@@ -1,0 +1,137 @@
+{
+  "$meta": {
+    "project": "BG Company · 가상 회사 관제 시스템",
+    "phase": "Phase 1",
+    "direction": "안 B — 모던 관제 디오라마",
+    "baseScreen": "1440 × 900 (PC web, fixed reference)",
+    "font": "Pretendard",
+    "note": "PoseAnalyzer 디자인 시스템의 Pretendard 타이포·상태 4단계 색상 체계·카드/그림자 원칙을 계승하되, 요청된 파스텔(크림·하늘·민트·연보라) 방향을 브랜드 컬러로 채택. 단위 px."
+  },
+
+  "color": {
+    "brand": {
+      "primary":      "#4D7FD6",
+      "primaryPress": "#3A6BC9",
+      "primaryText":  "#2C4878",
+      "tint":         "#EAF1FD",
+      "tintBorder":   "#DCE7FB",
+      "tintSurface":  "#F5F8FE"
+    },
+    "background": {
+      "app":        "#EAEEF4",
+      "surface":    "#FFFFFF",
+      "surface2":   "#FBFCFE",
+      "surface3":   "#F8FAFC",
+      "viewportStage": "radial-gradient(125% 95% at 50% 16%, #FAF6EE 0%, #EFF3F9 44%, #E4EAF3 100%)"
+    },
+    "border": {
+      "strong": "#E2E6EE",
+      "soft":   "#ECEFF4",
+      "faint":  "#E4E8F0",
+      "hudGlass": "rgba(226,230,238,0.9)"
+    },
+    "text": {
+      "strong": "#1C2433",
+      "base":   "#2A3445",
+      "body":   "#1F2A3A",
+      "muted":  "#8A94A6",
+      "faint":  "#9AA3B2",
+      "onDark": "#FFFFFF"
+    },
+    "status": {
+      "_doc": "직원 상태 6색. 항상 색+점(dot)+텍스트 라벨을 함께 사용(색 단독 금지).",
+      "working": { "dot": "#1F9E8E", "bg": "#E3F4F1", "text": "#137567", "states": ["업무 중","조사 중","검토 중","수정 중","보고 중","이동 중"] },
+      "meeting": { "dot": "#7C6BD6", "bg": "#ECE8FA", "text": "#52429E", "states": ["회의 중"] },
+      "waiting": { "dot": "#C98A12", "bg": "#FBF0D6", "text": "#8A5E08", "states": ["결과 대기","승인 대기"] },
+      "error":   { "dot": "#E0683A", "bg": "#FBE6DD", "text": "#A8431F", "states": ["오류 대응 중"] },
+      "done":    { "dot": "#1E9E63", "bg": "#E2F3EA", "text": "#117045", "states": ["업무 완료"] },
+      "idle":    { "dot": "#8A94A6", "bg": "#EEF1F6", "text": "#5C677A", "states": ["대기 중","휴식 중","업무 종료"] }
+    },
+    "department": {
+      "_doc": "직원 아바타 배경색. 채도를 한 단계 높여 상태 dot과 구분.",
+      "콘텐츠팀": "#E690A6",
+      "재정팀":   "#3FB6A6",
+      "주식팀":   "#D9A23E",
+      "개발팀":   "#6E97E0",
+      "지식·감사": "#9B86DB",
+      "대표실":   "#4D7FD6"
+    }
+  },
+
+  "radius": {
+    "chip":     9,
+    "badgePill": 999,
+    "button":   11,
+    "cardSm":   13,
+    "card":     14,
+    "cardLg":   15,
+    "avatar":   16,
+    "viewport": 18
+  },
+
+  "shadow": {
+    "hairline": "0 1px 2px rgba(15,27,45,0.04)",
+    "hud":      "0 8px 24px rgba(15,27,45,0.10)",
+    "hudSm":    "0 6px 16px rgba(15,27,45,0.08)",
+    "dock":     "0 10px 30px rgba(15,27,45,0.12)",
+    "pop":      "0 12px 30px rgba(40,70,130,0.16)",
+    "frame":    "0 10px 40px rgba(15,27,45,0.14)",
+    "_note": "그림자는 네이비 잉크 저알파만 사용 — 순수 검정 금지."
+  },
+
+  "type": {
+    "family": "Pretendard, -apple-system, BlinkMacSystemFont, sans-serif",
+    "tabularNums": "font-variant-numeric: tabular-nums (모든 수치/시각/비용/날짜에 적용)",
+    "scale": {
+      "logo":       { "size": 17, "weight": 800, "ls": "-0.01em" },
+      "kpiValue":   { "size": 18, "weight": 800, "tabular": true },
+      "kpiLabel":   { "size": 11, "weight": 600 },
+      "clock":      { "size": 13, "weight": 700, "tabular": true, "ls": "0.02em" },
+      "navLabel":   { "size": 11, "weight": 600, "lh": 1.15 },
+      "panelName":  { "size": 19, "weight": 800, "ls": "-0.01em" },
+      "panelDept":  { "size": 12.5, "weight": 600 },
+      "statusBadge":{ "size": 12.5, "weight": 700 },
+      "sectionLabel": { "size": 11, "weight": 700, "ls": "0.03em", "color": "text.faint" },
+      "bodyTask":   { "size": 14, "weight": 600, "lh": 1.5 },
+      "metricValue":{ "size": 15, "weight": 700, "tabular": true },
+      "dockName":   { "size": 13, "weight": 700 },
+      "dockState":  { "size": 10.5, "weight": 600 },
+      "viewportLabel": { "size": 15, "weight": 800, "ls": "0.16em" },
+      "timelineTime": { "size": 11, "weight": 700, "tabular": true },
+      "timelineText": { "size": 13, "weight": 600, "lh": 1.45 }
+    }
+  },
+
+  "layout": {
+    "frame":       { "w": 1440, "h": 900 },
+    "topBar":      { "h": 62, "padX": 20 },
+    "leftNav":     { "w": 104, "padX": 8, "padY": 12, "itemGap": 5, "itemPadY": 9, "iconSize": 20 },
+    "centerMain":  { "pad": 14, "viewportInnerW": 964, "viewportInnerH": 810 },
+    "rightPanel":  { "w": 344, "tabsRowH": 48, "contentPad": [18, 16] },
+    "dock":        { "inset": 18, "pad": [12, 14], "headerH": 20, "rowGap": 10, "chipH": 50, "approxH": 104 },
+    "hud": {
+      "inset": 18,
+      "legend":     { "anchor": "top-left", "approxW": 208, "approxH": 118 },
+      "viewControls": { "anchor": "top-right", "btn": 38, "gap": 8 },
+      "errorToast": { "anchor": "top-center", "approxH": 46 }
+    },
+    "viewportSafeArea": {
+      "_doc": "3D Canvas 위 HTML 오버레이가 가리는 영역. 캐릭터·클릭 타깃·중요한 3D 요소는 이 사각형들을 피해 배치/표시.",
+      "reservedTopBand": 150,
+      "reservedBottomBand": 140,
+      "reservedSideInset": 18,
+      "clearRect": { "top": 150, "right": 18, "bottom": 140, "left": 18, "ref": "viewport inner box" }
+    }
+  },
+
+  "motion": {
+    "ease": "cubic-bezier(0.16, 1, 0.3, 1)",
+    "durationBase": "220ms",
+    "press": { "scale": 0.96, "duration": "120ms" },
+    "liveDot": "1.6s ease-in-out infinite (opacity/scale breathing)",
+    "viewportFloat": "5s ease-in-out infinite (placeholder only — 제거 대상)",
+    "skeletonShimmer": "1.4s linear infinite",
+    "spinner": "0.9s linear infinite",
+    "_note": "숫자 카운터 애니메이션 금지. 패널 전환은 즉시(콘텐츠 스왑)."
+  }
+}

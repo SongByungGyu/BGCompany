@@ -1,0 +1,62 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+type View = "selected" | "unselected" | "approval" | "error" | "empty" | "loading";
+type Tab = "summary" | "outputs" | "timeline";
+type Group = "working" | "meeting" | "waiting" | "error" | "done" | "idle";
+type Employee = {
+  id: string; name: string; initial: string; department: string; status: string;
+  group: Group; task: string; progress: number; started: string; model: string;
+  cost: string; output: string; outputMeta: string; next: string; error?: string;
+};
+
+declare global { interface Window { __bgSetView?: (view: View) => void } }
+
+const initialEmployees: Employee[] = [
+  { id:"content-planner",name:"미나",initial:"미",department:"콘텐츠팀",status:"업무 중",group:"working",task:"블로그 포스트 「6월 루틴 정리」 초안 작성",progress:68,started:"13:50",model:"Claude Opus 4.6",cost:"$0.82",output:"초안 v2 · 1,240자",outputMeta:"14:21 저장됨",next:"제목 A/B안 생성" },
+  { id:"finance-manager",name:"도윤",initial:"도",department:"재정팀",status:"업무 중",group:"working",task:"6월 운영비 정산 및 현금흐름 검토",progress:54,started:"13:42",model:"GPT-5.1",cost:"$0.58",output:"주간 비용 요약",outputMeta:"14:18 저장됨",next:"비용 이상치 검토" },
+  { id:"stock-monitor",name:"서준",initial:"서",department:"주식팀",status:"조사 중",group:"waiting",task:"관심 종목 장중 변동 모니터링",progress:42,started:"13:28",model:"Claude Sonnet 4.6",cost:"$0.37",output:"변동성 감지 리포트",outputMeta:"14:12 저장됨",next:"대표 보고 준비" },
+  { id:"developer",name:"하늘",initial:"하",department:"개발팀",status:"오류 대응 중",group:"error",task:"배포 파이프라인 빌드 오류 수정",progress:30,started:"14:18",model:"GPT-5.1 Codex",cost:"$0.46",output:"에러 로그 분석",outputMeta:"14:24 진행 중",next:"핫픽스 PR 생성",error:"빌드 단계 exit code 1 · 14:21 감지, 자동 재시도 1회 실패." },
+  { id:"qa-auditor",name:"윤아",initial:"윤",department:"지식·감사",status:"회의 중",group:"meeting",task:"Phase 1-A 품질 기준 검토",progress:76,started:"13:20",model:"Claude Opus 4.6",cost:"$0.69",output:"QA 체크리스트 v3",outputMeta:"14:05 저장됨",next:"디자인 오차 보고" },
+  { id:"knowledge-manager",name:"지호",initial:"지",department:"지식·감사",status:"결과 대기",group:"waiting",task:"프로젝트 지식 문서 색인화",progress:91,started:"12:55",model:"Gemini 2.5 Pro",cost:"$0.31",output:"지식 색인 84건",outputMeta:"14:11 저장됨",next:"중복 문서 병합" },
+  { id:"marketing-manager",name:"카이",initial:"카",department:"콘텐츠팀",status:"승인 대기",group:"waiting",task:"유튜브 썸네일 3종 검수 요청",progress:100,started:"13:35",model:"Claude Opus 4.6",cost:"$0.61",output:"썸네일 3종",outputMeta:"승인 대기",next:"대표 승인 필요" },
+  { id:"director",name:"루나",initial:"루",department:"대표실",status:"대기 중",group:"idle",task:"전체 회사 업무 현황 대기",progress:0,started:"09:00",model:"Claude Opus 4.6",cost:"$0.74",output:"오전 경영 브리핑",outputMeta:"09:30 저장됨",next:"다음 경영 판단 대기" },
+];
+
+const nav = [["⌂","대표실"],["◇","가상 오피스"],["▣","업무 보드"],["♙","승인함"],["✎","콘텐츠"],["▤","재정"],["⌁","주식"],["‹›","개발"],["□","지식관리"],["◉","감사·품질"],["▧","보고서"]];
+const legend: [Group,string][] = [["working","업무 중"],["meeting","회의 중"],["waiting","승인 대기"],["error","오류 대응"],["done","업무 완료"],["idle","대기·휴식"]];
+
+export default function Home() {
+  const [view,setView] = useState<View>("selected");
+  const [selected,setSelected] = useState(0);
+  const [tab,setTab] = useState<Tab>("summary");
+  const [activeNav,setActiveNav] = useState("가상 오피스");
+  const [clock,setClock] = useState("");
+  const [employees,setEmployees] = useState(initialEmployees);
+  const setDemoView = (next: View) => { setView(next); setTab("summary"); if(next==="selected") setSelected(0); if(next==="approval") setSelected(6); if(next==="error") setSelected(3); };
+  useEffect(()=>{ const tick=()=>setClock(new Intl.DateTimeFormat("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(new Date())); tick(); const id=setInterval(tick,1000); return()=>clearInterval(id)},[]);
+  useEffect(()=>{ window.__bgSetView=setDemoView; return()=>{delete window.__bgSetView}},[]);
+  const current=employees[selected], approvals=employees.filter(e=>e.status==="승인 대기").length, errors=employees.filter(e=>e.group==="error").length, working=employees.filter(e=>["working","meeting"].includes(e.group)).length;
+  const kpis=useMemo(()=>[["업무 중",String(working),""],["진행 중 업무","12",""],["승인 대기",String(approvals),"waiting"],["오류",String(errors),"error"],["오늘 AI 비용","$4.20",""],["이번 달","$86.40",""]],[approvals,errors,working]);
+  const choose=(i:number)=>{ if(selected===i&&view!=="unselected"){setView("unselected");return} setSelected(i);setTab("summary");setView(employees[i].status==="승인 대기"?"approval":employees[i].group==="error"?"error":"selected"); };
+  const resolve=(approved:boolean)=>{ setEmployees(list=>list.map((e,i)=>i===selected?{...e,status:approved?"업무 완료":"수정 중",group:approved?"done":"working",next:approved?"게시 일정 등록":"수정안 재제출"}:e));setView("selected"); };
+
+  return <main className="control-room">
+    <header className="top-bar"><div className="brand"><b>✦</b><strong>BG Company</strong><span>가상 회사 관제</span></div><div className="clock"><i/>{clock}</div><div className="kpis">{kpis.map(([label,value,kind])=><button key={label} className={kind} disabled={!kind||value==="0"} onClick={()=>kind==="error"?setDemoView("error"):kind==="waiting"?setDemoView("approval"):null}><span>{label}</span><strong>{value}</strong></button>)}<button className="gear">⚙</button>{view==="loading"&&<i className="kpi-loading"/>}</div></header>
+    <div className="workspace">
+      <nav className="left-nav">{nav.map(([icon,label])=><button key={label} className={activeNav===label?"active":""} onClick={()=>setActiveNav(label)}><b>{icon}</b><span>{label}</span>{label==="승인함"&&approvals>0&&<i>{approvals}</i>}</button>)}</nav>
+      <section className="stage"><div className="viewport"><div className="legend glass"><strong>상태 범례</strong><div>{legend.map(([group,label])=><span key={group}><i className={`dot ${group}`}/>{label}</span>)}</div></div><div className="controls"><button>⌕</button><button>⛶</button><button>◇</button></div>{view==="error"&&<div className="toast"><span>⚠</span><strong>개발팀 · 하늘 — 배포 파이프라인 오류 대응 중</strong><button onClick={()=>setDemoView("error")}>상세 보기</button></div>}<ViewportState view={view}/><Dock view={view} employees={view==="empty"?[]:employees} selected={selected} choose={choose}/></div></section>
+      <Panel view={view} employee={current} tab={tab} setTab={setTab} close={()=>setView("unselected")} resolve={resolve}/>
+    </div>
+  </main>
+}
+
+function ViewportState({view}:{view:View}){ if(view==="empty") return <div className="view-center empty"><b>▱</b><strong>아직 활동 중인 직원이 없습니다</strong><p>직원을 채용하면 이곳에서 함께 일하는 모습을 볼 수 있습니다</p></div>; if(view==="loading") return <div className="view-center loading"><i/><span>가상 오피스를 불러오는 중...</span></div>; return <div className="view-center placeholder"><em/><b>◇</b><strong>3D OFFICE VIEWPORT</strong><p>React Three Fiber · 캐릭터 디오라마 사무실</p><small>실제 3D 장면이 이 영역에 마운트됩니다</small></div> }
+function Dock({view,employees,selected,choose}:{view:View;employees:Employee[];selected:number;choose:(i:number)=>void}){ return <div className="dock glass"><header><div><strong>사무실 직원</strong><span>클릭하면 우측에 상세가 열립니다</span></div><span>총 {employees.length}명 · 업무 중 {employees.filter(e=>["working","meeting"].includes(e.group)).length}</span></header>{view==="loading"?<div className="dock-skeleton">{[1,2,3,4,5].map(i=><i key={i}/>)}</div>:employees.length===0?<div className="dock-empty">표시할 직원이 없습니다</div>:<div className="dock-list">{employees.map((e,i)=><button key={e.id} className={selected===i&&view!=="unselected"?"selected":""} onClick={()=>choose(i)}><Avatar e={e} small/><span><strong>{e.name}</strong><small className={e.group}>{e.status}</small></span></button>)}</div>}</div> }
+function Panel({view,employee,tab,setTab,close,resolve}:{view:View;employee:Employee;tab:Tab;setTab:(t:Tab)=>void;close:()=>void;resolve:(a:boolean)=>void}){ if(view==="loading") return <aside className="panel skeleton"><i/><div><b/><span><i/><i/></span></div><i/><i className="tall"/><section><i/><i/></section><i/></aside>; if(view==="empty"||view==="unselected") return <aside className="panel no-selection"><div><b>♙</b><strong>{view==="empty"?"선택할 직원이 없습니다":"직원을 선택하세요"}</strong><p>{view==="empty"?"직원이 채용되면 이곳에서 상세 정보를 확인할 수 있습니다.":"하단 직원 도크에서 직원을 클릭하면 현재 업무와 상세 정보가 여기에 표시됩니다."}</p></div></aside>; return <aside className="panel"><div className="tabs">{(["summary","outputs","timeline"] as Tab[]).map(t=><button key={t} className={tab===t?"active":""} onClick={()=>setTab(t)}>{t==="summary"?"요약":t==="outputs"?"결과물":"타임라인"}</button>)}<button className="close" onClick={close}>×</button></div><div className="panel-body"><div className="profile"><Avatar e={employee}/><div><h2>{employee.name}</h2><p>{employee.department} · AI 에이전트</p></div></div><span className={`badge ${employee.group}`}><i className={`dot ${employee.group}`}/>{employee.status}</span>{tab==="summary"?<Summary e={employee} view={view} resolve={resolve}/>:tab==="outputs"?<Outputs e={employee}/>:<Timeline e={employee}/>}</div></aside> }
+function Summary({e,view,resolve}:{e:Employee;view:View;resolve:(a:boolean)=>void}){ return <div className="panel-stack">{view==="error"&&e.error&&<div className="error-banner"><span>⚠</span><div><strong>오류가 발생했습니다</strong><p>{e.error}</p></div></div>}<section className="task"><label>현재 업무</label><strong>{e.task}</strong><div><span><i className={e.group} style={{width:`${e.progress}%`}}/></span><b>{e.progress}%</b></div></section><div className="metrics"><Metric label="시작 시각" value={e.started}/><Metric label="현재 비용" value={e.cost}/><Metric label="사용 중인 모델" value={`• ${e.model}`} wide/></div><section className="output"><b>▯</b><div><label>최근 결과물</label><strong>{e.output}</strong><small>{e.outputMeta}</small></div></section>{view==="approval"&&e.status==="승인 대기"&&<section className="approval"><label>대표 승인 요청</label><div><button onClick={()=>resolve(true)}>승인</button><button onClick={()=>resolve(false)}>반려</button></div></section>}<section className="next"><div><label>다음 행동</label><strong>{e.next}</strong></div><span>→</span></section></div> }
+function Metric({label,value,wide}:{label:string;value:string;wide?:boolean}){return <div className={`metric ${wide?"wide":""}`}><label>{label}</label><strong>{value}</strong></div>}
+function Outputs({e}:{e:Employee}){return <div className="output-list">{[[e.output,e.outputMeta],["업무 진행 메모",`${e.started} 작성`],["참고 자료 묶음","파일 4개"]].map(([a,b])=><article key={a}><b>▯</b><div><strong>{a}</strong><small>{b}</small></div></article>)}</div>}
+function Timeline({e}:{e:Employee}){return <div className="timeline">{[[e.started,"업무를 시작했습니다","done"],["14:02","초기 자료 분석을 마쳤습니다","done"],["14:18",e.task,e.group],["다음",e.next,"idle"]].map(([a,b,c])=><article key={`${a}${b}`}><i className={c}/><time>{a}</time><p>{b}</p></article>)}</div>}
+function Avatar({e,small}:{e:Employee;small?:boolean}){return <b className={`avatar ${small?"small":""}`} data-dept={e.department}>{e.initial}<i className={`dot ${e.group}`}/></b>}
