@@ -1,0 +1,3441 @@
+{
+  "office": {
+    "size": [
+      24,
+      16
+    ],
+    "floorHeight": 0,
+    "floorColor": "#E1BD8E",
+    "labelsEnabled": true
+  },
+  "debug": {
+    "showGrid": false,
+    "showNavigationDebug": false,
+    "showOfficeDebugLabels": false
+  },
+  "camera": {
+    "position": [
+      0,
+      60,
+      12
+    ],
+    "up": [
+      0,
+      0,
+      -1
+    ],
+    "target": [
+      0,
+      0,
+      0.35
+    ],
+    "zoom": 33.6,
+    "minZoom": 24,
+    "maxZoom": 50,
+    "coverage": 0.94
+  },
+  "dimensions": {
+    "outerWallHeight": 0.58,
+    "innerWallHeight": 0.2,
+    "glassWallHeight": 0.5,
+    "wallThickness": 0.12,
+    "frontWallHeight": 0.08
+  },
+  "rooms": [
+    {
+      "id": "director-room",
+      "name": "대표실",
+      "position": [
+        -8.5,
+        0,
+        -5.25
+      ],
+      "size": [
+        7,
+        5.5
+      ],
+      "color": "#F4E9DD",
+      "wallType": "glass"
+    },
+    {
+      "id": "meeting-room",
+      "name": "대회의실",
+      "position": [
+        0,
+        0,
+        -5.25
+      ],
+      "size": [
+        10,
+        5.5
+      ],
+      "color": "#EAE5F8",
+      "wallType": "glass"
+    },
+    {
+      "id": "content-zone",
+      "name": "콘텐츠·마케팅",
+      "position": [
+        8.5,
+        0,
+        -5.25
+      ],
+      "size": [
+        7,
+        5.5
+      ],
+      "color": "#F8E7EC",
+      "wallType": "low"
+    },
+    {
+      "id": "review-zone",
+      "name": "비서실",
+      "position": [
+        -8.5,
+        0,
+        0.25
+      ],
+      "size": [
+        7,
+        5.5
+      ],
+      "color": "#F2EEE2",
+      "wallType": "low"
+    },
+    {
+      "id": "dev-ops-zone",
+      "name": "개발·운영",
+      "position": [
+        0,
+        0,
+        0.25
+      ],
+      "size": [
+        10,
+        5.5
+      ],
+      "color": "#E4ECFA",
+      "wallType": "low"
+    },
+    {
+      "id": "finance-stock-zone",
+      "name": "재정·주식",
+      "position": [
+        8.5,
+        0,
+        0.25
+      ],
+      "size": [
+        7,
+        5.5
+      ],
+      "color": "#FAF0D9",
+      "wallType": "low"
+    },
+    {
+      "id": "break-lounge",
+      "name": "휴게 라운지",
+      "position": [
+        -8.5,
+        0,
+        5.5
+      ],
+      "size": [
+        7,
+        5
+      ],
+      "color": "#F3E9DF",
+      "wallType": "low"
+    },
+    {
+      "id": "lobby-common-zone",
+      "name": "로비·공용공간",
+      "position": [
+        0,
+        0,
+        5.5
+      ],
+      "size": [
+        10,
+        5
+      ],
+      "color": "#EDF2F7",
+      "wallType": "open"
+    },
+    {
+      "id": "knowledge-audit-zone",
+      "name": "지식관리·감사",
+      "position": [
+        8.5,
+        0,
+        5.5
+      ],
+      "size": [
+        7,
+        5
+      ],
+      "color": "#EDE9F8",
+      "wallType": "low"
+    },
+    {
+      "id": "pantry-coffee-zone",
+      "name": "탕비·커피존",
+      "position": [
+        2.8,
+        0.04,
+        5.8
+      ],
+      "size": [
+        4,
+        3.8
+      ],
+      "color": "#E2F1EA",
+      "wallType": "open",
+      "parentId": "lobby-common-zone"
+    }
+  ],
+  "walls": [
+    {
+      "id": "outer-back",
+      "position": [
+        0,
+        0,
+        -8
+      ],
+      "size": [
+        24,
+        0.12
+      ],
+      "heightType": "outer",
+      "material": "solid"
+    },
+    {
+      "id": "outer-left",
+      "position": [
+        -12,
+        0,
+        0
+      ],
+      "size": [
+        0.12,
+        16
+      ],
+      "heightType": "outer",
+      "material": "solid"
+    },
+    {
+      "id": "outer-right",
+      "position": [
+        12,
+        0,
+        0
+      ],
+      "size": [
+        0.12,
+        16
+      ],
+      "heightType": "outer",
+      "material": "solid"
+    },
+    {
+      "id": "outer-front-left",
+      "position": [
+        -7.5,
+        0,
+        8
+      ],
+      "size": [
+        9,
+        0.12
+      ],
+      "heightType": "front",
+      "material": "solid"
+    },
+    {
+      "id": "outer-front-right",
+      "position": [
+        7.5,
+        0,
+        8
+      ],
+      "size": [
+        9,
+        0.12
+      ],
+      "heightType": "front",
+      "material": "solid"
+    },
+    {
+      "id": "director-glass-left",
+      "position": [
+        -5,
+        0,
+        -5.25
+      ],
+      "size": [
+        0.1,
+        3.2
+      ],
+      "heightType": "glass",
+      "material": "glass"
+    },
+    {
+      "id": "content-glass-right",
+      "position": [
+        5,
+        0,
+        -5.25
+      ],
+      "size": [
+        0.1,
+        3.2
+      ],
+      "heightType": "glass",
+      "material": "glass"
+    },
+    {
+      "id": "director-front-glass-left",
+      "position": [
+        -10.05,
+        0,
+        -2.5
+      ],
+      "size": [
+        2.1,
+        0.1
+      ],
+      "heightType": "glass",
+      "material": "glass"
+    },
+    {
+      "id": "director-front-glass-right",
+      "position": [
+        -6.65,
+        0,
+        -2.5
+      ],
+      "size": [
+        1.5,
+        0.1
+      ],
+      "heightType": "glass",
+      "material": "glass"
+    },
+    {
+      "id": "director-left-glass-accent",
+      "position": [
+        -11.94,
+        0,
+        -5.25
+      ],
+      "size": [
+        0.08,
+        4.6
+      ],
+      "heightType": "glass",
+      "material": "glass"
+    },
+    {
+      "id": "director-back-glass-accent",
+      "position": [
+        -8.5,
+        0,
+        -7.86
+      ],
+      "size": [
+        5.4,
+        0.08
+      ],
+      "heightType": "glass",
+      "material": "glass"
+    },
+    {
+      "id": "director-inner-glass-return",
+      "position": [
+        -5.05,
+        0,
+        -3.75
+      ],
+      "size": [
+        0.08,
+        1.1
+      ],
+      "heightType": "glass",
+      "material": "glass"
+    },
+    {
+      "id": "meeting-front-left-partition",
+      "position": [
+        -2.8,
+        0,
+        -2.5
+      ],
+      "size": [
+        3.2,
+        0.1
+      ],
+      "heightType": "glass",
+      "material": "glass"
+    },
+    {
+      "id": "meeting-front-right-partition",
+      "position": [
+        2.8,
+        0,
+        -2.5
+      ],
+      "size": [
+        3.2,
+        0.1
+      ],
+      "heightType": "glass",
+      "material": "glass"
+    },
+    {
+      "id": "content-front-partition",
+      "position": [
+        8.5,
+        0,
+        -2.5
+      ],
+      "size": [
+        4.8,
+        0.1
+      ],
+      "heightType": "inner",
+      "material": "solid"
+    },
+    {
+      "id": "review-dev-low-partition",
+      "position": [
+        -5,
+        0,
+        0.25
+      ],
+      "size": [
+        0.1,
+        3.4
+      ],
+      "heightType": "inner",
+      "material": "solid"
+    },
+    {
+      "id": "dev-finance-low-partition",
+      "position": [
+        5,
+        0,
+        0.25
+      ],
+      "size": [
+        0.1,
+        3.4
+      ],
+      "heightType": "inner",
+      "material": "solid"
+    },
+    {
+      "id": "review-bottom-low-partition",
+      "position": [
+        -8.5,
+        0,
+        3
+      ],
+      "size": [
+        4.8,
+        0.1
+      ],
+      "heightType": "inner",
+      "material": "solid"
+    },
+    {
+      "id": "finance-bottom-low-partition",
+      "position": [
+        8.5,
+        0,
+        3
+      ],
+      "size": [
+        4.8,
+        0.1
+      ],
+      "heightType": "inner",
+      "material": "solid"
+    },
+    {
+      "id": "lounge-lobby-low-partition",
+      "position": [
+        -5,
+        0,
+        5.5
+      ],
+      "size": [
+        0.1,
+        2.6
+      ],
+      "heightType": "inner",
+      "material": "solid"
+    },
+    {
+      "id": "lobby-audit-low-partition",
+      "position": [
+        5,
+        0,
+        5.5
+      ],
+      "size": [
+        0.1,
+        2.6
+      ],
+      "heightType": "inner",
+      "material": "solid"
+    },
+    {
+      "id": "pantry-divider",
+      "position": [
+        0.8,
+        0,
+        5.8
+      ],
+      "size": [
+        0.1,
+        3.8
+      ],
+      "heightType": "inner",
+      "material": "solid"
+    }
+  ],
+  "walkableAreas": [
+    {
+      "id": "shared-lobby-pantry-walkable",
+      "position": [
+        0.2,
+        0.09,
+        5.8
+      ],
+      "size": [
+        9.2,
+        4.4
+      ]
+    },
+    {
+      "id": "break-lounge-walkable",
+      "roomId": "break-lounge",
+      "position": [
+        -8.5,
+        0.09,
+        5.5
+      ],
+      "size": [
+        6.2,
+        4.0
+      ]
+    },
+    {
+      "id": "knowledge-audit-walkable",
+      "roomId": "knowledge-audit-zone",
+      "position": [
+        8.5,
+        0.09,
+        5.5
+      ],
+      "size": [
+        6.2,
+        4.0
+      ]
+    },
+    {
+      "id": "central-dev-hub-walkable",
+      "roomId": "dev-ops-zone",
+      "position": [
+        0,
+        0.09,
+        0.25
+      ],
+      "size": [
+        9.4,
+        5.0
+      ]
+    },
+    {
+      "id": "review-open-walkable",
+      "roomId": "review-zone",
+      "position": [
+        -8.5,
+        0.09,
+        0.25
+      ],
+      "size": [
+        6.2,
+        4.7
+      ]
+    },
+    {
+      "id": "finance-open-walkable",
+      "roomId": "finance-stock-zone",
+      "position": [
+        8.5,
+        0.09,
+        0.25
+      ],
+      "size": [
+        6.2,
+        4.7
+      ]
+    },
+    {
+      "id": "meeting-open-walkable",
+      "roomId": "meeting-room",
+      "position": [
+        0,
+        0.09,
+        -5.25
+      ],
+      "size": [
+        9.2,
+        4.7
+      ]
+    },
+    {
+      "id": "director-glass-walkable",
+      "roomId": "director-room",
+      "position": [
+        -8.5,
+        0.09,
+        -5.25
+      ],
+      "size": [
+        6.2,
+        4.7
+      ]
+    },
+    {
+      "id": "content-open-walkable",
+      "roomId": "content-zone",
+      "position": [
+        8.5,
+        0.09,
+        -5.25
+      ],
+      "size": [
+        6.2,
+        4.7
+      ]
+    },
+    {
+      "id": "north-south-spine",
+      "position": [
+        0,
+        0.1,
+        1.2
+      ],
+      "size": [
+        2.8,
+        7.8
+      ]
+    },
+    {
+      "id": "east-west-open-spine",
+      "position": [
+        0,
+        0.1,
+        0.25
+      ],
+      "size": [
+        12.4,
+        2.4
+      ]
+    }
+  ],
+  "doors": [
+    {
+      "id": "passage-main-entrance",
+      "position": [
+        0,
+        0.04,
+        8
+      ],
+      "size": [
+        2.6,
+        0.28
+      ],
+      "width": 2.6,
+      "connects": [
+        "outside",
+        "lobby-common-zone"
+      ]
+    },
+    {
+      "id": "passage-lobby-break",
+      "position": [
+        -5,
+        0.04,
+        5.5
+      ],
+      "size": [
+        0.26,
+        2.4
+      ],
+      "width": 2.4,
+      "connects": [
+        "lobby-common-zone",
+        "break-lounge"
+      ]
+    },
+    {
+      "id": "passage-lobby-knowledge",
+      "position": [
+        5,
+        0.04,
+        5.5
+      ],
+      "size": [
+        0.26,
+        2.4
+      ],
+      "width": 2.4,
+      "connects": [
+        "lobby-common-zone",
+        "knowledge-audit-zone"
+      ]
+    },
+    {
+      "id": "passage-lobby-dev",
+      "position": [
+        0,
+        0.04,
+        3
+      ],
+      "size": [
+        2.8,
+        0.26
+      ],
+      "width": 2.8,
+      "connects": [
+        "lobby-common-zone",
+        "dev-ops-zone"
+      ]
+    },
+    {
+      "id": "passage-dev-review",
+      "position": [
+        -5,
+        0.04,
+        0.25
+      ],
+      "size": [
+        0.26,
+        2.2
+      ],
+      "width": 2.2,
+      "connects": [
+        "dev-ops-zone",
+        "review-zone"
+      ]
+    },
+    {
+      "id": "passage-dev-finance",
+      "position": [
+        5,
+        0.04,
+        0.25
+      ],
+      "size": [
+        0.26,
+        2.2
+      ],
+      "width": 2.2,
+      "connects": [
+        "dev-ops-zone",
+        "finance-stock-zone"
+      ]
+    },
+    {
+      "id": "passage-dev-meeting",
+      "position": [
+        0,
+        0.04,
+        -2.5
+      ],
+      "size": [
+        2.8,
+        0.26
+      ],
+      "width": 2.8,
+      "connects": [
+        "dev-ops-zone",
+        "meeting-room"
+      ]
+    },
+    {
+      "id": "passage-meeting-director",
+      "position": [
+        -5,
+        0.04,
+        -5.25
+      ],
+      "size": [
+        0.26,
+        2.2
+      ],
+      "width": 2.2,
+      "connects": [
+        "meeting-room",
+        "director-room"
+      ]
+    },
+    {
+      "id": "passage-director-secretary",
+      "position": [
+        -8.5,
+        0.04,
+        -2.5
+      ],
+      "size": [
+        1.3,
+        0.26
+      ],
+      "width": 1.3,
+      "connects": [
+        "director-room",
+        "review-zone"
+      ]
+    },
+    {
+      "id": "passage-meeting-content",
+      "position": [
+        5,
+        0.04,
+        -5.25
+      ],
+      "size": [
+        0.26,
+        2.2
+      ],
+      "width": 2.2,
+      "connects": [
+        "meeting-room",
+        "content-zone"
+      ]
+    }
+  ],
+  "destinations": [
+    {
+      "id": "director-desk",
+      "roomId": "director-room",
+      "position": [
+        -9.35,
+        0,
+        -5.55
+      ]
+    },
+    {
+      "id": "director-report-point",
+      "roomId": "director-room",
+      "position": [
+        -7.05,
+        0,
+        -4.25
+      ]
+    },
+    {
+      "id": "approval-wait-point",
+      "roomId": "director-room",
+      "position": [
+        -8.45,
+        0,
+        -3.25
+      ]
+    },
+    {
+      "id": "secretary-desk-01",
+      "roomId": "review-zone",
+      "position": [
+        -9.75,
+        0,
+        -0.75
+      ]
+    },
+    {
+      "id": "secretary-desk-02",
+      "roomId": "review-zone",
+      "position": [
+        -7.2,
+        0,
+        0.85
+      ]
+    },
+    {
+      "id": "secretary-reception-point",
+      "roomId": "review-zone",
+      "position": [
+        -10.35,
+        0,
+        1.1
+      ]
+    },
+    {
+      "id": "director-support-point",
+      "roomId": "review-zone",
+      "position": [
+        -8.5,
+        0,
+        -1.8
+      ]
+    },
+    {
+      "id": "meeting-entrance",
+      "roomId": "meeting-room",
+      "position": [
+        0,
+        0,
+        -3.2
+      ]
+    },
+    {
+      "id": "meeting-seat-01",
+      "roomId": "meeting-room",
+      "position": [
+        -2.4,
+        0,
+        -5.9
+      ]
+    },
+    {
+      "id": "meeting-seat-02",
+      "roomId": "meeting-room",
+      "position": [
+        0,
+        0,
+        -5.9
+      ]
+    },
+    {
+      "id": "meeting-seat-03",
+      "roomId": "meeting-room",
+      "position": [
+        2.4,
+        0,
+        -5.9
+      ]
+    },
+    {
+      "id": "meeting-seat-04",
+      "roomId": "meeting-room",
+      "position": [
+        -2.4,
+        0,
+        -4.6
+      ]
+    },
+    {
+      "id": "meeting-seat-05",
+      "roomId": "meeting-room",
+      "position": [
+        0,
+        0,
+        -4.6
+      ]
+    },
+    {
+      "id": "meeting-seat-06",
+      "roomId": "meeting-room",
+      "position": [
+        2.4,
+        0,
+        -4.6
+      ]
+    },
+    {
+      "id": "meeting-presenter-point",
+      "roomId": "meeting-room",
+      "position": [
+        0,
+        0,
+        -6.85
+      ]
+    },
+    {
+      "id": "content-desk-01",
+      "roomId": "content-zone",
+      "position": [
+        7.4,
+        0,
+        -5.7
+      ]
+    },
+    {
+      "id": "content-desk-02",
+      "roomId": "content-zone",
+      "position": [
+        9.3,
+        0,
+        -4.8
+      ]
+    },
+    {
+      "id": "dev-desk-01",
+      "roomId": "dev-ops-zone",
+      "position": [
+        -1.6,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "error-response-point",
+      "roomId": "dev-ops-zone",
+      "position": [
+        0,
+        0,
+        1.4
+      ]
+    },
+    {
+      "id": "finance-desk-01",
+      "roomId": "finance-stock-zone",
+      "position": [
+        7.5,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "stock-desk-01",
+      "roomId": "finance-stock-zone",
+      "position": [
+        9.4,
+        0,
+        0.7
+      ]
+    },
+    {
+      "id": "break-seat-01",
+      "roomId": "break-lounge",
+      "position": [
+        -9.3,
+        0,
+        5.4
+      ]
+    },
+    {
+      "id": "break-seat-02",
+      "roomId": "break-lounge",
+      "position": [
+        -7.5,
+        0,
+        6.1
+      ]
+    },
+    {
+      "id": "lobby-center",
+      "roomId": "lobby-common-zone",
+      "position": [
+        -1.4,
+        0,
+        5.5
+      ]
+    },
+    {
+      "id": "main-crossroad",
+      "roomId": "lobby-common-zone",
+      "position": [
+        0,
+        0,
+        3.8
+      ]
+    },
+    {
+      "id": "entrance-point",
+      "roomId": "lobby-common-zone",
+      "position": [
+        0,
+        0,
+        7.5
+      ]
+    },
+    {
+      "id": "coffee-machine-point",
+      "roomId": "pantry-coffee-zone",
+      "position": [
+        3.6,
+        0,
+        5.2
+      ]
+    },
+    {
+      "id": "pantry-counter-point",
+      "roomId": "pantry-coffee-zone",
+      "position": [
+        2.7,
+        0,
+        6.7
+      ]
+    },
+    {
+      "id": "audit-desk-01",
+      "roomId": "knowledge-audit-zone",
+      "position": [
+        7.5,
+        0,
+        5.2
+      ]
+    },
+    {
+      "id": "knowledge-search-point",
+      "roomId": "knowledge-audit-zone",
+      "position": [
+        8.5,
+        0,
+        6.8
+      ]
+    }
+  ],
+  "navNodes": [
+    {
+      "id": "entrance-node",
+      "position": [
+        0,
+        0,
+        7.4
+      ],
+      "connectsTo": [
+        "lobby-open-hub"
+      ]
+    },
+    {
+      "id": "lobby-open-hub",
+      "position": [
+        -1.4,
+        0,
+        5.5
+      ],
+      "connectsTo": [
+        "entrance-node",
+        "open-spine-south",
+        "lounge-open-node",
+        "audit-open-node",
+        "pantry-open-node"
+      ]
+    },
+    {
+      "id": "pantry-open-node",
+      "position": [
+        1.8,
+        0,
+        5.5
+      ],
+      "connectsTo": [
+        "lobby-open-hub",
+        "coffee-machine-point",
+        "pantry-counter-point"
+      ]
+    },
+    {
+      "id": "lounge-open-node",
+      "position": [
+        -6.4,
+        0,
+        5.5
+      ],
+      "connectsTo": [
+        "lobby-open-hub",
+        "break-seat-01",
+        "break-seat-02"
+      ]
+    },
+    {
+      "id": "audit-open-node",
+      "position": [
+        6.4,
+        0,
+        5.5
+      ],
+      "connectsTo": [
+        "lobby-open-hub",
+        "audit-desk-01",
+        "knowledge-search-point"
+      ]
+    },
+    {
+      "id": "open-spine-south",
+      "position": [
+        0,
+        0,
+        3.0
+      ],
+      "connectsTo": [
+        "lobby-open-hub",
+        "dev-open-hub"
+      ]
+    },
+    {
+      "id": "dev-open-hub",
+      "position": [
+        0,
+        0,
+        0.25
+      ],
+      "connectsTo": [
+        "open-spine-south",
+        "meeting-open-hub",
+        "review-open-node",
+        "finance-open-node",
+        "dev-desk-01",
+        "dev-desk-02",
+        "ops-desk-01",
+        "error-response-point"
+      ]
+    },
+    {
+      "id": "review-open-node",
+      "position": [
+        -6.2,
+        0,
+        0.25
+      ],
+      "connectsTo": [
+        "dev-open-hub",
+        "secretary-desk-01",
+        "secretary-desk-02",
+        "secretary-reception-point",
+        "director-support-point",
+        "director-open-node",
+        "lobby-open-hub"
+      ]
+    },
+    {
+      "id": "finance-open-node",
+      "position": [
+        6.2,
+        0,
+        0.25
+      ],
+      "connectsTo": [
+        "dev-open-hub",
+        "finance-desk-01",
+        "stock-desk-01",
+        "finance-desk-02"
+      ]
+    },
+    {
+      "id": "meeting-open-hub",
+      "position": [
+        0,
+        0,
+        -4.6
+      ],
+      "connectsTo": [
+        "dev-open-hub",
+        "director-open-node",
+        "content-open-node",
+        "meeting-seat-01",
+        "meeting-seat-02",
+        "meeting-seat-03",
+        "meeting-seat-04",
+        "meeting-seat-05",
+        "meeting-seat-06",
+        "meeting-presenter-point"
+      ]
+    },
+    {
+      "id": "director-open-node",
+      "position": [
+        -6.2,
+        0,
+        -5.25
+      ],
+      "connectsTo": [
+        "meeting-open-hub",
+        "review-open-node",
+        "director-desk",
+        "director-report-point",
+        "approval-wait-point",
+        "director-support-point"
+      ]
+    },
+    {
+      "id": "content-open-node",
+      "position": [
+        6.2,
+        0,
+        -5.25
+      ],
+      "connectsTo": [
+        "meeting-open-hub",
+        "content-desk-01",
+        "content-desk-02",
+        "content-desk-03"
+      ]
+    },
+    {
+      "id": "knowledge-open-node",
+      "position": [
+        6.4,
+        0,
+        6.3
+      ],
+      "connectsTo": [
+        "audit-open-node",
+        "audit-desk-01",
+        "knowledge-desk-01",
+        "knowledge-search-point"
+      ]
+    }
+  ],
+  "furniture": {
+    "desks": [
+      {
+        "id": "director-desk",
+        "roomId": "director-room",
+        "position": [
+          -9.72,
+          0,
+          -6.28
+        ],
+        "rotation": 0,
+        "assignedEmployeeId": "director",
+        "isReserved": false,
+        "capacity": 2
+      },
+      {
+        "id": "secretary-desk-01",
+        "roomId": "review-zone",
+        "position": [
+          -8.55,
+          0,
+          -0.48
+        ],
+        "rotation": 0,
+        "assignedEmployeeId": null,
+        "isReserved": false,
+        "capacity": 1
+      },
+      {
+        "id": "secretary-desk-02",
+        "roomId": "review-zone",
+        "position": [
+          -9.75,
+          0,
+          0.48
+        ],
+        "rotation": 1.5708,
+        "assignedEmployeeId": null,
+        "isReserved": true,
+        "capacity": 1
+      },
+      {
+        "id": "content-desk-01",
+        "roomId": "content-zone",
+        "position": [
+          7.25,
+          0,
+          -6.35
+        ],
+        "rotation": 0,
+        "assignedEmployeeId": "mina",
+        "isReserved": false,
+        "capacity": 1
+      },
+      {
+        "id": "content-desk-02",
+        "roomId": "content-zone",
+        "position": [
+          9.18,
+          0,
+          -6.35
+        ],
+        "rotation": 0,
+        "assignedEmployeeId": "doun",
+        "isReserved": false,
+        "capacity": 1
+      },
+      {
+        "id": "content-desk-03",
+        "roomId": "content-zone",
+        "position": [
+          8.25,
+          0,
+          -4.7
+        ],
+        "rotation": 3.1416,
+        "assignedEmployeeId": null,
+        "isReserved": true,
+        "capacity": 1
+      },
+      {
+        "id": "dev-desk-01",
+        "roomId": "dev-ops-zone",
+        "position": [
+          -2.35,
+          0,
+          -0.1
+        ],
+        "rotation": 1.5708,
+        "assignedEmployeeId": "haneul",
+        "isReserved": false,
+        "capacity": 1
+      },
+      {
+        "id": "dev-desk-02",
+        "roomId": "dev-ops-zone",
+        "position": [
+          -0.8,
+          0,
+          1.35
+        ],
+        "rotation": 0,
+        "assignedEmployeeId": null,
+        "isReserved": true,
+        "capacity": 1
+      },
+      {
+        "id": "ops-desk-01",
+        "roomId": "dev-ops-zone",
+        "position": [
+          1.0,
+          0,
+          1.35
+        ],
+        "rotation": 0,
+        "assignedEmployeeId": null,
+        "isReserved": true,
+        "capacity": 1
+      },
+      {
+        "id": "finance-desk-01",
+        "roomId": "finance-stock-zone",
+        "position": [
+          7.15,
+          0,
+          -0.72
+        ],
+        "rotation": 1.5708,
+        "assignedEmployeeId": "seojun",
+        "isReserved": false,
+        "capacity": 1
+      },
+      {
+        "id": "stock-desk-01",
+        "roomId": "finance-stock-zone",
+        "position": [
+          9.3,
+          0,
+          0.98
+        ],
+        "rotation": 0,
+        "assignedEmployeeId": "kai",
+        "isReserved": false,
+        "capacity": 1
+      },
+      {
+        "id": "finance-desk-02",
+        "roomId": "finance-stock-zone",
+        "position": [
+          9.35,
+          0,
+          -1.28
+        ],
+        "rotation": 3.1416,
+        "assignedEmployeeId": null,
+        "isReserved": true,
+        "capacity": 1
+      },
+      {
+        "id": "audit-desk-01",
+        "roomId": "knowledge-audit-zone",
+        "position": [
+          7.55,
+          0,
+          4.48
+        ],
+        "rotation": 1.5708,
+        "assignedEmployeeId": "jiho",
+        "isReserved": false,
+        "capacity": 1
+      },
+      {
+        "id": "knowledge-desk-01",
+        "roomId": "knowledge-audit-zone",
+        "position": [
+          9.35,
+          0,
+          5.15
+        ],
+        "rotation": 3.1416,
+        "assignedEmployeeId": null,
+        "isReserved": true,
+        "capacity": 1
+      }
+    ],
+    "expansionZones": [
+      {
+        "id": "dev-expansion-zone",
+        "roomId": "dev-ops-zone",
+        "type": "expansionZone",
+        "position": [
+          0,
+          0,
+          1.55
+        ],
+        "rotation": 0,
+        "size": [
+          2.0,
+          0.04,
+          1.0
+        ],
+        "color": "#BFD7E8"
+      },
+      {
+        "id": "content-expansion-zone",
+        "roomId": "content-zone",
+        "type": "expansionZone",
+        "position": [
+          10.2,
+          0,
+          -4.25
+        ],
+        "rotation": 0,
+        "size": [
+          1.5,
+          0.04,
+          1.1
+        ],
+        "color": "#F4CAD5"
+      },
+      {
+        "id": "finance-expansion-zone",
+        "roomId": "finance-stock-zone",
+        "type": "expansionZone",
+        "position": [
+          10.1,
+          0,
+          1.9
+        ],
+        "rotation": 0,
+        "size": [
+          1.5,
+          0.04,
+          1.0
+        ],
+        "color": "#F4D38C"
+      },
+      {
+        "id": "knowledge-expansion-zone",
+        "roomId": "knowledge-audit-zone",
+        "type": "expansionZone",
+        "position": [
+          10.1,
+          0,
+          4.55
+        ],
+        "rotation": 0,
+        "size": [
+          1.5,
+          0.04,
+          1.0
+        ],
+        "color": "#CFC7F4"
+      }
+    ],
+    "items": [
+      {
+        "id": "director-left-glass",
+        "roomId": "director-room",
+        "type": "partition",
+        "position": [
+          -11.8,
+          0,
+          -5.25
+        ],
+        "rotation": 0,
+        "size": [
+          0.1,
+          0.86,
+          2.2
+        ],
+        "color": "#D9E5E6"
+      },
+      {
+        "id": "director-right-glass",
+        "roomId": "director-room",
+        "type": "partition",
+        "position": [
+          -5.25,
+          0,
+          -5.25
+        ],
+        "rotation": 0,
+        "size": [
+          0.1,
+          0.86,
+          2.25
+        ],
+        "color": "#D9E5E6"
+      },
+      {
+        "id": "director-entry-glass",
+        "roomId": "director-room",
+        "type": "partition",
+        "position": [
+          -6.0,
+          0,
+          -2.75
+        ],
+        "rotation": 1.5708,
+        "size": [
+          1.4,
+          0.74,
+          0.1
+        ],
+        "color": "#D9E5E6"
+      },
+      {
+        "id": "meeting-left-partition",
+        "roomId": "meeting-room",
+        "type": "partition",
+        "position": [
+          -4.65,
+          0,
+          -5.5
+        ],
+        "rotation": 0,
+        "size": [
+          0.1,
+          0.86,
+          2.4
+        ],
+        "color": "#D9E5E6"
+      },
+      {
+        "id": "meeting-right-partition",
+        "roomId": "meeting-room",
+        "type": "partition",
+        "position": [
+          4.65,
+          0,
+          -5.5
+        ],
+        "rotation": 0,
+        "size": [
+          0.1,
+          0.86,
+          2.4
+        ],
+        "color": "#D9E5E6"
+      },
+      {
+        "id": "content-left-partition",
+        "roomId": "content-zone",
+        "type": "partition",
+        "position": [
+          5.28,
+          0,
+          -5.4
+        ],
+        "rotation": 0,
+        "size": [
+          0.1,
+          0.78,
+          2.5
+        ],
+        "color": "#D9E5E6"
+      },
+      {
+        "id": "secretary-left-partition",
+        "roomId": "review-zone",
+        "type": "partition",
+        "position": [
+          -11.75,
+          0,
+          -0.1
+        ],
+        "rotation": 0,
+        "size": [
+          0.1,
+          0.78,
+          2.2
+        ],
+        "color": "#D9E5E6"
+      },
+      {
+        "id": "secretary-right-partition",
+        "roomId": "review-zone",
+        "type": "partition",
+        "position": [
+          -5.35,
+          0,
+          0.35
+        ],
+        "rotation": 0,
+        "size": [
+          0.1,
+          0.78,
+          2.25
+        ],
+        "color": "#D9E5E6"
+      },
+      {
+        "id": "dev-top-partition",
+        "roomId": "dev-ops-zone",
+        "type": "partition",
+        "position": [
+          0,
+          0,
+          -2.1
+        ],
+        "rotation": 1.5708,
+        "size": [
+          2.15,
+          0.55,
+          0.1
+        ],
+        "color": "#D9E5E6"
+      },
+      {
+        "id": "dev-middle-partition-left",
+        "roomId": "dev-ops-zone",
+        "type": "partition",
+        "position": [
+          -1.75,
+          0,
+          0.9
+        ],
+        "rotation": 1.5708,
+        "size": [
+          1.25,
+          0.5,
+          0.1
+        ],
+        "color": "#D9E5E6"
+      },
+      {
+        "id": "dev-middle-partition-right",
+        "roomId": "dev-ops-zone",
+        "type": "partition",
+        "position": [
+          1.75,
+          0,
+          0.9
+        ],
+        "rotation": 1.5708,
+        "size": [
+          1.25,
+          0.5,
+          0.1
+        ],
+        "color": "#D9E5E6"
+      },
+      {
+        "id": "finance-left-partition",
+        "roomId": "finance-stock-zone",
+        "type": "partition",
+        "position": [
+          5.35,
+          0,
+          -0.1
+        ],
+        "rotation": 0,
+        "size": [
+          0.1,
+          0.76,
+          2.2
+        ],
+        "color": "#D9E5E6"
+      },
+      {
+        "id": "finance-right-partition",
+        "roomId": "finance-stock-zone",
+        "type": "partition",
+        "position": [
+          11.65,
+          0,
+          0.4
+        ],
+        "rotation": 0,
+        "size": [
+          0.1,
+          0.76,
+          2.4
+        ],
+        "color": "#D9E5E6"
+      },
+      {
+        "id": "lounge-left-partition",
+        "roomId": "break-lounge",
+        "type": "partition",
+        "position": [
+          -11.8,
+          0,
+          5.55
+        ],
+        "rotation": 0,
+        "size": [
+          0.1,
+          0.72,
+          2.4
+        ],
+        "color": "#D9E5E6"
+      },
+      {
+        "id": "lounge-right-partition",
+        "roomId": "break-lounge",
+        "type": "partition",
+        "position": [
+          -5.35,
+          0,
+          5.45
+        ],
+        "rotation": 0,
+        "size": [
+          0.1,
+          0.72,
+          2.5
+        ],
+        "color": "#D9E5E6"
+      },
+      {
+        "id": "lobby-left-partition",
+        "roomId": "lobby-common-zone",
+        "type": "partition",
+        "position": [
+          -4.55,
+          0,
+          5.55
+        ],
+        "rotation": 0,
+        "size": [
+          0.1,
+          0.75,
+          2.25
+        ],
+        "color": "#D9E5E6"
+      },
+      {
+        "id": "knowledge-left-partition",
+        "roomId": "knowledge-audit-zone",
+        "type": "partition",
+        "position": [
+          5.35,
+          0,
+          5.55
+        ],
+        "rotation": 0,
+        "size": [
+          0.1,
+          0.75,
+          2.45
+        ],
+        "color": "#D9E5E6"
+      },
+      {
+        "id": "director-top-cabinet-left",
+        "roomId": "director-room",
+        "type": "storage",
+        "position": [
+          -11.05,
+          0,
+          -7.42
+        ],
+        "rotation": 0,
+        "size": [
+          1.2,
+          0.58,
+          0.34
+        ],
+        "color": "#C9A677"
+      },
+      {
+        "id": "director-top-cabinet-mid",
+        "roomId": "director-room",
+        "type": "storage",
+        "position": [
+          -9.62,
+          0,
+          -7.42
+        ],
+        "rotation": 0,
+        "size": [
+          1.25,
+          0.58,
+          0.34
+        ],
+        "color": "#C9A677"
+      },
+      {
+        "id": "director-top-shelf",
+        "roomId": "director-room",
+        "type": "shelf",
+        "position": [
+          -7.0,
+          0,
+          -7.42
+        ],
+        "rotation": 0,
+        "size": [
+          1.34,
+          0.62,
+          0.34
+        ],
+        "color": "#B78F64"
+      },
+      {
+        "id": "director-side-cabinet",
+        "roomId": "director-room",
+        "type": "storage",
+        "position": [
+          -11.5,
+          0,
+          -5.15
+        ],
+        "rotation": 0,
+        "size": [
+          0.42,
+          0.82,
+          0.44
+        ],
+        "color": "#D0B38D"
+      },
+      {
+        "id": "director-visitor-chair-left",
+        "roomId": "director-room",
+        "type": "chair",
+        "position": [
+          -10.38,
+          0,
+          -4.82
+        ],
+        "rotation": 0,
+        "color": "#8FA4B8"
+      },
+      {
+        "id": "director-visitor-chair-right",
+        "roomId": "director-room",
+        "type": "chair",
+        "position": [
+          -9.06,
+          0,
+          -4.82
+        ],
+        "rotation": 0,
+        "color": "#8FA4B8"
+      },
+      {
+        "id": "director-round-table",
+        "roomId": "director-room",
+        "type": "loungeTable",
+        "position": [
+          -7.35,
+          0,
+          -5.72
+        ],
+        "rotation": 0,
+        "size": [
+          0.82,
+          0.12,
+          0.82
+        ],
+        "color": "#D7B98F"
+      },
+      {
+        "id": "director-guest-chair-a",
+        "roomId": "director-room",
+        "type": "chair",
+        "position": [
+          -7.92,
+          0,
+          -4.92
+        ],
+        "rotation": 3.1416,
+        "color": "#A9B7C5"
+      },
+      {
+        "id": "director-guest-chair-b",
+        "roomId": "director-room",
+        "type": "chair",
+        "position": [
+          -6.72,
+          0,
+          -5.24
+        ],
+        "rotation": -2.45,
+        "color": "#A9B7C5"
+      },
+      {
+        "id": "director-plant-top",
+        "roomId": "director-room",
+        "type": "plant",
+        "position": [
+          -6.25,
+          0,
+          -7.15
+        ],
+        "rotation": 0
+      },
+      {
+        "id": "director-plant-label",
+        "roomId": "director-room",
+        "type": "plant",
+        "position": [
+          -11.25,
+          0,
+          -3.25
+        ],
+        "rotation": 0
+      },
+      {
+        "id": "director-frame",
+        "roomId": "director-room",
+        "type": "board",
+        "position": [
+          -8.35,
+          0,
+          -7.45
+        ],
+        "rotation": 0,
+        "size": [
+          0.8,
+          0.05,
+          0.08
+        ],
+        "color": "#F5EFE6"
+      },
+      {
+        "id": "meeting-large-screen",
+        "roomId": "meeting-room",
+        "type": "digitalSign",
+        "position": [
+          0,
+          0,
+          -7.5
+        ],
+        "rotation": 0,
+        "size": [
+          1.45,
+          0.48,
+          0.1
+        ],
+        "color": "#42566F"
+      },
+      {
+        "id": "meeting-table",
+        "roomId": "meeting-room",
+        "type": "roundMeetingTable",
+        "position": [
+          0,
+          0,
+          -5.62
+        ],
+        "rotation": 0,
+        "size": [
+          3.9,
+          0.16,
+          2.05
+        ],
+        "color": "#D8B27E"
+      },
+      {
+        "id": "meeting-chair-01",
+        "roomId": "meeting-room",
+        "type": "chair",
+        "position": [
+          -2.15,
+          0,
+          -6.68
+        ],
+        "rotation": 3.1416,
+        "color": "#8496AA"
+      },
+      {
+        "id": "meeting-chair-02",
+        "roomId": "meeting-room",
+        "type": "chair",
+        "position": [
+          0,
+          0,
+          -6.9
+        ],
+        "rotation": 3.1416,
+        "color": "#8496AA"
+      },
+      {
+        "id": "meeting-chair-03",
+        "roomId": "meeting-room",
+        "type": "chair",
+        "position": [
+          2.15,
+          0,
+          -6.68
+        ],
+        "rotation": 3.1416,
+        "color": "#8496AA"
+      },
+      {
+        "id": "meeting-chair-04",
+        "roomId": "meeting-room",
+        "type": "chair",
+        "position": [
+          -2.9,
+          0,
+          -5.62
+        ],
+        "rotation": -1.5708,
+        "color": "#8496AA"
+      },
+      {
+        "id": "meeting-chair-05",
+        "roomId": "meeting-room",
+        "type": "chair",
+        "position": [
+          2.9,
+          0,
+          -5.62
+        ],
+        "rotation": 1.5708,
+        "color": "#8496AA"
+      },
+      {
+        "id": "meeting-chair-06",
+        "roomId": "meeting-room",
+        "type": "chair",
+        "position": [
+          -2.15,
+          0,
+          -4.48
+        ],
+        "rotation": 0,
+        "color": "#8496AA"
+      },
+      {
+        "id": "meeting-chair-07",
+        "roomId": "meeting-room",
+        "type": "chair",
+        "position": [
+          0,
+          0,
+          -4.28
+        ],
+        "rotation": 0,
+        "color": "#8496AA"
+      },
+      {
+        "id": "meeting-chair-08",
+        "roomId": "meeting-room",
+        "type": "chair",
+        "position": [
+          2.15,
+          0,
+          -4.48
+        ],
+        "rotation": 0,
+        "color": "#8496AA"
+      },
+      {
+        "id": "meeting-plant-left",
+        "roomId": "meeting-room",
+        "type": "plant",
+        "position": [
+          -4.2,
+          0,
+          -3.4
+        ],
+        "rotation": 0
+      },
+      {
+        "id": "meeting-plant-right",
+        "roomId": "meeting-room",
+        "type": "plant",
+        "position": [
+          4.25,
+          0,
+          -3.45
+        ],
+        "rotation": 0
+      },
+      {
+        "id": "content-top-shelf",
+        "roomId": "content-zone",
+        "type": "shelf",
+        "position": [
+          6.5,
+          0,
+          -7.35
+        ],
+        "rotation": 0,
+        "size": [
+          1.25,
+          0.68,
+          0.34
+        ],
+        "color": "#B78F64"
+      },
+      {
+        "id": "content-side-cabinet",
+        "roomId": "content-zone",
+        "type": "storage",
+        "position": [
+          10.95,
+          0,
+          -6.0
+        ],
+        "rotation": 0,
+        "size": [
+          0.42,
+          0.92,
+          0.42
+        ],
+        "color": "#D0B38D"
+      },
+      {
+        "id": "content-sofa",
+        "roomId": "content-zone",
+        "type": "sofa",
+        "position": [
+          8.78,
+          0,
+          -4.72
+        ],
+        "rotation": 0,
+        "size": [
+          2.05,
+          0.44,
+          0.7
+        ],
+        "color": "#DED7CB"
+      },
+      {
+        "id": "content-coffee-table",
+        "roomId": "content-zone",
+        "type": "loungeTable",
+        "position": [
+          8.78,
+          0,
+          -4.12
+        ],
+        "rotation": 0,
+        "size": [
+          0.95,
+          0.11,
+          0.5
+        ],
+        "color": "#D7B98F"
+      },
+      {
+        "id": "content-lounge-chair",
+        "roomId": "content-zone",
+        "type": "chair",
+        "position": [
+          7.35,
+          0,
+          -4.25
+        ],
+        "rotation": 1.25,
+        "color": "#A5B883"
+      },
+      {
+        "id": "content-plant-right",
+        "roomId": "content-zone",
+        "type": "plant",
+        "position": [
+          11.15,
+          0,
+          -4.05
+        ],
+        "rotation": 0
+      },
+      {
+        "id": "content-plant-left",
+        "roomId": "content-zone",
+        "type": "plant",
+        "position": [
+          5.75,
+          0,
+          -3.45
+        ],
+        "rotation": 0
+      },
+      {
+        "id": "content-board",
+        "roomId": "content-zone",
+        "type": "contentBoard",
+        "position": [
+          10.0,
+          0,
+          -7.32
+        ],
+        "rotation": 0,
+        "size": [
+          1.2,
+          0.06,
+          0.08
+        ],
+        "color": "#F8FAFC"
+      },
+      {
+        "id": "content-paper-1",
+        "roomId": "content-zone",
+        "type": "propBox",
+        "position": [
+          7.65,
+          0,
+          -6.02
+        ],
+        "rotation": 0.1,
+        "size": [
+          0.26,
+          0.035,
+          0.2
+        ],
+        "color": "#F7E7C8"
+      },
+      {
+        "id": "content-paper-2",
+        "roomId": "content-zone",
+        "type": "propBox",
+        "position": [
+          8.25,
+          0,
+          -4.38
+        ],
+        "rotation": 0.2,
+        "size": [
+          0.26,
+          0.035,
+          0.2
+        ],
+        "color": "#F7E7C8"
+      },
+      {
+        "id": "content-paper-3",
+        "roomId": "content-zone",
+        "type": "propBox",
+        "position": [
+          9.35,
+          0,
+          -6.02
+        ],
+        "rotation": 0.30000000000000004,
+        "size": [
+          0.26,
+          0.035,
+          0.2
+        ],
+        "color": "#F7E7C8"
+      },
+      {
+        "id": "secretary-safe",
+        "roomId": "review-zone",
+        "type": "serverRack",
+        "position": [
+          -10.45,
+          0,
+          -1.22
+        ],
+        "rotation": 0,
+        "size": [
+          0.78,
+          0.92,
+          0.5
+        ],
+        "color": "#A9B3BD"
+      },
+      {
+        "id": "secretary-doc-stack",
+        "roomId": "review-zone",
+        "type": "documentCabinet",
+        "position": [
+          -10.3,
+          0,
+          0.5
+        ],
+        "rotation": 0,
+        "size": [
+          0.62,
+          0.62,
+          0.42
+        ],
+        "color": "#C9A677"
+      },
+      {
+        "id": "secretary-side-cabinet",
+        "roomId": "review-zone",
+        "type": "storage",
+        "position": [
+          -6.55,
+          0,
+          0.78
+        ],
+        "rotation": 0,
+        "size": [
+          0.48,
+          0.85,
+          0.42
+        ],
+        "color": "#D0B38D"
+      },
+      {
+        "id": "secretary-glass-cabinet",
+        "roomId": "review-zone",
+        "type": "storage",
+        "position": [
+          -6.65,
+          0,
+          -0.82
+        ],
+        "rotation": 0,
+        "size": [
+          0.52,
+          1.0,
+          0.42
+        ],
+        "color": "#DDE7EA"
+      },
+      {
+        "id": "secretary-phone",
+        "roomId": "review-zone",
+        "type": "propBox",
+        "position": [
+          -8.95,
+          0,
+          -0.33
+        ],
+        "rotation": 0.2,
+        "size": [
+          0.22,
+          0.12,
+          0.18
+        ],
+        "color": "#6B7280"
+      },
+      {
+        "id": "secretary-paper",
+        "roomId": "review-zone",
+        "type": "propBox",
+        "position": [
+          -8.35,
+          0,
+          -0.82
+        ],
+        "rotation": 0.1,
+        "size": [
+          0.32,
+          0.035,
+          0.24
+        ],
+        "color": "#F7E7C8"
+      },
+      {
+        "id": "secretary-plant",
+        "roomId": "review-zone",
+        "type": "plant",
+        "position": [
+          -11.25,
+          0,
+          1.8
+        ],
+        "rotation": 0
+      },
+      {
+        "id": "dev-bench-top",
+        "roomId": "dev-ops-zone",
+        "type": "teamBench",
+        "position": [
+          0.0,
+          0,
+          -0.95
+        ],
+        "rotation": 0,
+        "size": [
+          3.35,
+          0.18,
+          1.05
+        ],
+        "color": "#C8A783"
+      },
+      {
+        "id": "dev-bench-bottom",
+        "roomId": "dev-ops-zone",
+        "type": "teamBench",
+        "position": [
+          0.0,
+          0,
+          1.28
+        ],
+        "rotation": 0,
+        "size": [
+          3.35,
+          0.18,
+          1.05
+        ],
+        "color": "#C8A783"
+      },
+      {
+        "id": "dev-whiteboard-top",
+        "roomId": "dev-ops-zone",
+        "type": "board",
+        "position": [
+          0.05,
+          0,
+          -2.02
+        ],
+        "rotation": 0,
+        "size": [
+          1.8,
+          0.06,
+          0.08
+        ],
+        "color": "#F8FAFC"
+      },
+      {
+        "id": "dev-small-review-table",
+        "roomId": "dev-ops-zone",
+        "type": "smallMeetingTable",
+        "position": [
+          -2.15,
+          0,
+          1.2
+        ],
+        "rotation": 0,
+        "size": [
+          1.05,
+          0.14,
+          0.7
+        ],
+        "color": "#D7B98F"
+      },
+      {
+        "id": "dev-review-plant",
+        "roomId": "dev-ops-zone",
+        "type": "plant",
+        "position": [
+          -2.15,
+          0,
+          0.72
+        ],
+        "rotation": 0
+      },
+      {
+        "id": "dev-printer",
+        "roomId": "dev-ops-zone",
+        "type": "printer",
+        "position": [
+          3.1,
+          0,
+          -0.72
+        ],
+        "rotation": 0,
+        "size": [
+          0.72,
+          0.75,
+          0.52
+        ],
+        "color": "#9DA8B3"
+      },
+      {
+        "id": "dev-server-box",
+        "roomId": "dev-ops-zone",
+        "type": "serverRack",
+        "position": [
+          3.2,
+          0,
+          1.05
+        ],
+        "rotation": 0,
+        "size": [
+          0.58,
+          0.72,
+          0.5
+        ],
+        "color": "#7B8794"
+      },
+      {
+        "id": "dev-plant-right",
+        "roomId": "dev-ops-zone",
+        "type": "plant",
+        "position": [
+          4.1,
+          0,
+          1.85
+        ],
+        "rotation": 0
+      },
+      {
+        "id": "finance-glass-case",
+        "roomId": "finance-stock-zone",
+        "type": "storage",
+        "position": [
+          8.25,
+          0,
+          -0.75
+        ],
+        "rotation": 0,
+        "size": [
+          0.52,
+          0.98,
+          0.42
+        ],
+        "color": "#DDE7EA"
+      },
+      {
+        "id": "finance-top-cabinet",
+        "roomId": "finance-stock-zone",
+        "type": "storage",
+        "position": [
+          10.7,
+          0,
+          -1.7
+        ],
+        "rotation": 0,
+        "size": [
+          0.72,
+          0.62,
+          0.38
+        ],
+        "color": "#C9A677"
+      },
+      {
+        "id": "finance-doc-cabinet",
+        "roomId": "finance-stock-zone",
+        "type": "documentCabinet",
+        "position": [
+          10.7,
+          0,
+          1.55
+        ],
+        "rotation": 0,
+        "size": [
+          0.62,
+          0.82,
+          0.42
+        ],
+        "color": "#C9A677"
+      },
+      {
+        "id": "finance-plant",
+        "roomId": "finance-stock-zone",
+        "type": "plant",
+        "position": [
+          10.85,
+          0,
+          0.7
+        ],
+        "rotation": 0
+      },
+      {
+        "id": "finance-chart-board",
+        "roomId": "finance-stock-zone",
+        "type": "board",
+        "position": [
+          6.15,
+          0,
+          -1.4
+        ],
+        "rotation": 1.5708,
+        "size": [
+          0.92,
+          0.06,
+          0.08
+        ],
+        "color": "#F8FAFC"
+      },
+      {
+        "id": "finance-paper-01",
+        "roomId": "finance-stock-zone",
+        "type": "propBox",
+        "position": [
+          9.32,
+          0,
+          0.76
+        ],
+        "rotation": 0.22,
+        "size": [
+          0.3,
+          0.035,
+          0.22
+        ],
+        "color": "#F7E7C8"
+      },
+      {
+        "id": "finance-paper-02",
+        "roomId": "finance-stock-zone",
+        "type": "propBox",
+        "position": [
+          7.13,
+          0,
+          -0.55
+        ],
+        "rotation": -0.12,
+        "size": [
+          0.26,
+          0.035,
+          0.2
+        ],
+        "color": "#F7E7C8"
+      },
+      {
+        "id": "lounge-rug",
+        "roomId": "break-lounge",
+        "type": "floorRug",
+        "position": [
+          -8.85,
+          0,
+          5.48
+        ],
+        "rotation": 0,
+        "size": [
+          3.7,
+          0.024,
+          2.7
+        ],
+        "color": "#E7D3BB"
+      },
+      {
+        "id": "lounge-sofa",
+        "roomId": "break-lounge",
+        "type": "sofa",
+        "position": [
+          -9.38,
+          0,
+          4.3
+        ],
+        "rotation": 0,
+        "size": [
+          2.25,
+          0.46,
+          0.76
+        ],
+        "color": "#DED7CB"
+      },
+      {
+        "id": "lounge-low-table",
+        "roomId": "break-lounge",
+        "type": "loungeTable",
+        "position": [
+          -8.72,
+          0,
+          5.45
+        ],
+        "rotation": 0,
+        "size": [
+          1.12,
+          0.12,
+          0.72
+        ],
+        "color": "#D5B287"
+      },
+      {
+        "id": "lounge-chair-right-top",
+        "roomId": "break-lounge",
+        "type": "chair",
+        "position": [
+          -7.35,
+          0,
+          4.72
+        ],
+        "rotation": 2.35,
+        "color": "#C8C7C8"
+      },
+      {
+        "id": "lounge-chair-right-bottom",
+        "roomId": "break-lounge",
+        "type": "chair",
+        "position": [
+          -7.35,
+          0,
+          6.05
+        ],
+        "rotation": -2.3,
+        "color": "#C8C7C8"
+      },
+      {
+        "id": "lounge-side-table",
+        "roomId": "break-lounge",
+        "type": "loungeTable",
+        "position": [
+          -6.55,
+          0,
+          5.34
+        ],
+        "rotation": 0,
+        "size": [
+          0.48,
+          0.1,
+          0.48
+        ],
+        "color": "#CFAE84"
+      },
+      {
+        "id": "lounge-bar",
+        "roomId": "break-lounge",
+        "type": "barTable",
+        "position": [
+          -11.15,
+          0,
+          6.58
+        ],
+        "rotation": 1.5708,
+        "size": [
+          1.38,
+          0.15,
+          0.42
+        ],
+        "color": "#C9A677"
+      },
+      {
+        "id": "lounge-plant-left",
+        "roomId": "break-lounge",
+        "type": "plant",
+        "position": [
+          -11.28,
+          0,
+          4.18
+        ],
+        "rotation": 0
+      },
+      {
+        "id": "lounge-plant-bottom",
+        "roomId": "break-lounge",
+        "type": "plant",
+        "position": [
+          -6.2,
+          0,
+          7.25
+        ],
+        "rotation": 0
+      },
+      {
+        "id": "lounge-tv",
+        "roomId": "break-lounge",
+        "type": "board",
+        "position": [
+          -10.8,
+          0,
+          6.85
+        ],
+        "rotation": 1.5708,
+        "size": [
+          0.8,
+          0.05,
+          0.08
+        ],
+        "color": "#E7EEF2"
+      },
+      {
+        "id": "lounge-prop-1",
+        "roomId": "break-lounge",
+        "type": "propBox",
+        "position": [
+          -8.9,
+          0,
+          5.38
+        ],
+        "rotation": 0.2,
+        "size": [
+          0.22,
+          0.04,
+          0.16
+        ],
+        "color": "#F7E7C8"
+      },
+      {
+        "id": "lounge-prop-2",
+        "roomId": "break-lounge",
+        "type": "propBox",
+        "position": [
+          -8.58,
+          0,
+          5.52
+        ],
+        "rotation": 0.4,
+        "size": [
+          0.22,
+          0.04,
+          0.16
+        ],
+        "color": "#DDE7EA"
+      },
+      {
+        "id": "lounge-prop-3",
+        "roomId": "break-lounge",
+        "type": "propBox",
+        "position": [
+          -8.35,
+          0,
+          5.34
+        ],
+        "rotation": 0.6000000000000001,
+        "size": [
+          0.22,
+          0.04,
+          0.16
+        ],
+        "color": "#7B8794"
+      },
+      {
+        "id": "lobby-fridge",
+        "roomId": "lobby-common-zone",
+        "type": "serverRack",
+        "position": [
+          -3.65,
+          0,
+          4.12
+        ],
+        "rotation": 0,
+        "size": [
+          0.68,
+          1.35,
+          0.5
+        ],
+        "color": "#AEB8C2"
+      },
+      {
+        "id": "lobby-storage-box",
+        "roomId": "lobby-common-zone",
+        "type": "storage",
+        "position": [
+          -2.45,
+          0,
+          4.65
+        ],
+        "rotation": 0,
+        "size": [
+          0.58,
+          0.72,
+          0.42
+        ],
+        "color": "#C9A677"
+      },
+      {
+        "id": "lobby-file-box",
+        "roomId": "lobby-common-zone",
+        "type": "propBox",
+        "position": [
+          -2.95,
+          0,
+          5.3
+        ],
+        "rotation": 0.12,
+        "size": [
+          0.42,
+          0.34,
+          0.38
+        ],
+        "color": "#D6A880"
+      },
+      {
+        "id": "lobby-wait-chair",
+        "roomId": "lobby-common-zone",
+        "type": "chair",
+        "position": [
+          -2.15,
+          0,
+          5.15
+        ],
+        "rotation": -2.15,
+        "color": "#CBB8A6"
+      },
+      {
+        "id": "lobby-plant-left",
+        "roomId": "lobby-common-zone",
+        "type": "plant",
+        "position": [
+          -4.12,
+          0,
+          6.75
+        ],
+        "rotation": 0
+      },
+      {
+        "id": "lobby-plant-center",
+        "roomId": "lobby-common-zone",
+        "type": "plant",
+        "position": [
+          -3.9,
+          0,
+          7.55
+        ],
+        "rotation": 0
+      },
+      {
+        "id": "lobby-entrance-rug",
+        "roomId": "lobby-common-zone",
+        "type": "floorRug",
+        "position": [
+          0,
+          0,
+          7.45
+        ],
+        "rotation": 0,
+        "size": [
+          1.85,
+          0.024,
+          0.58
+        ],
+        "color": "#EEE0C7"
+      },
+      {
+        "id": "pantry-rug",
+        "roomId": "pantry-coffee-zone",
+        "type": "floorRug",
+        "position": [
+          2.6,
+          0,
+          6.15
+        ],
+        "rotation": 0,
+        "size": [
+          3.0,
+          0.024,
+          2.05
+        ],
+        "color": "#E8D8BF"
+      },
+      {
+        "id": "pantry-table",
+        "roomId": "pantry-coffee-zone",
+        "type": "barTable",
+        "position": [
+          1.85,
+          0,
+          6.15
+        ],
+        "rotation": 0,
+        "size": [
+          1.45,
+          0.15,
+          0.72
+        ],
+        "color": "#D5B287"
+      },
+      {
+        "id": "pantry-chair-1",
+        "roomId": "pantry-coffee-zone",
+        "type": "stool",
+        "position": [
+          1.25,
+          0,
+          5.55
+        ],
+        "rotation": 0,
+        "color": "#83A88F"
+      },
+      {
+        "id": "pantry-chair-2",
+        "roomId": "pantry-coffee-zone",
+        "type": "stool",
+        "position": [
+          2.45,
+          0,
+          5.55
+        ],
+        "rotation": 0,
+        "color": "#83A88F"
+      },
+      {
+        "id": "pantry-chair-3",
+        "roomId": "pantry-coffee-zone",
+        "type": "stool",
+        "position": [
+          1.25,
+          0,
+          6.75
+        ],
+        "rotation": 3.1416,
+        "color": "#83A88F"
+      },
+      {
+        "id": "pantry-chair-4",
+        "roomId": "pantry-coffee-zone",
+        "type": "stool",
+        "position": [
+          2.45,
+          0,
+          6.75
+        ],
+        "rotation": 3.1416,
+        "color": "#83A88F"
+      },
+      {
+        "id": "pantry-counter",
+        "roomId": "pantry-coffee-zone",
+        "type": "storage",
+        "position": [
+          3.72,
+          0,
+          6.18
+        ],
+        "rotation": 1.5708,
+        "size": [
+          1.55,
+          0.72,
+          0.42
+        ],
+        "color": "#C9A677"
+      },
+      {
+        "id": "pantry-coffee-machine",
+        "roomId": "pantry-coffee-zone",
+        "type": "coffeeMachine",
+        "position": [
+          3.32,
+          0,
+          5.58
+        ],
+        "rotation": 0,
+        "size": [
+          0.42,
+          0.66,
+          0.38
+        ],
+        "color": "#5A6472"
+      },
+      {
+        "id": "pantry-water",
+        "roomId": "pantry-coffee-zone",
+        "type": "waterDispenser",
+        "position": [
+          4.02,
+          0,
+          5.58
+        ],
+        "rotation": 0,
+        "size": [
+          0.42,
+          0.78,
+          0.38
+        ],
+        "color": "#AEB8C2"
+      },
+      {
+        "id": "pantry-sink",
+        "roomId": "pantry-coffee-zone",
+        "type": "propBox",
+        "position": [
+          3.78,
+          0,
+          6.2
+        ],
+        "rotation": 0,
+        "size": [
+          0.46,
+          0.08,
+          0.32
+        ],
+        "color": "#DDE7EA"
+      },
+      {
+        "id": "pantry-cabinet",
+        "roomId": "pantry-coffee-zone",
+        "type": "shelf",
+        "position": [
+          4.12,
+          0,
+          6.98
+        ],
+        "rotation": 3.1416,
+        "size": [
+          0.88,
+          0.7,
+          0.34
+        ],
+        "color": "#B78F64"
+      },
+      {
+        "id": "pantry-plant",
+        "roomId": "pantry-coffee-zone",
+        "type": "plant",
+        "position": [
+          4.45,
+          0,
+          7.35
+        ],
+        "rotation": 0
+      },
+      {
+        "id": "knowledge-doc-cabinet",
+        "roomId": "knowledge-audit-zone",
+        "type": "documentCabinet",
+        "position": [
+          7.05,
+          0,
+          6.15
+        ],
+        "rotation": 0,
+        "size": [
+          0.58,
+          0.95,
+          0.42
+        ],
+        "color": "#DDE7EA"
+      },
+      {
+        "id": "knowledge-low-table",
+        "roomId": "knowledge-audit-zone",
+        "type": "loungeTable",
+        "position": [
+          9.85,
+          0,
+          6.78
+        ],
+        "rotation": 0,
+        "size": [
+          0.72,
+          0.11,
+          0.46
+        ],
+        "color": "#D7B98F"
+      },
+      {
+        "id": "knowledge-lounge-chair",
+        "roomId": "knowledge-audit-zone",
+        "type": "chair",
+        "position": [
+          10.1,
+          0,
+          4.62
+        ],
+        "rotation": -2.3,
+        "color": "#C7A1D7"
+      },
+      {
+        "id": "knowledge-small-stool",
+        "roomId": "knowledge-audit-zone",
+        "type": "stool",
+        "position": [
+          10.95,
+          0,
+          4.58
+        ],
+        "rotation": -1.5708,
+        "color": "#C9A677"
+      },
+      {
+        "id": "knowledge-plant",
+        "roomId": "knowledge-audit-zone",
+        "type": "plant",
+        "position": [
+          10.85,
+          0,
+          6.9
+        ],
+        "rotation": 0
+      },
+      {
+        "id": "knowledge-board",
+        "roomId": "knowledge-audit-zone",
+        "type": "board",
+        "position": [
+          7.35,
+          0,
+          7.05
+        ],
+        "rotation": 0,
+        "size": [
+          0.85,
+          0.05,
+          0.08
+        ],
+        "color": "#F8FAFC"
+      },
+      {
+        "id": "knowledge-bookcase",
+        "roomId": "knowledge-audit-zone",
+        "type": "bookcase",
+        "position": [
+          10.05,
+          0,
+          7.42
+        ],
+        "rotation": 0,
+        "size": [
+          1.05,
+          0.78,
+          0.34
+        ],
+        "color": "#B78F64"
+      },
+      {
+        "id": "lounge-bottom-sofa",
+        "roomId": "break-lounge",
+        "type": "sofa",
+        "position": [
+          -9.15,
+          0,
+          6.72
+        ],
+        "rotation": 3.1416,
+        "size": [
+          2.35,
+          0.46,
+          0.76
+        ],
+        "color": "#D8C8B8"
+      },
+      {
+        "id": "lounge-bottom-side-table",
+        "roomId": "break-lounge",
+        "type": "loungeTable",
+        "position": [
+          -10.65,
+          0,
+          6.05
+        ],
+        "rotation": 0,
+        "size": [
+          0.48,
+          0.1,
+          0.48
+        ],
+        "color": "#CFAE84"
+      },
+      {
+        "id": "lobby-common-table-rug",
+        "roomId": "lobby-common-zone",
+        "type": "floorRug",
+        "position": [
+          -0.65,
+          0,
+          5.55
+        ],
+        "rotation": 0,
+        "size": [
+          3.15,
+          0.024,
+          2.05
+        ],
+        "color": "#EBDCC7"
+      },
+      {
+        "id": "lobby-common-table",
+        "roomId": "lobby-common-zone",
+        "type": "smallMeetingTable",
+        "position": [
+          -0.65,
+          0,
+          5.55
+        ],
+        "rotation": 0,
+        "size": [
+          2.35,
+          0.15,
+          0.86
+        ],
+        "color": "#D4B184"
+      },
+      {
+        "id": "lobby-common-chair-north-1",
+        "roomId": "lobby-common-zone",
+        "type": "chair",
+        "position": [
+          -1.45,
+          0,
+          4.82
+        ],
+        "rotation": 3.1416,
+        "color": "#8FA4B8"
+      },
+      {
+        "id": "lobby-common-chair-south-1",
+        "roomId": "lobby-common-zone",
+        "type": "chair",
+        "position": [
+          -1.45,
+          0,
+          6.28
+        ],
+        "rotation": 0,
+        "color": "#8FA4B8"
+      },
+      {
+        "id": "lobby-common-chair-north-2",
+        "roomId": "lobby-common-zone",
+        "type": "chair",
+        "position": [
+          -0.65,
+          0,
+          4.82
+        ],
+        "rotation": 3.1416,
+        "color": "#8FA4B8"
+      },
+      {
+        "id": "lobby-common-chair-south-2",
+        "roomId": "lobby-common-zone",
+        "type": "chair",
+        "position": [
+          -0.65,
+          0,
+          6.28
+        ],
+        "rotation": 0,
+        "color": "#8FA4B8"
+      },
+      {
+        "id": "lobby-common-chair-north-3",
+        "roomId": "lobby-common-zone",
+        "type": "chair",
+        "position": [
+          0.15,
+          0,
+          4.82
+        ],
+        "rotation": 3.1416,
+        "color": "#8FA4B8"
+      },
+      {
+        "id": "lobby-common-chair-south-3",
+        "roomId": "lobby-common-zone",
+        "type": "chair",
+        "position": [
+          0.15,
+          0,
+          6.28
+        ],
+        "rotation": 0,
+        "color": "#8FA4B8"
+      },
+      {
+        "id": "knowledge-side-cabinet",
+        "roomId": "knowledge-audit-zone",
+        "type": "storage",
+        "position": [
+          10.35,
+          0,
+          6.25
+        ],
+        "rotation": 0,
+        "size": [
+          0.72,
+          0.58,
+          0.36
+        ],
+        "color": "#C9A677"
+      },
+      {
+        "id": "knowledge-archive-box",
+        "roomId": "knowledge-audit-zone",
+        "type": "propBox",
+        "position": [
+          9.55,
+          0,
+          7.02
+        ],
+        "rotation": -0.16,
+        "size": [
+          0.38,
+          0.24,
+          0.32
+        ],
+        "color": "#D6A880"
+      }
+    ]
+  },
+  "employeeSeats": {
+    "director": "director-desk",
+    "content-planner": "content-desk-01",
+    "marketing-manager": "content-desk-02",
+    "developer": "dev-desk-01",
+    "finance-manager": "finance-desk-01",
+    "stock-monitor": "stock-desk-01",
+    "qa-auditor": "audit-desk-01"
+  }
+}
