@@ -34,7 +34,13 @@ const nav = [["⌂","대표실"],["◇","가상 오피스"],["▣","업무 보�
 const legend: [Group,string][] = [["working","업무 중"],["meeting","회의 중"],["waiting","승인 대기"],["error","오류 대응"],["done","업무 완료"],["idle","대기·휴식"]];
 const SHOW_EMPLOYEE_MOVEMENT_DEV_PANEL = process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_SHOW_MOVEMENT_TEST_PANEL === "true";
 const employeeStatusOptions: EmployeeStatus[] = ["대기 중","업무 중","조사 중","회의 중","검토 중","결과 대기","승인 대기","수정 중","보고 중","오류 대응 중","업무 완료","휴식 중","업무 종료"];
-const movementTestScenarios: [string, EmployeeStatus][] = [["content-planner","회의 중"],["marketing-manager","승인 대기"],["developer","오류 대응 중"],["qa-auditor","휴식 중"],["stock-monitor","조사 중"]];
+type MovementTestScenario = { label: string; steps: [string, EmployeeStatus][] };
+const movementTestScenarios: MovementTestScenario[] = [
+  { label: "콘텐츠 회의", steps: [["content-planner","회의 중"],["qa-auditor","회의 중"],["finance-manager","회의 중"]] },
+  { label: "승인 요청", steps: [["marketing-manager","승인 대기"],["director","보고 중"]] },
+  { label: "오류 대응", steps: [["developer","오류 대응 중"],["finance-manager","조사 중"]] },
+  { label: "휴식", steps: [["stock-monitor","휴식 중"],["content-planner","휴식 중"]] },
+];
 const statusGroupMap: Record<EmployeeStatus, Group> = {
   "대기 중": "idle",
   "업무 중": "working",
@@ -92,7 +98,7 @@ export default function Home() {
       }
     }
   }, [employees]);
-  const runMovementScenario = () => movementTestScenarios.forEach(([employeeId,status])=>updateEmployeeStatus(employeeId,status,false));
+  const runMovementScenario = (steps = movementTestScenarios[0].steps) => steps.forEach(([employeeId,status])=>updateEmployeeStatus(employeeId,status,false));
   const resolve=(approved:boolean)=>{ setEmployees(list=>list.map((e,i)=>i===selected?{...e,status:approved?"업무 완료":"수정 중",group:approved?"done":"working",next:approved?"게시 일정 등록":"수정안 재제출"}:e));setView("selected"); };
 
   return <main className="control-room">
@@ -119,6 +125,7 @@ export default function Home() {
                 onChangeStatus={setDevStatus}
                 onRunScenario={runMovementScenario}
                 onApply={()=>updateEmployeeStatus(devEmployeeId,devStatus)}
+                scenarios={movementTestScenarios}
                 status={devStatus}
               />
             ) : null}
@@ -139,6 +146,7 @@ function EmployeeMovementDevPanel({
   onChangeEmployee,
   onChangeStatus,
   onRunScenario,
+  scenarios,
   status,
 }: {
   employees: Employee[];
@@ -146,9 +154,10 @@ function EmployeeMovementDevPanel({
   onApply: () => void;
   onChangeEmployee: (employeeId: string) => void;
   onChangeStatus: (status: EmployeeStatus) => void;
-  onRunScenario: () => void;
+  onRunScenario: (steps?: [string, EmployeeStatus][]) => void;
+  scenarios: MovementTestScenario[];
   status: EmployeeStatus;
-}){ return <div className="employee-movement-dev-panel"><strong>이동 테스트</strong><select value={employeeId} onChange={(event)=>onChangeEmployee(event.target.value)}>{employees.map(employee=><option key={employee.id} value={employee.id}>{employee.name}</option>)}</select><select value={status} onChange={(event)=>onChangeStatus(event.target.value as EmployeeStatus)}>{employeeStatusOptions.map(option=><option key={option} value={option}>{option}</option>)}</select><button onClick={onApply}>이동</button><button onClick={onRunScenario}>시나리오</button></div> }
+}){ return <div className="employee-movement-dev-panel"><strong>이동 테스트</strong><select value={employeeId} onChange={(event)=>onChangeEmployee(event.target.value)}>{employees.map(employee=><option key={employee.id} value={employee.id}>{employee.name}</option>)}</select><select value={status} onChange={(event)=>onChangeStatus(event.target.value as EmployeeStatus)}>{employeeStatusOptions.map(option=><option key={option} value={option}>{option}</option>)}</select><button onClick={onApply}>이동</button>{scenarios.map((scenario)=><button key={scenario.label} onClick={()=>onRunScenario(scenario.steps)}>{scenario.label}</button>)}</div> }
 function ViewportState({
   employees,
   onSelectEmployee,
