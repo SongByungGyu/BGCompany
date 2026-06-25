@@ -1,7 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { createBGCompanyEventBus } from "@/features/events/event-bus";
+import { appendTimelineEntry, reduceEmployeesByEvent } from "@/features/events/event-reducer";
+import { createMockScenarioSteps, mockScenarioDefinitions, type MockScenarioDefinition } from "@/features/events/mock-scenarios";
+import type { BGCompanyEvent, BGTimelineEntry } from "@/features/events/types";
 
 const OfficeCanvas = dynamic(
   () => import("@/components/office/3d/OfficeCanvas"),
@@ -33,6 +37,7 @@ const initialEmployees: Employee[] = [
 const nav = [["⌂","대표실"],["◇","가상 오피스"],["▣","업무 보드"],["♙","승인함"],["✎","콘텐츠"],["▤","재정"],["⌁","주식"],["‹›","개발"],["□","지식관리"],["◉","감사·품질"],["▧","보고서"]];
 const legend: [Group,string][] = [["working","업무 중"],["meeting","회의 중"],["waiting","승인 대기"],["error","오류 대응"],["done","업무 완료"],["idle","대기·휴식"]];
 const SHOW_EMPLOYEE_MOVEMENT_DEV_PANEL = process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_SHOW_MOVEMENT_TEST_PANEL === "true";
+const SHOW_MOCK_EVENT_SCENARIO_PANEL = process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_SHOW_MOCK_EVENT_PANEL === "true";
 const employeeStatusOptions: EmployeeStatus[] = ["대기 중","업무 중","조사 중","회의 중","검토 중","결과 대기","승인 대기","수정 중","보고 중","오류 대응 중","업무 완료","휴식 중","업무 종료"];
 type MovementTestScenario = { label: string; steps: [string, EmployeeStatus][] };
 const movementTestScenarios: MovementTestScenario[] = [
@@ -64,6 +69,10 @@ export default function Home() {
   const [activeNav,setActiveNav] = useState("가상 오피스");
   const [clock,setClock] = useState("");
   const [employees,setEmployees] = useState(initialEmployees);
+  const [eventLog,setEventLog] = useState<BGCompanyEvent[]>([]);
+  const [timelineByEmployeeId,setTimelineByEmployeeId] = useState<Record<string, BGTimelineEntry[]>>({});
+  const eventBusRef = useRef(createBGCompanyEventBus());
+  const scenarioTimerIdsRef = useRef<number[]>([]);
   const [devEmployeeId,setDevEmployeeId] = useState(initialEmployees[0].id);
   const [devStatus,setDevStatus] = useState<EmployeeStatus>("회의 중");
   const selectIndexById = useCallback((employeeId: string) => {
@@ -79,6 +88,7 @@ export default function Home() {
   }, [selectIndexById]);
   useEffect(()=>{ const tick=()=>setClock(new Intl.DateTimeFormat("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(new Date())); tick(); const id=setInterval(tick,1000); return()=>clearInterval(id)},[]);
   useEffect(()=>{ window.__bgSetView=setDemoView; return()=>{delete window.__bgSetView}},[setDemoView]);
+  useEffect(()=>()=>{scenarioTimerIdsRef.current.forEach((timerId)=>window.clearTimeout(timerId));},[]);
   const current=employees[selected], approvals=employees.filter(e=>e.status==="승인 대기").length, errors=employees.filter(e=>e.group==="error").length, working=employees.filter(e=>["working","meeting"].includes(e.group)).length;
   const kpis=useMemo(()=>[["업무 중",String(working),""],["진행 중 업무","12",""],["승인 대기",String(approvals),"waiting"],["오류",String(errors),"error"],["오늘 AI 비용","$4.20",""],["이번 달","$86.40",""]],[approvals,errors,working]);
   const choose=(i:number)=>{ if(selected===i&&view!=="unselected"){setView("unselected");return} setSelected(i);setTab("summary");setView(employees[i].status==="승인 대기"?"approval":employees[i].group==="error"?"error":"selected"); };
@@ -86,6 +96,42 @@ export default function Home() {
     const index = employees.findIndex((employee) => employee.id === employeeId);
     if (index >= 0) choose(index);
   };
+  const focusEmployeeByEvent = useCallback((employeeId: string, status: EmployeeStatus) => {
+    const index = employees.findIndex((employee) => employee.id === employeeId);
+    if (index < 0) return;
+    setSelected(index);
+    setTab("summary");
+    const group = statusGroupMap[status];
+    setView(status==="승인 대기"?"approval":group==="error"?"error":"selected");
+  }, [employees]);
+  const publishBGEvent = useCallback((event: BGCompanyEvent, focus = true) => {
+    eventBusRef.current.publish(event);
+    setEventLog(eventBusRef.current.getLog());
+    const payload = event.payload as Record<string, unknown>;
+    const status = typeof payload.status === "string" ? payload.status as EmployeeStatus : undefined;
+    const payloadNextStatus = typeof payload.nextStatus === "string" ? payload.nextStatus as EmployeeStatus : undefined;
+    const nextStatus = event.type === "MeetingStarted" ? "회의 중" : event.type === "ApprovalRequested" ? "승인 대기" : event.type === "ErrorOccurred" ? "오류 대응 중" : event.type === "TaskStarted" ? "업무 중" : event.type === "ErrorResolved" ? payloadNextStatus ?? "업무 중" : event.type === "MeetingEnded" ? payloadNextStatus ?? "업무 중" : event.type === "ApprovalResolved" ? payload.approved ? "업무 완료" : "수정 중" : event.type === "OutputGenerated" ? payloadNextStatus ?? "결과 대기" : status;
+    setEmployees((currentEmployees)=> {
+      setTimelineByEmployeeId((timeline)=>appendTimelineEntry(timeline, event, currentEmployees));
+      return reduceEmployeesByEvent(currentEmployees, event);
+    });
+    if (focus && event.employeeId && nextStatus) focusEmployeeByEvent(event.employeeId, nextStatus);
+  }, [focusEmployeeByEvent]);
+  const resetMockEvents = useCallback(() => {
+    scenarioTimerIdsRef.current.forEach((timerId)=>window.clearTimeout(timerId));
+    scenarioTimerIdsRef.current = [];
+    eventBusRef.current.clear();
+    setEventLog([]);
+    setTimelineByEmployeeId({});
+    setEmployees(initialEmployees);
+    setSelected(0);
+    setTab("summary");
+    setView("selected");
+  }, []);
+  const runMockScenario = useCallback((scenarioId: MockScenarioDefinition["id"]) => {
+    scenarioTimerIdsRef.current.forEach((timerId)=>window.clearTimeout(timerId));
+    scenarioTimerIdsRef.current = createMockScenarioSteps(scenarioId).map(({delayMs,event})=>window.setTimeout(()=>publishBGEvent({...event,timestamp:new Date().toISOString()}),delayMs));
+  }, [publishBGEvent]);
   const updateEmployeeStatus = useCallback((employeeId: string, status: EmployeeStatus, focus = true) => {
     const group = statusGroupMap[status];
     setEmployees(list=>list.map(employee=>employee.id===employeeId?{...employee,status,group,next:status==="업무 완료"?"다음 업무 대기":status==="오류 대응 중"?"오류 원인 분석 및 핫픽스 준비":status==="승인 대기"?"대표 승인 필요":employee.next}:employee));
@@ -117,6 +163,13 @@ export default function Home() {
               selectedEmployeeId={view === "unselected" ? null : current?.id ?? null}
               view={view}
             />
+            {SHOW_MOCK_EVENT_SCENARIO_PANEL ? (
+              <MockEventScenarioPanel
+                eventCount={eventLog.length}
+                onReset={resetMockEvents}
+                onRunScenario={runMockScenario}
+              />
+            ) : null}
             {SHOW_EMPLOYEE_MOVEMENT_DEV_PANEL ? (
               <EmployeeMovementDevPanel
                 employees={employees}
@@ -133,12 +186,13 @@ export default function Home() {
           <EmployeeDock view={view} employees={view==="empty"?[]:employees} selected={selected} choose={choose}/>
         </div>
       </section>
-      <Panel view={view} employee={current} tab={tab} setTab={setTab} close={()=>setView("unselected")} resolve={resolve}/>
+      <Panel view={view} employee={current} tab={tab} setTab={setTab} close={()=>setView("unselected")} resolve={resolve} timelineEntries={timelineByEmployeeId[current?.id] ?? []}/>
     </div>
   </main>
 }
 
 function OfficeViewportStatusBar(){ return <div className="office-viewport-status-bar"><strong>상태 범례</strong><div>{legend.map(([group,label])=><span key={group}><i className={`dot ${group}`}/>{label}</span>)}</div></div> }
+function MockEventScenarioPanel({eventCount,onReset,onRunScenario}:{eventCount:number;onReset:()=>void;onRunScenario:(scenarioId:MockScenarioDefinition["id"])=>void}){ return <div className="mock-event-scenario-panel"><strong>Mock 이벤트</strong>{mockScenarioDefinitions.map((scenario)=><button key={scenario.id} onClick={()=>onRunScenario(scenario.id)}>{scenario.label}</button>)}<button onClick={onReset}>전체 리셋</button><span>{eventCount} events</span></div> }
 function EmployeeMovementDevPanel({
   employees,
   employeeId,
@@ -170,9 +224,9 @@ function ViewportState({
   view: View;
 }){ if(view==="empty") return <div className="view-center empty"><b>▱</b><strong>아직 활동 중인 직원이 없습니다</strong><p>직원을 채용하면 이곳에서 함께 일하는 모습을 볼 수 있습니다</p></div>; if(view==="loading") return <div className="view-center loading"><i/><span>가상 오피스를 불러오는 중...</span></div>; return <OfficeCanvas employees={employees} onSelectEmployee={onSelectEmployee} selectedEmployeeId={selectedEmployeeId}/> }
 function EmployeeDock({view,employees,selected,choose}:{view:View;employees:Employee[];selected:number;choose:(i:number)=>void}){ return <div className="employee-dock-bar"><header><div><strong>사무실 직원</strong><span>클릭하면 우측에 상세가 열립니다</span></div><span>총 {employees.length}명 · 업무 중 {employees.filter(e=>["working","meeting"].includes(e.group)).length}</span></header>{view==="loading"?<div className="dock-skeleton">{[1,2,3,4,5].map(i=><i key={i}/>)}</div>:employees.length===0?<div className="dock-empty">표시할 직원이 없습니다</div>:<div className="dock-list">{employees.map((e,i)=><button key={e.id} className={selected===i&&view!=="unselected"?"selected":""} onClick={()=>choose(i)}><Avatar e={e} small/><span><strong>{e.name}</strong><small className={e.group}>{e.status}</small></span></button>)}</div>}</div> }
-function Panel({view,employee,tab,setTab,close,resolve}:{view:View;employee:Employee;tab:Tab;setTab:(t:Tab)=>void;close:()=>void;resolve:(a:boolean)=>void}){ if(view==="loading") return <aside className="panel skeleton"><i/><div><b/><span><i/><i/></span></div><i/><i className="tall"/><section><i/><i/></section><i/></aside>; if(view==="empty"||view==="unselected") return <aside className="panel no-selection"><div><b>♙</b><strong>{view==="empty"?"선택할 직원이 없습니다":"직원을 선택하세요"}</strong><p>{view==="empty"?"직원이 채용되면 이곳에서 상세 정보를 확인할 수 있습니다.":"하단 직원 도크에서 직원을 클릭하면 현재 업무와 상세 정보가 여기에 표시됩니다."}</p></div></aside>; return <aside className="panel"><div className="tabs">{(["summary","outputs","timeline"] as Tab[]).map(t=><button key={t} className={tab===t?"active":""} onClick={()=>setTab(t)}>{t==="summary"?"요약":t==="outputs"?"결과물":"타임라인"}</button>)}<button className="close" onClick={close}>×</button></div><div className="panel-body"><div className="profile"><Avatar e={employee}/><div><h2>{employee.name}</h2><p>{employee.department} · AI 에이전트</p></div></div><span className={`badge ${employee.group}`}><i className={`dot ${employee.group}`}/>{employee.status}</span>{tab==="summary"?<Summary e={employee} view={view} resolve={resolve}/>:tab==="outputs"?<Outputs e={employee}/>:<Timeline e={employee}/>}</div></aside> }
+function Panel({view,employee,tab,setTab,close,resolve,timelineEntries}:{view:View;employee:Employee;tab:Tab;setTab:(t:Tab)=>void;close:()=>void;resolve:(a:boolean)=>void;timelineEntries:BGTimelineEntry[]}){ if(view==="loading") return <aside className="panel skeleton"><i/><div><b/><span><i/><i/></span></div><i/><i className="tall"/><section><i/><i/></section><i/></aside>; if(view==="empty"||view==="unselected") return <aside className="panel no-selection"><div><b>♙</b><strong>{view==="empty"?"선택할 직원이 없습니다":"직원을 선택하세요"}</strong><p>{view==="empty"?"직원이 채용되면 이곳에서 상세 정보를 확인할 수 있습니다.":"하단 직원 도크에서 직원을 클릭하면 현재 업무와 상세 정보가 여기에 표시됩니다."}</p></div></aside>; return <aside className="panel"><div className="tabs">{(["summary","outputs","timeline"] as Tab[]).map(t=><button key={t} className={tab===t?"active":""} onClick={()=>setTab(t)}>{t==="summary"?"요약":t==="outputs"?"결과물":"타임라인"}</button>)}<button className="close" onClick={close}>×</button></div><div className="panel-body"><div className="profile"><Avatar e={employee}/><div><h2>{employee.name}</h2><p>{employee.department} · AI 에이전트</p></div></div><span className={`badge ${employee.group}`}><i className={`dot ${employee.group}`}/>{employee.status}</span>{tab==="summary"?<Summary e={employee} view={view} resolve={resolve}/>:tab==="outputs"?<Outputs e={employee}/>:<Timeline e={employee} entries={timelineEntries}/>}</div></aside> }
 function Summary({e,view,resolve}:{e:Employee;view:View;resolve:(a:boolean)=>void}){ return <div className="panel-stack">{view==="error"&&e.error&&<div className="error-banner"><span>⚠</span><div><strong>오류가 발생했습니다</strong><p>{e.error}</p></div></div>}<section className="task"><label>현재 업무</label><strong>{e.task}</strong><div><span><i className={e.group} style={{width:`${e.progress}%`}}/></span><b>{e.progress}%</b></div></section><div className="metrics"><Metric label="시작 시각" value={e.started}/><Metric label="현재 비용" value={e.cost}/><Metric label="사용 중인 모델" value={`• ${e.model}`} wide/></div><section className="output"><b>▯</b><div><label>최근 결과물</label><strong>{e.output}</strong><small>{e.outputMeta}</small></div></section>{view==="approval"&&e.status==="승인 대기"&&<section className="approval"><label>대표 승인 요청</label><div><button onClick={()=>resolve(true)}>승인</button><button onClick={()=>resolve(false)}>반려</button></div></section>}<section className="next"><div><label>다음 행동</label><strong>{e.next}</strong></div><span>→</span></section></div> }
 function Metric({label,value,wide}:{label:string;value:string;wide?:boolean}){return <div className={`metric ${wide?"wide":""}`}><label>{label}</label><strong>{value}</strong></div>}
 function Outputs({e}:{e:Employee}){return <div className="output-list">{[[e.output,e.outputMeta],["업무 진행 메모",`${e.started} 작성`],["참고 자료 묶음","파일 4개"]].map(([a,b])=><article key={a}><b>▯</b><div><strong>{a}</strong><small>{b}</small></div></article>)}</div>}
-function Timeline({e}:{e:Employee}){return <div className="timeline">{[[e.started,"업무를 시작했습니다","done"],["14:02","초기 자료 분석을 마쳤습니다","done"],["14:18",e.task,e.group],["다음",e.next,"idle"]].map(([a,b,c])=><article key={`${a}${b}`}><i className={c}/><time>{a}</time><p>{b}</p></article>)}</div>}
+function Timeline({e,entries}:{e:Employee;entries:BGTimelineEntry[]}){const fallback:[[string,string,string],[string,string,string],[string,string,string],[string,string,string]]=[[e.started,"업무를 시작했습니다","done"],["14:02","초기 자료 분석을 마쳤습니다","done"],["14:18",e.task,e.group],["다음",e.next,"idle"]];return <div className="timeline">{entries.length>0?entries.map((entry)=><article key={entry.id}><i className={entry.group}/><time>{new Intl.DateTimeFormat("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(new Date(entry.timestamp))}</time><p><strong>{entry.eventType}</strong> · {entry.description}{entry.taskTitle?` · ${entry.taskTitle}`:""}</p></article>):fallback.map(([a,b,c])=><article key={`${a}${b}`}><i className={c}/><time>{a}</time><p>{b}</p></article>)}</div>}
 function Avatar({e,small}:{e:Employee;small?:boolean}){return <b className={`avatar ${small?"small":""}`} data-dept={e.department}>{e.initial}<i className={`dot ${e.group}`}/></b>}
