@@ -1,21 +1,20 @@
+"use client";
+
 import { Html } from "@react-three/drei";
+import { useFrame } from "@react-three/fiber";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Vector3, type Group } from "three";
 import type { OfficeEmployee, OfficeLayout, Vec3 } from "./types";
 
 type EmployeeLocation = {
   employeeId: string;
   destinationId: string;
   position: Vec3;
+  path: Vec3[];
 };
 
-const employeeBaseDestinationMap: Record<string, string> = {
-  director: "director-desk",
-  "content-planner": "content-desk-01",
-  "marketing-manager": "content-desk-02",
-  developer: "dev-desk-01",
-  "finance-manager": "finance-desk-01",
-  "stock-monitor": "stock-desk-01",
-  "qa-auditor": "audit-desk-01",
-};
+const MOVEMENT_SPEED = 4.2;
+const ARRIVAL_THRESHOLD = 0.035;
 
 const meetingSeatMap: Record<string, string> = {
   director: "meeting-seat-01",
@@ -27,22 +26,26 @@ const meetingSeatMap: Record<string, string> = {
   "qa-auditor": "meeting-seat-05",
 };
 
-const destinationOffsets: Record<string, Vec3> = {
-  "director-desk": [0, 0, 0.72],
-  "content-desk-01": [0, 0, 0.62],
-  "content-desk-02": [0, 0, 0.62],
-  "dev-desk-01": [0.64, 0, 0.12],
-  "finance-desk-01": [0.58, 0, 0.1],
-  "stock-desk-01": [0, 0, 0.62],
-  "audit-desk-01": [0.54, 0, 0.1],
-  "approval-wait-point": [0, 0, 0.1],
-  "director-report-point": [0, 0, 0.08],
-  "error-response-point": [0.32, 0, 0.1],
-  "knowledge-search-point": [0, 0, 0.1],
-  "lobby-center": [0, 0, 0],
-  "break-seat-01": [0, 0, 0],
-  "coffee-machine-point": [0.12, 0, 0.2],
-  "entrance-point": [0, 0, -0.1],
+const departmentFallbackDestinationMap: Record<string, string> = {
+  "대표실": "director-seat",
+  "콘텐츠팀": "content-seat-01",
+  "재정팀": "finance-seat-01",
+  "주식팀": "stock-seat-01",
+  "개발팀": "dev-seat-01",
+  "지식·감사": "audit-seat-01",
+};
+
+const roomEntryNodeMap: Record<string, string> = {
+  "director-room": "director-open-node",
+  "meeting-room": "meeting-open-hub",
+  "content-zone": "content-open-node",
+  "review-zone": "review-open-node",
+  "dev-ops-zone": "dev-open-hub",
+  "finance-stock-zone": "finance-open-node",
+  "break-lounge": "lounge-open-node",
+  "lobby-common-zone": "lobby-open-hub",
+  "pantry-coffee-zone": "pantry-open-node",
+  "knowledge-audit-zone": "knowledge-open-node",
 };
 
 const departmentColors: Record<string, string> = {
@@ -63,26 +66,45 @@ const statusColors: Record<string, string> = {
   idle: "#7B8794",
 };
 
-function addVec3(a: Vec3, b: Vec3): Vec3 {
-  return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-}
+type DestinationEntry = {
+  id: string;
+  roomId: string;
+  position: Vec3;
+};
 
 function buildDestinationMap(layout: OfficeLayout) {
-  const map = new Map<string, Vec3>();
+  const map = new Map<string, DestinationEntry>();
 
   layout.destinations.forEach((destination) => {
-    map.set(destination.id, destination.position);
+    map.set(destination.id, destination);
   });
-
-  layout.furniture?.desks.forEach((desk) => {
-    map.set(desk.id, desk.position);
+  layout.seats.forEach((seat) => {
+    map.set(seat.id, seat);
+  });
+  layout.workPoints.forEach((point) => {
+    map.set(point.id, point);
+  });
+  layout.standPoints.forEach((point) => {
+    map.set(point.id, point);
   });
 
   return map;
 }
 
-function getStatusDestinationId(employee: OfficeEmployee) {
-  const baseDestinationId = employeeBaseDestinationMap[employee.id] ?? "lobby-center";
+function buildNavNodeMap(layout: OfficeLayout) {
+  return new Map(layout.navNodes.map((node) => [node.id, node.position] as const));
+}
+
+function getAssignedSeatId(layout: OfficeLayout, employee: OfficeEmployee) {
+  return layout.employeeSeats[employee.id];
+}
+
+function getFallbackDestinationId(layout: OfficeLayout, employee: OfficeEmployee) {
+  return getAssignedSeatId(layout, employee) ?? departmentFallbackDestinationMap[employee.department] ?? "lobby-center";
+}
+
+function getStatusDestinationId(layout: OfficeLayout, employee: OfficeEmployee) {
+  const baseDestinationId = getFallbackDestinationId(layout, employee);
 
   switch (employee.status) {
     case "대기 중":
@@ -104,7 +126,7 @@ function getStatusDestinationId(employee: OfficeEmployee) {
     case "오류 대응 중":
       return "error-response-point";
     case "휴식 중":
-      return employee.id === "director" ? "break-seat-02" : "break-seat-01";
+      return employee.id === "director" ? "break-seat-02" : employee.id === "qa-auditor" ? "break-seat-03" : "break-seat-01";
     case "업무 종료":
       return "entrance-point";
     default:
@@ -112,22 +134,63 @@ function getStatusDestinationId(employee: OfficeEmployee) {
   }
 }
 
+function getWaypointPath(
+  destination: DestinationEntry,
+  destinationId: string,
+  navNodeMap: Map<string, Vec3>,
+) {
+  if (["lobby-center", "main-crossroad", "entrance-point"].includes(destinationId)) {
+    return [destination.position];
+  }
+
+  const path: Vec3[] = [];
+  const lobbyNode = navNodeMap.get("lobby-open-hub");
+  const mainNode = navNodeMap.get("dev-open-hub");
+  const roomEntryNodeId = roomEntryNodeMap[destination.roomId];
+  const roomEntryNode = roomEntryNodeId ? navNodeMap.get(roomEntryNodeId) : undefined;
+
+  if (lobbyNode) path.push(lobbyNode);
+  if (mainNode && destination.roomId !== "lobby-common-zone") path.push(mainNode);
+  if (roomEntryNode && !path.some((point) => point[0] === roomEntryNode[0] && point[2] === roomEntryNode[2])) {
+    path.push(roomEntryNode);
+  }
+  path.push(destination.position);
+
+  return path;
+}
+
 function getEmployeeLocations(layout: OfficeLayout, employees: OfficeEmployee[]) {
   const destinationMap = buildDestinationMap(layout);
+  const navNodeMap = buildNavNodeMap(layout);
 
   return employees.map((employee): EmployeeLocation => {
-    const destinationId = getStatusDestinationId(employee);
-    const fallbackDestinationId = employeeBaseDestinationMap[employee.id] ?? "lobby-center";
-    const basePosition =
-      destinationMap.get(destinationId) ??
+    const requestedDestinationId = getStatusDestinationId(layout, employee);
+    const fallbackDestinationId = getFallbackDestinationId(layout, employee);
+    const requestedDestination =
+      destinationMap.get(requestedDestinationId) ??
       destinationMap.get(fallbackDestinationId) ??
-      ([0, 0, 0] as Vec3);
-    const offset = destinationOffsets[destinationId] ?? destinationOffsets[fallbackDestinationId] ?? ([0, 0, 0] as Vec3);
+      destinationMap.get(departmentFallbackDestinationMap[employee.department]) ??
+      destinationMap.get("lobby-center");
+
+    if (!requestedDestination) {
+      console.warn(`[office-placement] Missing destination for ${employee.id}; falling back to origin.`);
+      return {
+        employeeId: employee.id,
+        destinationId: "missing-destination",
+        path: [[0, 0, 0]],
+        position: [0, 0, 0],
+      };
+    }
+
+    if (!destinationMap.has(requestedDestinationId)) {
+      console.warn(`[office-placement] Missing ${requestedDestinationId}; ${employee.id} uses ${requestedDestination.id}.`);
+    }
 
     return {
       employeeId: employee.id,
-      destinationId,
-      position: addVec3(basePosition, offset),
+      destinationId: requestedDestination.id,
+      path: getWaypointPath(requestedDestination, requestedDestination.id, navNodeMap),
+      position: requestedDestination.position,
     };
   });
 }
@@ -147,10 +210,59 @@ function EmployeeAvatar3D({
   const statusColor = statusColors[employee.group] ?? "#7B8794";
   const [x, , z] = location.position;
   const scale = selected ? 1.22 : 1;
+  const groupRef = useRef<Group>(null);
+  const [initialPosition] = useState<[number, number, number]>(() => [x, 0.08, z]);
+  const lastDestinationId = useRef(location.destinationId);
+  const initialPath = useMemo(() => location.path.map(([pathX, , pathZ]) => new Vector3(pathX, 0.08, pathZ)), [location.path]);
+  const pathRef = useRef(initialPath);
+  const pathIndexRef = useRef(Math.max(0, initialPath.length - 1));
+  const [isMoving, setIsMoving] = useState(false);
+  const targetPosition = useMemo(() => new Vector3(x, 0.08, z), [x, z]);
+  const visibleStatusColor = isMoving ? "#4B9FD8" : statusColor;
+
+  useEffect(() => {
+    const group = groupRef.current;
+    if (!group) return;
+
+    const isNewDestination = lastDestinationId.current !== location.destinationId;
+    lastDestinationId.current = location.destinationId;
+
+    if (isNewDestination) {
+      pathRef.current = location.path.map(([pathX, , pathZ]) => new Vector3(pathX, 0.08, pathZ));
+      pathIndexRef.current = 0;
+    }
+
+    if (isNewDestination && group.position.distanceTo(targetPosition) > ARRIVAL_THRESHOLD) {
+      setIsMoving(true);
+    }
+  }, [location.destinationId, location.path, targetPosition]);
+
+  useFrame((_, delta) => {
+    const group = groupRef.current;
+    if (!group) return;
+
+    const pathTarget = pathRef.current[pathIndexRef.current] ?? targetPosition;
+    const distance = group.position.distanceTo(pathTarget);
+    if (distance <= ARRIVAL_THRESHOLD) {
+      group.position.copy(pathTarget);
+      if (pathIndexRef.current < pathRef.current.length - 1) {
+        pathIndexRef.current += 1;
+        return;
+      }
+      group.position.copy(targetPosition);
+      if (isMoving) setIsMoving(false);
+      return;
+    }
+
+    const step = Math.min(1, (MOVEMENT_SPEED * delta) / distance);
+    group.position.lerp(pathTarget, step);
+    if (!isMoving) setIsMoving(true);
+  });
 
   return (
     <group
-      position={[x, 0.08, z]}
+      ref={groupRef}
+      position={initialPosition}
       scale={[scale, scale, scale]}
       onClick={(event) => {
         event.stopPropagation();
@@ -166,6 +278,13 @@ function EmployeeAvatar3D({
         <mesh position={[0, 0.05, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <torusGeometry args={[0.5, 0.04, 8, 56]} />
           <meshStandardMaterial color="#4F7DDE" emissive="#4F7DDE" emissiveIntensity={0.34} roughness={0.45} />
+        </mesh>
+      ) : null}
+
+      {isMoving ? (
+        <mesh position={[0, 0.08, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.58, 0.018, 8, 44]} />
+          <meshBasicMaterial color="#4B9FD8" opacity={0.45} transparent />
         </mesh>
       ) : null}
 
@@ -195,13 +314,14 @@ function EmployeeAvatar3D({
       </mesh>
       <mesh castShadow position={[0.17, 1.05, 0.02]}>
         <sphereGeometry args={[0.09, 14, 10]} />
-        <meshStandardMaterial color={statusColor} emissive={selected ? statusColor : "#000000"} emissiveIntensity={selected ? 0.26 : 0} roughness={0.55} />
+        <meshStandardMaterial color={visibleStatusColor} emissive={selected || isMoving ? visibleStatusColor : "#000000"} emissiveIntensity={selected || isMoving ? 0.26 : 0} roughness={0.55} />
       </mesh>
 
       <Html center position={[0, 1.28, 0]} occlude={false} zIndexRange={[10, 0]}>
         <div className={`office-employee-label ${selected ? "office-employee-label-selected" : ""}`}>
           <span>{employee.name}</span>
-          <i style={{ backgroundColor: statusColor }} />
+          {isMoving ? <em>이동 중</em> : null}
+          <i style={{ backgroundColor: visibleStatusColor }} />
         </div>
       </Html>
     </group>

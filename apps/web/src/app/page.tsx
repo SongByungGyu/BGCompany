@@ -11,8 +11,9 @@ const OfficeCanvas = dynamic(
 type View = "selected" | "unselected" | "approval" | "error" | "empty" | "loading";
 type Tab = "summary" | "outputs" | "timeline";
 type Group = "working" | "meeting" | "waiting" | "error" | "done" | "idle";
+type EmployeeStatus = "대기 중" | "업무 중" | "조사 중" | "회의 중" | "검토 중" | "결과 대기" | "승인 대기" | "수정 중" | "보고 중" | "오류 대응 중" | "업무 완료" | "휴식 중" | "업무 종료";
 type Employee = {
-  id: string; name: string; initial: string; department: string; status: string;
+  id: string; name: string; initial: string; department: string; status: EmployeeStatus;
   group: Group; task: string; progress: number; started: string; model: string;
   cost: string; output: string; outputMeta: string; next: string; error?: string;
 };
@@ -31,6 +32,24 @@ const initialEmployees: Employee[] = [
 
 const nav = [["⌂","대표실"],["◇","가상 오피스"],["▣","업무 보드"],["♙","승인함"],["✎","콘텐츠"],["▤","재정"],["⌁","주식"],["‹›","개발"],["□","지식관리"],["◉","감사·품질"],["▧","보고서"]];
 const legend: [Group,string][] = [["working","업무 중"],["meeting","회의 중"],["waiting","승인 대기"],["error","오류 대응"],["done","업무 완료"],["idle","대기·휴식"]];
+const SHOW_EMPLOYEE_MOVEMENT_DEV_PANEL = process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_SHOW_MOVEMENT_TEST_PANEL === "true";
+const employeeStatusOptions: EmployeeStatus[] = ["대기 중","업무 중","조사 중","회의 중","검토 중","결과 대기","승인 대기","수정 중","보고 중","오류 대응 중","업무 완료","휴식 중","업무 종료"];
+const movementTestScenarios: [string, EmployeeStatus][] = [["content-planner","회의 중"],["marketing-manager","승인 대기"],["developer","오류 대응 중"],["qa-auditor","휴식 중"],["stock-monitor","조사 중"]];
+const statusGroupMap: Record<EmployeeStatus, Group> = {
+  "대기 중": "idle",
+  "업무 중": "working",
+  "조사 중": "waiting",
+  "회의 중": "meeting",
+  "검토 중": "working",
+  "결과 대기": "waiting",
+  "승인 대기": "waiting",
+  "수정 중": "working",
+  "보고 중": "working",
+  "오류 대응 중": "error",
+  "업무 완료": "done",
+  "휴식 중": "idle",
+  "업무 종료": "idle",
+};
 
 export default function Home() {
   const [view,setView] = useState<View>("selected");
@@ -39,6 +58,8 @@ export default function Home() {
   const [activeNav,setActiveNav] = useState("가상 오피스");
   const [clock,setClock] = useState("");
   const [employees,setEmployees] = useState(initialEmployees);
+  const [devEmployeeId,setDevEmployeeId] = useState(initialEmployees[0].id);
+  const [devStatus,setDevStatus] = useState<EmployeeStatus>("회의 중");
   const selectIndexById = useCallback((employeeId: string) => {
     const index = employees.findIndex((employee) => employee.id === employeeId);
     if (index >= 0) setSelected(index);
@@ -59,6 +80,19 @@ export default function Home() {
     const index = employees.findIndex((employee) => employee.id === employeeId);
     if (index >= 0) choose(index);
   };
+  const updateEmployeeStatus = useCallback((employeeId: string, status: EmployeeStatus, focus = true) => {
+    const group = statusGroupMap[status];
+    setEmployees(list=>list.map(employee=>employee.id===employeeId?{...employee,status,group,next:status==="업무 완료"?"다음 업무 대기":status==="오류 대응 중"?"오류 원인 분석 및 핫픽스 준비":status==="승인 대기"?"대표 승인 필요":employee.next}:employee));
+    if (focus) {
+      const index = employees.findIndex((employee) => employee.id === employeeId);
+      if (index >= 0) {
+        setSelected(index);
+        setTab("summary");
+        setView(status==="승인 대기"?"approval":group==="error"?"error":"selected");
+      }
+    }
+  }, [employees]);
+  const runMovementScenario = () => movementTestScenarios.forEach(([employeeId,status])=>updateEmployeeStatus(employeeId,status,false));
   const resolve=(approved:boolean)=>{ setEmployees(list=>list.map((e,i)=>i===selected?{...e,status:approved?"업무 완료":"수정 중",group:approved?"done":"working",next:approved?"게시 일정 등록":"수정안 재제출"}:e));setView("selected"); };
 
   return <main className="control-room">
@@ -77,6 +111,17 @@ export default function Home() {
               selectedEmployeeId={view === "unselected" ? null : current?.id ?? null}
               view={view}
             />
+            {SHOW_EMPLOYEE_MOVEMENT_DEV_PANEL ? (
+              <EmployeeMovementDevPanel
+                employees={employees}
+                employeeId={devEmployeeId}
+                onChangeEmployee={setDevEmployeeId}
+                onChangeStatus={setDevStatus}
+                onRunScenario={runMovementScenario}
+                onApply={()=>updateEmployeeStatus(devEmployeeId,devStatus)}
+                status={devStatus}
+              />
+            ) : null}
           </div>
           <EmployeeDock view={view} employees={view==="empty"?[]:employees} selected={selected} choose={choose}/>
         </div>
@@ -87,6 +132,23 @@ export default function Home() {
 }
 
 function OfficeViewportStatusBar(){ return <div className="office-viewport-status-bar"><strong>상태 범례</strong><div>{legend.map(([group,label])=><span key={group}><i className={`dot ${group}`}/>{label}</span>)}</div></div> }
+function EmployeeMovementDevPanel({
+  employees,
+  employeeId,
+  onApply,
+  onChangeEmployee,
+  onChangeStatus,
+  onRunScenario,
+  status,
+}: {
+  employees: Employee[];
+  employeeId: string;
+  onApply: () => void;
+  onChangeEmployee: (employeeId: string) => void;
+  onChangeStatus: (status: EmployeeStatus) => void;
+  onRunScenario: () => void;
+  status: EmployeeStatus;
+}){ return <div className="employee-movement-dev-panel"><strong>이동 테스트</strong><select value={employeeId} onChange={(event)=>onChangeEmployee(event.target.value)}>{employees.map(employee=><option key={employee.id} value={employee.id}>{employee.name}</option>)}</select><select value={status} onChange={(event)=>onChangeStatus(event.target.value as EmployeeStatus)}>{employeeStatusOptions.map(option=><option key={option} value={option}>{option}</option>)}</select><button onClick={onApply}>이동</button><button onClick={onRunScenario}>시나리오</button></div> }
 function ViewportState({
   employees,
   onSelectEmployee,

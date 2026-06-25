@@ -31,6 +31,33 @@ export type OfficeDestination = {
   id: string;
   roomId: string;
   position: Vec3;
+  type?: "seat" | "meetingSeat" | "workPoint" | "standPoint" | "waitingPoint";
+};
+
+export type PlacementPoint = {
+  id: string;
+  roomId: string;
+  position: Vec3;
+  rotation?: number;
+  type?: "seat" | "meetingSeat" | "workPoint" | "standPoint" | "waitingPoint";
+};
+
+export type SeatPlacement = PlacementPoint & {
+  deskId?: string;
+  employeeId?: string | null;
+};
+
+export type WorkPointPlacement = PlacementPoint & {
+  deskId: string;
+};
+
+export type BlockedArea = {
+  id: string;
+  sourceId: string;
+  type: string;
+  position: Vec3;
+  size: Vec2;
+  rotation?: number;
 };
 
 export type WalkableArea = {
@@ -54,6 +81,8 @@ export type FurnitureDesk = {
   assignedEmployeeId: string | null;
   isReserved: boolean;
   capacity: number;
+  seatId?: string;
+  workPointId?: string;
 };
 
 export type FurnitureItem = {
@@ -116,6 +145,8 @@ export type OfficeLayout = {
     showGrid: boolean;
     showNavigationDebug: boolean;
     showOfficeDebugLabels: boolean;
+    showPlacementDebug: boolean;
+    showMovementTestPanel: boolean;
   };
   camera: {
     position: Vec3;
@@ -138,6 +169,10 @@ export type OfficeLayout = {
   walkableAreas: WalkableArea[];
   doors: OfficeDoor[];
   destinations: OfficeDestination[];
+  seats: SeatPlacement[];
+  workPoints: WorkPointPlacement[];
+  standPoints: PlacementPoint[];
+  blockedAreas: BlockedArea[];
   navNodes: NavNode[];
   furniture?: {
     desks: FurnitureDesk[];

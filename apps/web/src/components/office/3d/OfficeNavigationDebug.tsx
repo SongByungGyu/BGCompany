@@ -22,6 +22,9 @@ export function OfficeNavigationDebug({
     ...layout.destinations.map(
       (destination) => [destination.id, destination.position] as const,
     ),
+    ...layout.seats.map((seat) => [seat.id, seat.position] as const),
+    ...layout.workPoints.map((point) => [point.id, point.position] as const),
+    ...layout.standPoints.map((point) => [point.id, point.position] as const),
   ]);
   const renderedEdges = new Set<string>();
   const edges = layout.navNodes.flatMap((node) =>
@@ -104,14 +107,14 @@ export function OfficeNavigationDebug({
         </group>
       ))}
 
-      {layout.destinations.map((destination) => (
+      {[...layout.seats, ...layout.workPoints, ...layout.standPoints, ...layout.destinations].map((destination) => (
         <group key={destination.id}>
           <mesh
             position={elevated(destination.position)}
             rotation={[Math.PI / 2, 0, 0]}
           >
             <torusGeometry args={[0.16, 0.055, 8, 16]} />
-            <meshBasicMaterial color="#F09A3E" depthWrite={false} />
+            <meshBasicMaterial color={destination.type === "seat" || destination.type === "meetingSeat" ? "#3FB6A6" : destination.type === "workPoint" ? "#8B6EDC" : "#F09A3E"} depthWrite={false} />
           </mesh>
           <Html
             center
@@ -123,6 +126,21 @@ export function OfficeNavigationDebug({
           </Html>
         </group>
       ))}
+
+      {layout.debug.showPlacementDebug ? layout.blockedAreas.map((area) => {
+        const [width, depth] = area.size;
+        return (
+          <mesh
+            key={area.id}
+            position={area.position}
+            rotation={[-Math.PI / 2, 0, area.rotation ?? 0]}
+            renderOrder={3}
+          >
+            <planeGeometry args={[width, depth]} />
+            <meshBasicMaterial color="#EF4444" depthWrite={false} opacity={0.12} transparent />
+          </mesh>
+        );
+      }) : null}
     </group>
   );
 }
