@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Employee {
+  id              String    @id
+  displayName     String
+  initial         String
+  department      String
+  role            String
+  status          String
+  currentTaskId   String?
+  currentLocation String?
+  model           String?
+  currentCost     Decimal?  @db.Decimal(10, 4)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tasks           Task[]
+  approvals       ApprovalRequest[]
+  events          EventLog[]
+
+  @@index([status])
+  @@index([department])
+}
+
+model Task {
+  id                 String    @id
+  title              String
+  description        String?
+  department         String
+  assignedEmployeeId String?
+  status             String
+  progress           Int       @default(0)
+  startedAt          DateTime?
+  completedAt        DateTime?
+  model              String?
+  cost               Decimal?  @db.Decimal(10, 4)
+  currentStep        String?
+  recentOutput       String?
+  nextAction         String?
+  error              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  assignedEmployee   Employee? @relation(fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
+  approvals          ApprovalRequest[]
+  events             EventLog[]
+
+  @@index([status])
+  @@index([department])
+  @@index([assignedEmployeeId])
+}
+
+model ApprovalRequest {
+  id                    String    @id
+  title                 String
+  requestedByEmployeeId String
+  taskId                String?
+  approvalType          String
+  riskLevel             String
+  estimatedCost         Decimal?  @db.Decimal(10, 4)
+  status                String
+  reason                String?
+  plannedAction         String?
+  expectedResult        String?
+  decision              String?
+  decisionReason        String?
+  decidedAt             DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  requestedBy           Employee  @relation(fields: [requestedByEmployeeId], references: [id], onDelete: Cascade)
+  task                  Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  events                EventLog[]
+
+  @@index([status])
+  @@index([requestedByEmployeeId])
+  @@index([taskId])
+}
+
+model EventLog {
+  id          String    @id
+  type        String
+  timestamp   DateTime  @default(now())
+  employeeId  String?
+  taskId      String?
+  approvalId  String?
+  payload     Json
+  summary     String?
+
+  employee    Employee?        @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  task        Task?            @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  approval    ApprovalRequest? @relation(fields: [approvalId], references: [id], onDelete: SetNull)
+  timelines   Timeline[]
+
+  @@index([type])
+  @@index([timestamp])
+  @@index([employeeId])
+  @@index([taskId])
+  @@index([approvalId])
+}
+
+model Timeline {
+  id          String    @id
+  targetType  String
+  targetId    String
+  eventId     String?
+  title       String
+  description String?
+  timestamp   DateTime  @default(now())
+
+  event       EventLog? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  @@index([targetType, targetId])
+  @@index([timestamp])
+}
