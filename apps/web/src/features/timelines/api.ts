@@ -1,5 +1,16 @@
 export type TimelineTargetType = "task" | "approval" | "employee" | "global";
 
+export type TimelineEventRecord = {
+  id: string;
+  type: string;
+  timestamp: string;
+  employeeId: string | null;
+  taskId: string | null;
+  approvalId: string | null;
+  payload: Record<string, unknown>;
+  summary: string | null;
+};
+
 export type TimelineRecord = {
   id: string;
   targetType: string;
@@ -8,6 +19,7 @@ export type TimelineRecord = {
   title: string;
   description: string | null;
   timestamp: string;
+  event?: TimelineEventRecord | null;
 };
 
 export async function fetchTimeline(input?: {

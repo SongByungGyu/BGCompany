@@ -17,6 +17,7 @@ export async function listTimelines(targetType?: string | null, targetId?: strin
       targetType: { in: normalizedTargetTypes },
       ...(targetId ? { targetId } : {}),
     } : undefined,
+    include: { event: true },
     orderBy: { timestamp: "desc" },
     take: 100,
   });
