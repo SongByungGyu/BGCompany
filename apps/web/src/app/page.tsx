@@ -6,6 +6,8 @@ import { createBGCompanyEventBus } from "@/features/events/event-bus";
 import { appendTimelineEntry, reduceEmployeesByEvent } from "@/features/events/event-reducer";
 import { createMockScenarioSteps, mockScenarioDefinitions, type MockScenarioDefinition } from "@/features/events/mock-scenarios";
 import type { BGCompanyEvent, BGTimelineEntry } from "@/features/events/types";
+import { WorkBoardView } from "@/features/work-board/WorkBoardView";
+import { ApprovalInboxView } from "@/features/approvals/ApprovalInboxView";
 
 const OfficeCanvas = dynamic(
   () => import("@/components/office/3d/OfficeCanvas"),
@@ -87,6 +89,7 @@ export default function Home() {
     if(next==="error") selectIndexById("developer");
   }, [selectIndexById]);
   useEffect(()=>{ const tick=()=>setClock(new Intl.DateTimeFormat("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(new Date())); tick(); const id=setInterval(tick,1000); return()=>clearInterval(id)},[]);
+  useEffect(()=>{ const id=window.setTimeout(()=>{ const viewParam=new URLSearchParams(window.location.search).get("view"); if(viewParam==="work-board") setActiveNav("업무 보드"); if(viewParam==="approvals") setActiveNav("승인함"); },0); return()=>window.clearTimeout(id); },[]);
   useEffect(()=>{ window.__bgSetView=setDemoView; return()=>{delete window.__bgSetView}},[setDemoView]);
   useEffect(()=>()=>{scenarioTimerIdsRef.current.forEach((timerId)=>window.clearTimeout(timerId));},[]);
   const current=employees[selected], approvals=employees.filter(e=>e.status==="승인 대기").length, errors=employees.filter(e=>e.group==="error").length, working=employees.filter(e=>["working","meeting"].includes(e.group)).length;
@@ -148,50 +151,61 @@ export default function Home() {
   const resolve=(approved:boolean)=>{ setEmployees(list=>list.map((e,i)=>i===selected?{...e,status:approved?"업무 완료":"수정 중",group:approved?"done":"working",next:approved?"게시 일정 등록":"수정안 재제출"}:e));setView("selected"); };
 
   return <main className="control-room">
-    <header className="top-bar"><div className="brand"><b>✦</b><strong>BG Company</strong><span>가상 회사 관제</span></div><div className="clock"><i/>{clock}</div><div className="kpis">{kpis.map(([label,value,kind])=><button key={label} className={kind} disabled={!kind||value==="0"} onClick={()=>kind==="error"?setDemoView("error"):kind==="waiting"?setDemoView("approval"):null}><span>{label}</span><strong>{value}</strong></button>)}<button className="gear">⚙</button>{view==="loading"&&<i className="kpi-loading"/>}</div></header>
+    <header className="top-bar"><div className="brand"><b>✦</b><strong>BG Company</strong><span>가상 회사 관제</span></div><div className="clock"><i/>{clock}</div><div className="kpis">{kpis.map(([label,value,kind])=><button key={label} className={kind} disabled={!kind||value==="0"} onClick={()=>kind==="error"?(setActiveNav("가상 오피스"),setDemoView("error")):kind==="waiting"?setActiveNav("승인함"):null}><span>{label}</span><strong>{value}</strong></button>)}<button className="gear">⚙</button>{view==="loading"&&<i className="kpi-loading"/>}</div></header>
     <div className="workspace">
       <nav className="left-nav">{nav.map(([icon,label])=><button key={label} className={activeNav===label?"active":""} onClick={()=>setActiveNav(label)}><b>{icon}</b><span>{label}</span>{label==="승인함"&&approvals>0&&<i>{approvals}</i>}</button>)}</nav>
-      <section className="stage">
-        <div className="viewport">
-          <OfficeViewportStatusBar/>
-          <div className="office-canvas-wrap">
-            <div className="controls"><button>⌕</button><button>⛶</button><button>◇</button></div>
-            {view==="error"&&<div className="toast"><span>⚠</span><strong>개발팀 · 하늘 — 배포 파이프라인 오류 대응 중</strong><button onClick={()=>setDemoView("error")}>상세 보기</button></div>}
-            <ViewportState
-              employees={employees}
-              onSelectEmployee={chooseEmployeeById}
-              selectedEmployeeId={view === "unselected" ? null : current?.id ?? null}
-              view={view}
-            />
-            {SHOW_MOCK_EVENT_SCENARIO_PANEL ? (
-              <MockEventScenarioPanel
-                eventCount={eventLog.length}
-                onReset={resetMockEvents}
-                onRunScenario={runMockScenario}
-              />
-            ) : null}
-            {SHOW_EMPLOYEE_MOVEMENT_DEV_PANEL ? (
-              <EmployeeMovementDevPanel
-                employees={employees}
-                employeeId={devEmployeeId}
-                onChangeEmployee={setDevEmployeeId}
-                onChangeStatus={setDevStatus}
-                onRunScenario={runMovementScenario}
-                onApply={()=>updateEmployeeStatus(devEmployeeId,devStatus)}
-                scenarios={movementTestScenarios}
-                status={devStatus}
-              />
-            ) : null}
-          </div>
-          <EmployeeDock view={view} employees={view==="empty"?[]:employees} selected={selected} choose={choose}/>
-        </div>
-      </section>
-      <Panel view={view} employee={current} tab={tab} setTab={setTab} close={()=>setView("unselected")} resolve={resolve} timelineEntries={timelineByEmployeeId[current?.id] ?? []}/>
+      {activeNav==="가상 오피스" ? (
+        <>
+          <section className="stage">
+            <div className="viewport">
+              <OfficeViewportStatusBar/>
+              <div className="office-canvas-wrap">
+                <div className="controls"><button>⌕</button><button>⛶</button><button>◇</button></div>
+                {view==="error"&&<div className="toast"><span>⚠</span><strong>개발팀 · 하늘 — 배포 파이프라인 오류 대응 중</strong><button onClick={()=>setDemoView("error")}>상세 보기</button></div>}
+                <ViewportState
+                  employees={employees}
+                  onSelectEmployee={chooseEmployeeById}
+                  selectedEmployeeId={view === "unselected" ? null : current?.id ?? null}
+                  view={view}
+                />
+                {SHOW_MOCK_EVENT_SCENARIO_PANEL ? (
+                  <MockEventScenarioPanel
+                    eventCount={eventLog.length}
+                    onReset={resetMockEvents}
+                    onRunScenario={runMockScenario}
+                  />
+                ) : null}
+                {SHOW_EMPLOYEE_MOVEMENT_DEV_PANEL ? (
+                  <EmployeeMovementDevPanel
+                    employees={employees}
+                    employeeId={devEmployeeId}
+                    onChangeEmployee={setDevEmployeeId}
+                    onChangeStatus={setDevStatus}
+                    onRunScenario={runMovementScenario}
+                    onApply={()=>updateEmployeeStatus(devEmployeeId,devStatus)}
+                    scenarios={movementTestScenarios}
+                    status={devStatus}
+                  />
+                ) : null}
+              </div>
+              <EmployeeDock view={view} employees={view==="empty"?[]:employees} selected={selected} choose={choose}/>
+            </div>
+          </section>
+          <Panel view={view} employee={current} tab={tab} setTab={setTab} close={()=>setView("unselected")} resolve={resolve} timelineEntries={timelineByEmployeeId[current?.id] ?? []}/>
+        </>
+      ) : activeNav==="업무 보드" ? (
+        <WorkBoardView employees={employees} eventLog={eventLog} onPublishEvent={publishBGEvent}/>
+      ) : activeNav==="승인함" ? (
+        <ApprovalInboxView employees={employees} eventLog={eventLog} onPublishEvent={publishBGEvent}/>
+      ) : (
+        <PlaceholderWorkspace label={activeNav}/>
+      )}
     </div>
   </main>
 }
 
 function OfficeViewportStatusBar(){ return <div className="office-viewport-status-bar"><strong>상태 범례</strong><div>{legend.map(([group,label])=><span key={group}><i className={`dot ${group}`}/>{label}</span>)}</div></div> }
+function PlaceholderWorkspace({label}:{label:string}){ return <><section className="stage"><div className="feature-shell placeholder-feature"><strong>{label}</strong><p>이 메뉴는 Phase 1-B 이후 단계에서 연결됩니다. 현재는 가상 오피스, 업무 보드, 승인함을 우선 검증합니다.</p></div></section><aside className="panel no-selection"><div><b>□</b><strong>{label}</strong><p>아직 상세 패널이 준비되지 않았습니다.</p></div></aside></> }
 function MockEventScenarioPanel({eventCount,onReset,onRunScenario}:{eventCount:number;onReset:()=>void;onRunScenario:(scenarioId:MockScenarioDefinition["id"])=>void}){ return <div className="mock-event-scenario-panel"><strong>Mock 이벤트</strong>{mockScenarioDefinitions.map((scenario)=><button key={scenario.id} onClick={()=>onRunScenario(scenario.id)}>{scenario.label}</button>)}<button onClick={onReset}>전체 리셋</button><span>{eventCount} events</span></div> }
 function EmployeeMovementDevPanel({
   employees,
