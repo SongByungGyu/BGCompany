@@ -49,5 +49,5 @@ export type WorkTask = {
 export type WorkBoardProps = {
   employees: WorkBoardEmployee[];
   eventLog: BGCompanyEvent[];
-  onPublishEvent: (event: BGCompanyEvent, focus?: boolean, persist?: boolean) => void;
+  onPublishEvent: (event: BGCompanyEvent, focus?: boolean, persist?: boolean) => void | Promise<void>;
 };

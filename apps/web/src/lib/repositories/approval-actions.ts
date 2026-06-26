@@ -75,21 +75,26 @@ export async function resolveApproval(input: {
         summary: `${approval.title} · ${input.status}`,
       },
     });
-    const timeline = await tx.timeline.create({
+    const timelineTargets = [
+      { targetType: "approval", targetId: approval.id },
+      approval.taskId ? { targetType: "task", targetId: approval.taskId } : null,
+      { targetType: "employee", targetId: approval.requestedByEmployeeId },
+    ].filter((target): target is { targetType: string; targetId: string } => Boolean(target));
+    const timelines = await Promise.all(timelineTargets.map((target) => tx.timeline.create({
       data: {
         id: `timeline-${randomUUID()}`,
-        targetType: "approval",
-        targetId: approval.id,
+        targetType: target.targetType,
+        targetId: target.targetId,
         eventId: event.id,
         title: input.status,
         description: input.decisionReason || `${approval.title} 처리`,
         timestamp: decidedAt,
       },
-    });
+    })));
     return {
       approval: serializeApproval(approval),
       event: serializeEvent(event),
-      timeline: serializeTimeline(timeline),
+      timeline: serializeTimeline(timelines[0]),
     };
   });
 }

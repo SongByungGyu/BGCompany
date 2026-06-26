@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createBGCompanyEvent } from "@/features/events/bg-company-events";
 import type { BGCompanyEvent } from "@/features/events/types";
+import { useTimeline } from "@/features/timelines/useTimeline";
+import type { TimelineRecord } from "@/features/timelines/api";
 import { fetchApprovals, updateApprovalStatus } from "./api";
 import { mockApprovals } from "./mock-approvals";
 import type { ApprovalInboxProps, ApprovalRequest, ApprovalStatus } from "./approval-types";
@@ -33,36 +35,35 @@ export function ApprovalInboxView({ employees, eventLog, onPublishEvent }: Appro
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState("DB 승인 요청 데이터를 표시 중입니다.");
+  const [actionBusy, setActionBusy] = useState(false);
 
-  const refreshApprovals = async () => {
-    const approvals = await fetchApprovals();
-    setApiApprovals(approvals);
-    setFetchError(null);
-    if (approvals[0] && !approvals.some((approval) => approval.id === selectedApprovalId)) setSelectedApprovalId(approvals[0].id);
-  };
+  const refreshApprovals = useCallback(async () => {
+    try {
+      const approvals = await fetchApprovals();
+      setApiApprovals(approvals);
+      setFetchError(null);
+      setActionNotice("DB seed 승인 요청 데이터를 표시 중입니다.");
+      setSelectedApprovalId((current) => approvals.some((approval) => approval.id === current) ? current : approvals[0]?.id ?? "");
+      return approvals;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "알 수 없는 오류";
+      setApiApprovals(mockApprovals);
+      setFetchError(message);
+      setActionNotice("DB 승인 조회 실패 · Mock fallback을 표시 중입니다.");
+      return mockApprovals;
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    fetchApprovals()
-      .then((approvals) => {
-        if (cancelled) return;
-        setApiApprovals(approvals);
-        setFetchError(null);
-        setActionNotice("DB seed 승인 요청 데이터를 표시 중입니다.");
-        if (approvals[0] && !approvals.some((approval) => approval.id === selectedApprovalId)) setSelectedApprovalId(approvals[0].id);
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        const message = error instanceof Error ? error.message : "알 수 없는 오류";
-        setApiApprovals(mockApprovals);
-        setFetchError(message);
-        setActionNotice("DB 승인 조회 실패 · Mock fallback을 표시 중입니다.");
-      })
+    Promise.resolve()
+      .then(() => refreshApprovals())
       .finally(() => {
         if (!cancelled) setIsLoading(false);
       });
     return () => { cancelled = true; };
-  }, [selectedApprovalId]);
+  }, [refreshApprovals]);
+
   const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
   const approvals = apiApprovals.map((approval) => ({ ...approval, status: statusOverrides[approval.id] ?? approval.status }));
   const selectedApproval = approvals.find((approval) => approval.id === selectedApprovalId) ?? approvals[0];
@@ -70,6 +71,7 @@ export function ApprovalInboxView({ employees, eventLog, onPublishEvent }: Appro
   const approvalEvents = selectedApproval
     ? eventLog.filter((event) => event.taskId === selectedApproval.relatedTaskId || event.employeeId === selectedApproval.employeeId || payloadText(event, "approvalId") === selectedApproval.id).slice(0, 8)
     : [];
+  const approvalTimeline = useTimeline(selectedApproval ? "approval" : undefined, selectedApproval?.id);
   const counts = {
     waiting: approvals.filter((approval) => approval.status === "승인 대기").length,
     done: approvals.filter((approval) => approval.status === "승인 완료").length,
@@ -82,38 +84,41 @@ export function ApprovalInboxView({ employees, eventLog, onPublishEvent }: Appro
   };
 
   const handleAction = async (approval: ApprovalRequest, nextStatus: ApprovalStatus) => {
+    if (actionBusy) return;
+    setActionBusy(true);
     setStatusOverrides((prev) => ({ ...prev, [approval.id]: nextStatus }));
     appendAudit(approval.id, `${nextStatus} 처리 · ${comment || "코멘트 없음"}`);
     setActionNotice(`${nextStatus} 처리 중입니다.`);
-    if (nextStatus === "승인 완료" || nextStatus === "반려") {
+    try {
       const updatedApproval = await updateApprovalStatus({ approvalId: approval.id, status: nextStatus, decisionReason: comment });
       setApiApprovals((prev) => prev.map((item) => item.id === updatedApproval.id ? updatedApproval : item));
-      onPublishEvent(createBGCompanyEvent("ApprovalResolved", {
-        employeeId: approval.employeeId,
-        taskId: approval.relatedTaskId,
-        payload: { title: approval.title, approved: nextStatus === "승인 완료", comment, approvalId: approval.id },
-      }), true, false);
-    } else if (nextStatus === "수정 요청") {
-      const updatedApproval = await updateApprovalStatus({ approvalId: approval.id, status: nextStatus, decisionReason: comment });
-      setApiApprovals((prev) => prev.map((item) => item.id === updatedApproval.id ? updatedApproval : item));
-      onPublishEvent(createBGCompanyEvent("EmployeeStatusChanged", {
-        employeeId: approval.employeeId,
-        taskId: approval.relatedTaskId,
-        payload: { status: "수정 중", reason: comment || "승인함에서 수정 요청", approvalId: approval.id },
-      }), true, false);
-    } else {
-      const updatedApproval = await updateApprovalStatus({ approvalId: approval.id, status: nextStatus, decisionReason: comment });
-      setApiApprovals((prev) => prev.map((item) => item.id === updatedApproval.id ? updatedApproval : item));
-      onPublishEvent(createBGCompanyEvent("EmployeeStatusChanged", {
-        employeeId: approval.employeeId,
-        taskId: approval.relatedTaskId,
-        payload: { status: "대기 중", reason: "승인 보류", approvalId: approval.id },
-      }), true, false);
+      if (nextStatus === "승인 완료" || nextStatus === "반려") {
+        await onPublishEvent(createBGCompanyEvent("ApprovalResolved", {
+          employeeId: approval.employeeId,
+          taskId: approval.relatedTaskId,
+          payload: { title: approval.title, approved: nextStatus === "승인 완료", comment, approvalId: approval.id },
+        }), true, false);
+      } else if (nextStatus === "수정 요청") {
+        await onPublishEvent(createBGCompanyEvent("EmployeeStatusChanged", {
+          employeeId: approval.employeeId,
+          taskId: approval.relatedTaskId,
+          payload: { status: "수정 중", reason: comment || "승인함에서 수정 요청", approvalId: approval.id },
+        }), true, false);
+      } else {
+        await onPublishEvent(createBGCompanyEvent("EmployeeStatusChanged", {
+          employeeId: approval.employeeId,
+          taskId: approval.relatedTaskId,
+          payload: { status: "대기 중", reason: "승인 보류", approvalId: approval.id },
+        }), true, false);
+      }
+      setStatusOverrides((prev) => { const next = { ...prev }; delete next[approval.id]; return next; });
+      setActionNotice(`${nextStatus} 처리 결과가 DB에 저장되었습니다.`);
+      setComment("");
+      await refreshApprovals();
+      await approvalTimeline.refresh();
+    } finally {
+      setActionBusy(false);
     }
-    setStatusOverrides((prev) => { const next = { ...prev }; delete next[approval.id]; return next; });
-    setActionNotice(`${nextStatus} 처리 결과가 DB에 저장되었습니다.`);
-    setComment("");
-    await refreshApprovals().catch(() => null);
   };
 
   return (
@@ -189,19 +194,23 @@ export function ApprovalInboxView({ employees, eventLog, onPublishEvent }: Appro
               </div>
               <textarea className="approval-comment" value={comment} onChange={(event) => setComment(event.target.value)} placeholder="승인/반려/수정 요청 사유를 입력하세요." />
               <div className="feature-actions approval-actions">
-                <button onClick={() => handleAction(selectedApproval, "승인 완료")}>승인</button>
-                <button onClick={() => handleAction(selectedApproval, "반려")}>반려</button>
-                <button onClick={() => handleAction(selectedApproval, "수정 요청")}>수정 요청</button>
-                <button onClick={() => handleAction(selectedApproval, "보류")}>보류</button>
+                <button disabled={actionBusy} onClick={() => void handleAction(selectedApproval, "승인 완료")}>승인</button>
+                <button disabled={actionBusy} onClick={() => void handleAction(selectedApproval, "반려")}>반려</button>
+                <button disabled={actionBusy} onClick={() => void handleAction(selectedApproval, "수정 요청")}>수정 요청</button>
+                <button disabled={actionBusy} onClick={() => void handleAction(selectedApproval, "보류")}>보류</button>
               </div>
               <div className="feature-card">
                 <label>감사 로그</label>
                 <ul className="audit-list">
                   {(auditNotes[selectedApproval.id] ?? []).map((note) => <li key={note}>{note}</li>)}
-                  {approvalEvents.map((event) => <li key={event.id}>{formatTime(event.timestamp)} {event.type} · {payloadText(event, "title") ?? payloadText(event, "reason") ?? "Mock 이벤트"}</li>)}
-                  {(auditNotes[selectedApproval.id] ?? []).length === 0 && approvalEvents.length === 0 ? <li>아직 처리 로그가 없습니다.</li> : null}
+                  {approvalTimeline.isLoading ? <li>DB timeline을 불러오는 중입니다.</li> : null}
+                  {approvalTimeline.error ? <li>DB timeline 조회 실패 · {approvalTimeline.error}</li> : null}
+                  {approvalTimeline.timeline.map((entry) => <li key={entry.id}>{formatTime(entry.timestamp)} {entry.title} · {entry.description ?? "DB timeline 기록"}</li>)}
+                  {approvalTimeline.timeline.length === 0 && !approvalTimeline.isLoading && !approvalTimeline.error ? approvalEvents.map((event) => <li key={event.id}>{formatTime(event.timestamp)} {event.type} · {payloadText(event, "title") ?? payloadText(event, "reason") ?? "Local 이벤트"}</li>) : null}
+                  {(auditNotes[selectedApproval.id] ?? []).length === 0 && approvalTimeline.timeline.length === 0 && approvalEvents.length === 0 && !approvalTimeline.isLoading ? <li>아직 처리 로그가 없습니다.</li> : null}
                 </ul>
               </div>
+              <ApprovalTimelinePreview timeline={approvalTimeline.timeline} />
             </div>
           </>
         ) : (
@@ -209,5 +218,20 @@ export function ApprovalInboxView({ employees, eventLog, onPublishEvent }: Appro
         )}
       </aside>
     </>
+  );
+}
+
+function ApprovalTimelinePreview({ timeline }: { timeline: TimelineRecord[] }) {
+  if (timeline.length === 0) return null;
+  return (
+    <div className="timeline feature-timeline">
+      {timeline.map((entry) => (
+        <article key={entry.id}>
+          <i className={entry.title.includes("반려") ? "error" : entry.title.includes("승인") ? "waiting" : "working"} />
+          <time>{formatTime(entry.timestamp)}</time>
+          <p><strong>{entry.title}</strong><br />{entry.description ?? "DB approval timeline"}</p>
+        </article>
+      ))}
+    </div>
   );
 }

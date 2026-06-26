@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createBGCompanyEvent } from "@/features/events/bg-company-events";
-import type { BGCompanyEvent } from "@/features/events/types";
+import type { BGCompanyEvent, BGEmployeeStatus } from "@/features/events/types";
+import { useTimeline } from "@/features/timelines/useTimeline";
+import type { TimelineRecord } from "@/features/timelines/api";
 import { fetchWorkTasks } from "./api";
 import { mockWorkTasks } from "./mock-tasks";
 import type { WorkBoardProps, WorkTask, WorkTaskStatus } from "./work-board-types";
@@ -15,6 +17,13 @@ const taskStatusGroup: Record<WorkTaskStatus, "working" | "waiting" | "error" | 
   "오류": "error",
   "완료": "done",
 };
+
+const taskActionLabels = {
+  pause: "일시정지",
+  retry: "재시도",
+  cancel: "취소",
+  log: "상세 로그",
+} as const;
 
 function formatTime(timestamp: string) {
   return new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(timestamp));
@@ -34,6 +43,13 @@ function resolveTaskStatus(base: WorkTask, employeeStatus?: string): WorkTaskSta
   return base.status;
 }
 
+function employeeStatusForAction(action: keyof typeof taskActionLabels, fallbackStatus?: BGEmployeeStatus): BGEmployeeStatus {
+  if (action === "pause") return "대기 중";
+  if (action === "retry") return "업무 중";
+  if (action === "cancel") return "업무 종료";
+  return fallbackStatus ?? "업무 중";
+}
+
 export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoardProps) {
   const [filter, setFilter] = useState<(typeof filters)[number]>("전체");
   const [selectedTaskId, setSelectedTaskId] = useState(mockWorkTasks[0]?.id ?? "");
@@ -41,29 +57,34 @@ export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoard
   const [apiTasks, setApiTasks] = useState<WorkTask[]>(mockWorkTasks);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+
+  const refreshTasks = useCallback(async () => {
+    try {
+      const tasks = await fetchWorkTasks();
+      setApiTasks(tasks);
+      setFetchError(null);
+      setNotice("DB seed 업무 데이터를 표시 중입니다.");
+      setSelectedTaskId((current) => tasks.some((task) => task.id === current) ? current : tasks[0]?.id ?? "");
+      return tasks;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "알 수 없는 오류";
+      setApiTasks(mockWorkTasks);
+      setFetchError(message);
+      setNotice("DB 업무 조회 실패 · Mock fallback을 표시 중입니다.");
+      return mockWorkTasks;
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    fetchWorkTasks()
-      .then((tasks) => {
-        if (cancelled) return;
-        setApiTasks(tasks);
-        setFetchError(null);
-        setNotice("DB seed 업무 데이터를 표시 중입니다.");
-        if (tasks[0] && !tasks.some((task) => task.id === selectedTaskId)) setSelectedTaskId(tasks[0].id);
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        const message = error instanceof Error ? error.message : "알 수 없는 오류";
-        setApiTasks(mockWorkTasks);
-        setFetchError(message);
-        setNotice("DB 업무 조회 실패 · Mock fallback을 표시 중입니다.");
-      })
+    Promise.resolve()
+      .then(() => refreshTasks())
       .finally(() => {
         if (!cancelled) setIsLoading(false);
       });
     return () => { cancelled = true; };
-  }, [selectedTaskId]);
+  }, [refreshTasks]);
 
   const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
   const tasks = useMemo(() => apiTasks.map((task) => {
@@ -87,6 +108,7 @@ export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoard
   const taskEvents = selectedTask
     ? eventLog.filter((event) => event.taskId === selectedTask.id || event.employeeId === selectedTask.assigneeId).slice(0, 8)
     : [];
+  const taskTimeline = useTimeline(selectedTask ? "task" : undefined, selectedTask?.id);
   const counts = {
     total: tasks.length,
     working: tasks.filter((task) => task.status === "진행 중").length,
@@ -95,32 +117,33 @@ export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoard
     done: tasks.filter((task) => task.status === "완료").length,
   };
 
-  const publishTaskAction = (action: "pause" | "retry" | "cancel" | "log") => {
-    if (!selectedTask) return;
-    if (action === "log") {
-      setNotice(`${selectedTask.title} 상세 로그를 콘솔에 기록했습니다.`);
-      console.info("[BG Company] task log", selectedTask, taskEvents);
-      return;
-    }
-    const eventMap = {
-      pause: createBGCompanyEvent("EmployeeStatusChanged", {
-        employeeId: selectedTask.assigneeId,
-        taskId: selectedTask.id,
-        payload: { status: "대기 중", reason: "업무 보드에서 일시정지" },
-      }),
-      retry: createBGCompanyEvent("TaskStarted", {
+  const publishTaskAction = async (action: keyof typeof taskActionLabels) => {
+    if (!selectedTask || actionBusy) return;
+    const status = employeeStatusForAction(action, selectedEmployee?.status);
+    const event = action === "retry"
+      ? createBGCompanyEvent("TaskStarted", {
         employeeId: selectedTask.assigneeId,
         taskId: selectedTask.id,
         payload: { title: selectedTask.title, next: "재시도 후 결과 확인" },
-      }),
-      cancel: createBGCompanyEvent("EmployeeStatusChanged", {
+      })
+      : createBGCompanyEvent("EmployeeStatusChanged", {
         employeeId: selectedTask.assigneeId,
         taskId: selectedTask.id,
-        payload: { status: "업무 종료", reason: "업무 보드에서 취소" },
-      }),
-    };
-    onPublishEvent(eventMap[action], true);
-    setNotice(`${selectedTask.title} · ${action === "pause" ? "일시정지" : action === "retry" ? "재시도" : "취소"} 이벤트를 발행했습니다.`);
+        payload: {
+          status,
+          reason: action === "pause" ? "업무 보드에서 일시정지" : action === "cancel" ? "업무 보드에서 취소" : "업무 보드 상세 로그 확인",
+        },
+      });
+    setActionBusy(true);
+    try {
+      await onPublishEvent(event, true);
+      if (action === "log") console.info("[BG Company] task log", selectedTask, taskEvents);
+      await refreshTasks();
+      await taskTimeline.refresh();
+      setNotice(`${selectedTask.title} · ${taskActionLabels[action]} 이벤트를 DB에 저장하고 화면을 갱신했습니다.`);
+    } finally {
+      setActionBusy(false);
+    }
   };
 
   return (
@@ -219,12 +242,18 @@ export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoard
                 <p>{selectedTask.nextAction}</p>
               </div>
               <div className="feature-actions">
-                <button onClick={() => publishTaskAction("pause")}>일시정지</button>
-                <button onClick={() => publishTaskAction("retry")}>재시도</button>
-                <button onClick={() => publishTaskAction("cancel")}>취소</button>
-                <button onClick={() => publishTaskAction("log")}>상세 로그</button>
+                <button disabled={actionBusy} onClick={() => void publishTaskAction("pause")}>일시정지</button>
+                <button disabled={actionBusy} onClick={() => void publishTaskAction("retry")}>재시도</button>
+                <button disabled={actionBusy} onClick={() => void publishTaskAction("cancel")}>취소</button>
+                <button disabled={actionBusy} onClick={() => void publishTaskAction("log")}>상세 로그</button>
               </div>
-              <TimelinePreview events={taskEvents} fallback="아직 이 업무에 연결된 이벤트가 없습니다." />
+              <TimelinePreview
+                dbTimeline={taskTimeline.timeline}
+                error={taskTimeline.error}
+                fallback="아직 이 업무에 연결된 DB timeline이 없습니다."
+                isLoading={taskTimeline.isLoading}
+                localEvents={taskEvents}
+              />
             </div>
           </>
         ) : (
@@ -235,17 +264,46 @@ export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoard
   );
 }
 
-function TimelinePreview({ events, fallback }: { events: BGCompanyEvent[]; fallback: string }) {
-  if (events.length === 0) return <div className="feature-card muted"><label>타임라인</label><p>{fallback}</p></div>;
-  return (
-    <div className="timeline feature-timeline">
-      {events.map((event) => (
-        <article key={event.id}>
-          <i className={event.type.includes("Error") ? "error" : event.type.includes("Approval") ? "waiting" : event.type.includes("Meeting") ? "meeting" : "working"} />
-          <time>{formatTime(event.timestamp)}</time>
-          <p><strong>{event.type}</strong><br />{payloadText(event, "title") ?? payloadText(event, "meetingTitle") ?? payloadText(event, "reason") ?? "Mock 이벤트 기록"}</p>
-        </article>
-      ))}
-    </div>
-  );
+function TimelinePreview({
+  dbTimeline,
+  error,
+  fallback,
+  isLoading,
+  localEvents,
+}: {
+  dbTimeline: TimelineRecord[];
+  error: string | null;
+  fallback: string;
+  isLoading: boolean;
+  localEvents: BGCompanyEvent[];
+}) {
+  if (isLoading) return <div className="feature-card muted"><label>DB 타임라인</label><p>타임라인을 불러오는 중입니다.</p></div>;
+  if (error) return <div className="feature-card muted"><label>DB 타임라인</label><p>DB timeline 조회 실패 · {error}</p></div>;
+  if (dbTimeline.length > 0) {
+    return (
+      <div className="timeline feature-timeline">
+        {dbTimeline.map((entry) => (
+          <article key={entry.id}>
+            <i className={entry.title.includes("Error") ? "error" : entry.title.includes("Approval") || entry.title.includes("승인") ? "waiting" : entry.title.includes("Meeting") ? "meeting" : "working"} />
+            <time>{formatTime(entry.timestamp)}</time>
+            <p><strong>{entry.title}</strong><br />{entry.description ?? "DB timeline 기록"}</p>
+          </article>
+        ))}
+      </div>
+    );
+  }
+  if (localEvents.length > 0) {
+    return (
+      <div className="timeline feature-timeline">
+        {localEvents.map((event) => (
+          <article key={event.id}>
+            <i className={event.type.includes("Error") ? "error" : event.type.includes("Approval") ? "waiting" : event.type.includes("Meeting") ? "meeting" : "working"} />
+            <time>{formatTime(event.timestamp)}</time>
+            <p><strong>{event.type}</strong><br />{payloadText(event, "title") ?? payloadText(event, "meetingTitle") ?? payloadText(event, "reason") ?? "Local 이벤트 기록"}</p>
+          </article>
+        ))}
+      </div>
+    );
+  }
+  return <div className="feature-card muted"><label>DB 타임라인</label><p>{fallback}</p></div>;
 }

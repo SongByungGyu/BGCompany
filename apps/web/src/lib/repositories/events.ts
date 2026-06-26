@@ -59,19 +59,23 @@ async function applyEventSideEffects(event: { type: string; employeeId: string |
 }
 
 async function createTimelineForEvent(event: { id: string; type: string; timestamp: Date; employeeId: string | null; taskId: string | null; approvalId: string | null; summary: string | null }) {
-  const targetType = event.approvalId ? "approval" : event.taskId ? "task" : event.employeeId ? "employee" : "system";
-  const targetId = event.approvalId ?? event.taskId ?? event.employeeId ?? "bg-company";
-  await prisma.timeline.create({
+  const targets = [
+    event.approvalId ? { targetType: "approval", targetId: event.approvalId } : null,
+    event.taskId ? { targetType: "task", targetId: event.taskId } : null,
+    event.employeeId ? { targetType: "employee", targetId: event.employeeId } : null,
+  ].filter((target): target is { targetType: string; targetId: string } => Boolean(target));
+  const resolvedTargets = targets.length > 0 ? targets : [{ targetType: "global", targetId: "bg-company" }];
+  await Promise.all(resolvedTargets.map((target) => prisma.timeline.create({
     data: {
       id: `timeline-${randomUUID()}`,
-      targetType,
-      targetId,
+      targetType: target.targetType,
+      targetId: target.targetId,
       eventId: event.id,
       title: event.type,
       description: event.summary,
       timestamp: event.timestamp,
     },
-  }).catch(() => null);
+  }).catch(() => null)));
 }
 
 export async function createEvent(input: {

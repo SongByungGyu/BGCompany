@@ -107,11 +107,11 @@ export default function Home() {
     const group = statusGroupMap[status];
     setView(status==="승인 대기"?"approval":group==="error"?"error":"selected");
   }, [employees]);
-  const publishBGEvent = useCallback((event: BGCompanyEvent, focus = true, persist = true) => {
+  const publishBGEvent = useCallback(async (event: BGCompanyEvent, focus = true, persist = true) => {
     eventBusRef.current.publish(event);
+    const payload = event.payload as Record<string, unknown>;
     if (persist) {
-      const payload = event.payload as Record<string, unknown>;
-      fetch("/api/events", {
+      await fetch("/api/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -127,7 +127,6 @@ export default function Home() {
       }).catch((error: unknown) => console.warn("[BG Company] failed to persist event", error));
     }
     setEventLog(eventBusRef.current.getLog());
-    const payload = event.payload as Record<string, unknown>;
     const status = typeof payload.status === "string" ? payload.status as EmployeeStatus : undefined;
     const payloadNextStatus = typeof payload.nextStatus === "string" ? payload.nextStatus as EmployeeStatus : undefined;
     const nextStatus = event.type === "MeetingStarted" ? "회의 중" : event.type === "ApprovalRequested" ? "승인 대기" : event.type === "ErrorOccurred" ? "오류 대응 중" : event.type === "TaskStarted" ? "업무 중" : event.type === "ErrorResolved" ? payloadNextStatus ?? "업무 중" : event.type === "MeetingEnded" ? payloadNextStatus ?? "업무 중" : event.type === "ApprovalResolved" ? payload.approved ? "업무 완료" : "수정 중" : event.type === "OutputGenerated" ? payloadNextStatus ?? "결과 대기" : status;
