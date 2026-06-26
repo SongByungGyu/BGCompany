@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createBGCompanyEvent } from "@/features/events/bg-company-events";
 import type { BGCompanyEvent } from "@/features/events/types";
+import { fetchWorkTasks } from "./api";
 import { mockWorkTasks } from "./mock-tasks";
 import type { WorkBoardProps, WorkTask, WorkTaskStatus } from "./work-board-types";
 
@@ -36,10 +37,36 @@ function resolveTaskStatus(base: WorkTask, employeeStatus?: string): WorkTaskSta
 export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoardProps) {
   const [filter, setFilter] = useState<(typeof filters)[number]>("전체");
   const [selectedTaskId, setSelectedTaskId] = useState(mockWorkTasks[0]?.id ?? "");
-  const [notice, setNotice] = useState("업무 보드는 Mock 이벤트 기반으로 동작합니다.");
+  const [notice, setNotice] = useState("업무 보드는 DB API 기반으로 데이터를 불러옵니다.");
+  const [apiTasks, setApiTasks] = useState<WorkTask[]>(mockWorkTasks);
+  const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchWorkTasks()
+      .then((tasks) => {
+        if (cancelled) return;
+        setApiTasks(tasks);
+        setFetchError(null);
+        setNotice("DB seed 업무 데이터를 표시 중입니다.");
+        if (tasks[0] && !tasks.some((task) => task.id === selectedTaskId)) setSelectedTaskId(tasks[0].id);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : "알 수 없는 오류";
+        setApiTasks(mockWorkTasks);
+        setFetchError(message);
+        setNotice("DB 업무 조회 실패 · Mock fallback을 표시 중입니다.");
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [selectedTaskId]);
 
   const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
-  const tasks = useMemo(() => mockWorkTasks.map((task) => {
+  const tasks = useMemo(() => apiTasks.map((task) => {
     const employee = employeeById.get(task.assigneeId);
     const status = resolveTaskStatus(task, employee?.status);
     return {
@@ -52,7 +79,7 @@ export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoard
       nextAction: employee?.next ?? task.nextAction,
       error: employee?.error ?? task.error,
     };
-  }), [employeeById]);
+  }), [apiTasks, employeeById]);
 
   const visibleTasks = filter === "전체" ? tasks : tasks.filter((task) => task.status === filter);
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? visibleTasks[0] ?? tasks[0];
@@ -71,8 +98,8 @@ export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoard
   const publishTaskAction = (action: "pause" | "retry" | "cancel" | "log") => {
     if (!selectedTask) return;
     if (action === "log") {
-      setNotice(`${selectedTask.title} 상세 로그를 Mock 콘솔에 기록했습니다.`);
-      console.info("[BG Company] mock task log", selectedTask, taskEvents);
+      setNotice(`${selectedTask.title} 상세 로그를 콘솔에 기록했습니다.`);
+      console.info("[BG Company] task log", selectedTask, taskEvents);
       return;
     }
     const eventMap = {
@@ -104,7 +131,7 @@ export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoard
             <div>
               <span>Phase 1-B</span>
               <h1>업무 보드</h1>
-              <p>Mock 이벤트로 직원 상태, 업무 진행률, 승인/오류 흐름을 함께 검증합니다.</p>
+              <p>DB seed 업무 데이터를 기반으로 업무 진행률, 승인/오류 흐름을 검증합니다.</p>
             </div>
             <div className="work-summary">
               <span><b>{counts.total}</b>전체</span>
@@ -120,9 +147,11 @@ export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoard
                 <button key={item} className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>{item}</button>
               ))}
             </div>
-            <p>{notice}</p>
+            <p>{isLoading ? "DB 업무 데이터를 불러오는 중입니다." : fetchError ? `${notice} (${fetchError})` : notice}</p>
           </div>
-          {visibleTasks.length === 0 ? (
+          {isLoading ? (
+            <div className="feature-empty">DB 업무 데이터를 불러오는 중입니다.</div>
+          ) : visibleTasks.length === 0 ? (
             <div className="feature-empty">현재 필터에 해당하는 업무가 없습니다.</div>
           ) : (
             <div className="task-board-list">
@@ -195,7 +224,7 @@ export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoard
                 <button onClick={() => publishTaskAction("cancel")}>취소</button>
                 <button onClick={() => publishTaskAction("log")}>상세 로그</button>
               </div>
-              <TimelinePreview events={taskEvents} fallback="아직 이 업무에 연결된 Mock 이벤트가 없습니다." />
+              <TimelinePreview events={taskEvents} fallback="아직 이 업무에 연결된 이벤트가 없습니다." />
             </div>
           </>
         ) : (

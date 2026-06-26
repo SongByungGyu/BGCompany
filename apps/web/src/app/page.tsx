@@ -107,8 +107,25 @@ export default function Home() {
     const group = statusGroupMap[status];
     setView(status==="승인 대기"?"approval":group==="error"?"error":"selected");
   }, [employees]);
-  const publishBGEvent = useCallback((event: BGCompanyEvent, focus = true) => {
+  const publishBGEvent = useCallback((event: BGCompanyEvent, focus = true, persist = true) => {
     eventBusRef.current.publish(event);
+    if (persist) {
+      const payload = event.payload as Record<string, unknown>;
+      fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: event.id,
+          type: event.type,
+          timestamp: event.timestamp,
+          employeeId: event.employeeId,
+          taskId: event.taskId,
+          approvalId: typeof payload.approvalId === "string" ? payload.approvalId : undefined,
+          payload,
+          summary: typeof payload.reason === "string" ? payload.reason : typeof payload.title === "string" ? payload.title : event.type,
+        }),
+      }).catch((error: unknown) => console.warn("[BG Company] failed to persist event", error));
+    }
     setEventLog(eventBusRef.current.getLog());
     const payload = event.payload as Record<string, unknown>;
     const status = typeof payload.status === "string" ? payload.status as EmployeeStatus : undefined;
