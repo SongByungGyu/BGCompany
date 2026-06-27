@@ -1,6 +1,6 @@
 import type { AgentEventProcessResult } from "@/lib/events/agent-event-types";
 
-export type AgentRunMode = "mock";
+export type AgentRunMode = "mock" | "mock-error";
 
 export type AgentRunRequest = {
   taskId: string;
@@ -51,8 +51,9 @@ export type AgentRunResult = {
   runId: string;
   taskId: string;
   employeeId: string;
-  status: "completed";
+  status: "succeeded";
   mode: AgentRunMode;
   events: AgentEventProcessResult[];
   approvalId?: string;
+  resultSummary: string;
 };

@@ -6,7 +6,7 @@ import type { BGCompanyEvent, BGEmployeeStatus } from "@/features/events/types";
 import { useTimeline } from "@/features/timelines/useTimeline";
 import type { TimelineRecord } from "@/features/timelines/api";
 import { DB_SYNC_INTERVAL_MS } from "@/lib/db-sync";
-import { fetchWorkTasks, runAgentTask } from "./api";
+import { fetchAgentRuns, fetchWorkTasks, runAgentTask, type AgentRunRecord } from "./api";
 import { mockWorkTasks } from "./mock-tasks";
 import type { WorkBoardProps, WorkTask, WorkTaskStatus } from "./work-board-types";
 
@@ -17,6 +17,22 @@ const taskStatusGroup: Record<WorkTaskStatus, "working" | "waiting" | "error" | 
   "승인 대기": "waiting",
   "오류": "error",
   "완료": "done",
+};
+
+const agentRunStatusGroup: Record<string, "working" | "waiting" | "error" | "done" | "idle"> = {
+  queued: "waiting",
+  running: "working",
+  succeeded: "done",
+  failed: "error",
+  cancelled: "idle",
+};
+
+const agentRunStatusLabel: Record<string, string> = {
+  queued: "대기",
+  running: "실행 중",
+  succeeded: "성공",
+  failed: "실패",
+  cancelled: "취소",
 };
 
 const taskActionLabels = {
@@ -59,6 +75,8 @@ export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoard
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
+  const [agentRuns, setAgentRuns] = useState<AgentRunRecord[]>([]);
+  const [agentRunError, setAgentRunError] = useState<string | null>(null);
 
   const refreshTasks = useCallback(async () => {
     try {
@@ -112,6 +130,28 @@ export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoard
     ? eventLog.filter((event) => event.taskId === selectedTask.id || event.employeeId === selectedTask.assigneeId).slice(0, 8)
     : [];
   const taskTimeline = useTimeline(selectedTask ? "task" : undefined, selectedTask?.id, { polling: Boolean(selectedTask) });
+  const refreshAgentRuns = useCallback(async (taskId?: string) => {
+    if (!taskId) {
+      setAgentRuns([]);
+      setAgentRunError(null);
+      return [];
+    }
+    try {
+      const runs = await fetchAgentRuns({ taskId });
+      setAgentRuns(runs);
+      setAgentRunError(null);
+      return runs;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "알 수 없는 오류";
+      setAgentRunError(message);
+      return [];
+    }
+  }, []);
+
+  useEffect(() => {
+    Promise.resolve().then(() => refreshAgentRuns(selectedTask?.id));
+  }, [refreshAgentRuns, selectedTask?.id]);
+
   const counts = {
     total: tasks.length,
     working: tasks.filter((task) => task.status === "진행 중").length,
@@ -127,6 +167,7 @@ export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoard
     try {
       const result = await runAgentTask({ taskId: selectedTask.id, employeeId: selectedTask.assigneeId, mode: "mock" });
       await refreshTasks();
+      await refreshAgentRuns(selectedTask.id);
       await taskTimeline.refresh();
       setNotice(`${selectedTask.title} · ${result.employeeId} Agent 실행 완료${result.approvalId ? " · 승인 요청 생성" : ""}`);
     } catch (error: unknown) {
@@ -159,6 +200,7 @@ export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoard
       await onPublishEvent(event, true);
       if (action === "log") console.info("[BG Company] task log", selectedTask, taskEvents);
       await refreshTasks();
+      await refreshAgentRuns(selectedTask.id);
       await taskTimeline.refresh();
       setNotice(`${selectedTask.title} · ${taskActionLabels[action]} 이벤트를 DB에 저장하고 화면을 갱신했습니다.`);
     } finally {
@@ -268,6 +310,7 @@ export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoard
                 <button disabled={actionBusy} onClick={() => void publishTaskAction("cancel")}>취소</button>
                 <button disabled={actionBusy} onClick={() => void publishTaskAction("log")}>상세 로그</button>
               </div>
+              <AgentRunHistory error={agentRunError} runs={agentRuns} />
               <TimelinePreview
                 dbTimeline={taskTimeline.timeline}
                 error={taskTimeline.error}
@@ -282,6 +325,31 @@ export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoard
         )}
       </aside>
     </>
+  );
+}
+
+function AgentRunHistory({ error, runs }: { error: string | null; runs: AgentRunRecord[] }) {
+  if (error) return <div className="feature-card muted"><label>실행 이력</label><p>AgentRun 조회 실패 · {error}</p></div>;
+  if (runs.length === 0) return <div className="feature-card muted"><label>실행 이력</label><p>아직 이 업무에 연결된 AgentRun 이력이 없습니다.</p></div>;
+  return (
+    <div className="feature-card">
+      <label>실행 이력</label>
+      <ul className="audit-list">
+        {runs.slice(0, 6).map((run) => {
+          const group = agentRunStatusGroup[run.status] ?? "idle";
+          return (
+            <li key={run.id}>
+              <span className={`badge compact ${group}`}><i className={`dot ${group}`} />{agentRunStatusLabel[run.status] ?? run.status}</span>
+              {" "}{run.id} · {run.employeeId} · {run.mode}
+              <br />
+              시작 {run.startedAt ? formatTime(run.startedAt) : "-"} · 완료 {run.completedAt ? formatTime(run.completedAt) : "-"}
+              <br />
+              {run.resultSummary ?? run.errorMessage ?? "결과 요약 대기"}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

@@ -23,6 +23,7 @@ model Employee {
   tasks           Task[]
   approvals       ApprovalRequest[]
   events          EventLog[]
+  agentRuns       AgentRun[]
 
   @@index([status])
   @@index([department])
@@ -50,6 +51,7 @@ model Task {
   assignedEmployee   Employee? @relation(fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
   approvals          ApprovalRequest[]
   events             EventLog[]
+  agentRuns          AgentRun[]
 
   @@index([status])
   @@index([department])
@@ -118,4 +120,30 @@ model Timeline {
 
   @@index([targetType, targetId])
   @@index([timestamp])
+}
+
+model AgentRun {
+  id            String    @id @default(cuid())
+  taskId        String?
+  employeeId    String
+  mode          String
+  status        String
+  triggerSource String
+  startedAt     DateTime?
+  completedAt   DateTime?
+  resultSummary String?
+  errorMessage  String?
+  hermesJobId   String?
+  metadata      Json?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  task          Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([employeeId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([hermesJobId])
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { processAgentEvent } from "@/lib/events/event-processor";
+import { createAgentRun, updateAgentRunStatus } from "@/lib/repositories/agent-runs";
 import { AgentEventError, type AgentEventInput } from "@/lib/events/agent-event-types";
 import { getAgentMetadata } from "./agent-registry";
 import { createMockAgentRunPlan } from "./mock-agent-runner";
@@ -23,13 +24,13 @@ function validateRequest(input: unknown): AgentRunRequest {
   if (body.employeeId !== undefined && typeof body.employeeId !== "string") {
     throw new AgentEventError("INVALID_AGENT_RUN", "employeeId must be a string", 400);
   }
-  if (body.mode !== undefined && body.mode !== "mock") {
-    throw new AgentEventError("UNSUPPORTED_AGENT_RUN_MODE", "only mock mode is supported", 400);
+  if (body.mode !== undefined && body.mode !== "mock" && body.mode !== "mock-error") {
+    throw new AgentEventError("UNSUPPORTED_AGENT_RUN_MODE", "only mock/mock-error mode is supported", 400);
   }
   return {
     taskId: body.taskId,
     employeeId: typeof body.employeeId === "string" ? body.employeeId : undefined,
-    mode: "mock",
+    mode: body.mode === "mock-error" ? "mock-error" : "mock",
   };
 }
 
@@ -103,8 +104,27 @@ export async function runAgentTask(input: unknown): Promise<AgentRunResult> {
     agent,
   };
   const plan = createMockAgentRunPlan(context);
+  await createAgentRun({
+    id: runId,
+    taskId: task.id,
+    employeeId,
+    mode: request.mode ?? "mock",
+    status: "running",
+    triggerSource: "user",
+    startedAt: new Date(),
+    metadata: {
+      taskTitle: task.title,
+      agentDisplayName: agent.displayName,
+      department: agent.department,
+    },
+  });
 
   const events = [];
+  try {
+    if (request.mode === "mock-error") {
+      throw new Error("Forced mock agent run failure");
+    }
+
   events.push(await emit({
     source: "mock",
     eventType: "TaskStarted",
@@ -184,14 +204,56 @@ export async function runAgentTask(input: unknown): Promise<AgentRunResult> {
     }));
   }
 
+  const resultSummary = approvalId ? `${plan.outputTitle} · 승인 요청 생성` : plan.summary;
+  await updateAgentRunStatus({
+    id: runId,
+    status: "succeeded",
+    completedAt: new Date(),
+    resultSummary,
+    metadata: {
+      taskTitle: task.title,
+      agentDisplayName: agent.displayName,
+      outputTitle: plan.outputTitle,
+      approvalId: approvalId ?? null,
+      eventCount: events.length,
+    },
+  });
+
   return {
     ok: true,
     runId,
     taskId: task.id,
     employeeId,
-    status: "completed",
-    mode: "mock",
+    status: "succeeded",
+    mode: request.mode ?? "mock",
     events,
     approvalId,
+    resultSummary,
   };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown mock agent run error";
+    await emit({
+      source: "mock",
+      eventType: "ErrorOccurred",
+      employeeId,
+      taskId: task.id,
+      payload: {
+        runId,
+        summary: `${agent.displayName} Agent 실행 실패`,
+        error: message,
+      },
+    }).catch(() => null);
+    await updateAgentRunStatus({
+      id: runId,
+      status: "failed",
+      completedAt: new Date(),
+      errorMessage: message,
+      metadata: {
+        taskTitle: task.title,
+        agentDisplayName: agent.displayName,
+        eventCount: events.length,
+      },
+    });
+    throw new AgentEventError("AGENT_RUN_MOCK_FAILED", message, 500);
+  }
 }

@@ -1,4 +1,4 @@
-import type { ApprovalRequest, Employee, EventLog, Prisma, Task, Timeline } from "@prisma/client";
+import type { AgentRun, ApprovalRequest, Employee, EventLog, Prisma, Task, Timeline } from "@prisma/client";
 
 function decimalToString(value: Prisma.Decimal | null) {
   return value ? value.toString() : null;
@@ -31,4 +31,8 @@ export function serializeEvent(event: EventLog) {
 
 export function serializeTimeline(timeline: Timeline) {
   return timeline;
+}
+
+export function serializeAgentRun(agentRun: AgentRun) {
+  return agentRun;
 }

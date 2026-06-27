@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AgentEventError } from "@/lib/events/agent-event-types";
 import { runAgentTask } from "@/lib/agents/agent-runner-service";
+import { getAgentRuns } from "@/lib/repositories/agent-runs";
+
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const runs = await getAgentRuns({
+    taskId: searchParams.get("taskId") ?? undefined,
+    employeeId: searchParams.get("employeeId") ?? undefined,
+    status: searchParams.get("status") ?? undefined,
+  });
+  return NextResponse.json({ agentRuns: runs });
+}
 
 export async function POST(request: NextRequest) {
   try {
