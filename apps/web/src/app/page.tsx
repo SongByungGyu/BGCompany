@@ -12,6 +12,7 @@ import { fetchEmployees, type EmployeeRecord } from "@/features/employees/api";
 import { DB_SYNC_INTERVAL_MS } from "@/lib/db-sync";
 import { WorkBoardView } from "@/features/work-board/WorkBoardView";
 import { ApprovalInboxView } from "@/features/approvals/ApprovalInboxView";
+import { ContentPipelineView } from "@/features/content-pipeline/ContentPipelineView";
 
 const OfficeCanvas = dynamic(
   () => import("@/components/office/3d/OfficeCanvas"),
@@ -271,6 +272,8 @@ export default function Home() {
         <WorkBoardView employees={employees} eventLog={eventLog} onPublishEvent={publishBGEvent}/>
       ) : activeNav==="승인함" ? (
         <ApprovalInboxView employees={employees} eventLog={eventLog} onPublishEvent={publishBGEvent}/>
+      ) : activeNav==="콘텐츠" ? (
+        <ContentPipelineView/>
       ) : (
         <PlaceholderWorkspace label={activeNav}/>
       )}
