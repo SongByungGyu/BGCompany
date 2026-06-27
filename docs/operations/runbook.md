@@ -180,3 +180,45 @@ sudo ss -tulpn | grep 5432
 docker compose build web
 docker compose up -d web
 ```
+
+## 정기 백업 cron 확인
+
+BG Company 운영 VPS는 매일 새벽 03:00에 PostgreSQL 백업을 실행하도록 구성합니다.
+
+```bash
+crontab -l
+```
+
+정상 cron:
+
+```cron
+0 3 * * * cd /opt/bg-company && bash scripts/backup-postgres.sh >> logs/backup-postgres.log 2>&1
+```
+
+백업 로그 확인:
+
+```bash
+cd /opt/bg-company
+tail -n 50 logs/backup-postgres.log
+```
+
+백업 파일 확인:
+
+```bash
+ls -lh backups/
+```
+
+수동 백업:
+
+```bash
+bash scripts/backup-postgres.sh
+```
+
+보관 정책:
+
+- 기본값: 최근 14일 백업 보관
+- 삭제 대상: `backups/bg_company_*.sql`, `backups/bg_company_*.sql.gz`
+- 보관 일수 조정: `RETENTION_DAYS=<days> bash scripts/backup-postgres.sh`
+
+복구 전에는 반드시 현재 DB 백업을 먼저 생성합니다.
+

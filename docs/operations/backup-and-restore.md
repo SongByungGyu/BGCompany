@@ -84,3 +84,59 @@ curl https://bgcompanyoffice.cloud/api/approvals
 - 복구 전후로 백업 파일 이름과 대상 DB를 반드시 확인합니다.
 - `.env`, 백업 SQL, dump 파일은 외부에 공유하지 않습니다.
 - 자동 복구 스크립트는 아직 제공하지 않습니다. 복구는 수동 확인 후 진행합니다.
+
+## 자동 백업 cron
+
+운영 VPS에서는 매일 새벽 03:00에 PostgreSQL 백업을 실행합니다.
+
+```cron
+0 3 * * * cd /opt/bg-company && bash scripts/backup-postgres.sh >> logs/backup-postgres.log 2>&1
+```
+
+백업 위치:
+
+```text
+/opt/bg-company/backups/
+```
+
+로그 위치:
+
+```text
+/opt/bg-company/logs/backup-postgres.log
+```
+
+cron 확인:
+
+```bash
+crontab -l
+```
+
+수동으로 cron과 동일한 명령을 테스트할 수 있습니다.
+
+```bash
+cd /opt/bg-company
+mkdir -p logs
+bash scripts/backup-postgres.sh >> logs/backup-postgres.log 2>&1
+tail -n 50 logs/backup-postgres.log
+ls -lh backups/
+```
+
+## 백업 보관 정책
+
+기본 보관 기간은 14일입니다.
+
+```bash
+RETENTION_DAYS=14 bash scripts/backup-postgres.sh
+```
+
+`RETENTION_DAYS` 값을 지정하지 않으면 기본값 14일이 사용됩니다.
+
+삭제 대상은 아래 패턴으로 제한됩니다.
+
+```text
+backups/bg_company_*.sql
+backups/bg_company_*.sql.gz
+```
+
+백업 생성에 실패하면 오래된 백업 삭제 단계까지 진행되지 않습니다.
+
