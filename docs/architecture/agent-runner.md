@@ -75,11 +75,12 @@ AgentRunContext는 이후 Hermes에 전달할 실행 payload의 기반입니다.
 
 ### hermes runner
 
-아직 실제 Hermes 서버에 연결하지 않습니다.
+Hermes 연결 준비용 runner입니다.
 
-- interface만 준비
-- `AGENT_RUNNER_MODE=hermes` 또는 mode `hermes`일 때 명확한 not implemented 오류 발생
-- 추후 Hermes jobId와 AgentRun.hermesJobId를 연결할 예정
+- `mode=hermes` 또는 `AGENT_RUNNER_MODE=hermes`에서 Hermes Client를 호출합니다.
+- `HERMES_BASE_URL`이 없으면 명확한 설정 오류를 반환하고 AgentRun은 failed로 기록됩니다.
+- Hermes 제출 성공 시 AgentRun은 `running` 상태를 유지하고 `hermesJobId`를 저장할 수 있습니다.
+- `mode=hermes-dry-run`에서는 네트워크 호출 없이 Hermes payload summary만 생성합니다.
 
 ## AGENT_RUNNER_MODE
 
@@ -88,9 +89,12 @@ AgentRunContext는 이후 Hermes에 전달할 실행 payload의 기반입니다.
 ```text
 mock
 hermes
+hermes-dry-run
 ```
 
 현재 기본값은 `mock`입니다.
+
+Hermes 연결 준비 상세는 [Hermes Runner Integration Preparation](./hermes-runner.md)을 참고합니다.
 
 ## 안전 규칙
 

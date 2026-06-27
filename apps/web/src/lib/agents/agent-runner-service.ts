@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { processAgentEvent } from "@/lib/events/event-processor";
 import { createAgentRun, updateAgentRunStatus } from "@/lib/repositories/agent-runs";
@@ -24,13 +25,14 @@ function validateRequest(input: unknown): AgentRunRequest {
   if (body.employeeId !== undefined && typeof body.employeeId !== "string") {
     throw new AgentEventError("INVALID_AGENT_RUN", "employeeId must be a string", 400);
   }
-  if (body.mode !== undefined && body.mode !== "mock" && body.mode !== "mock-error" && body.mode !== "hermes") {
-    throw new AgentEventError("UNSUPPORTED_AGENT_RUN_MODE", "only mock/mock-error/hermes mode is supported", 400);
+  const supportedModes = ["mock", "mock-error", "hermes", "hermes-dry-run"];
+  if (body.mode !== undefined && (typeof body.mode !== "string" || !supportedModes.includes(body.mode))) {
+    throw new AgentEventError("UNSUPPORTED_AGENT_RUN_MODE", "only mock/mock-error/hermes/hermes-dry-run mode is supported", 400);
   }
   return {
     taskId: body.taskId,
     employeeId: typeof body.employeeId === "string" ? body.employeeId : undefined,
-    mode: body.mode === "mock-error" ? "mock-error" : body.mode === "hermes" ? "hermes" : "mock",
+    mode: typeof body.mode === "string" ? body.mode as AgentRunRequest["mode"] : undefined,
   };
 }
 
@@ -84,13 +86,14 @@ export async function runAgentTask(input: unknown): Promise<AgentRunResult> {
   const context = buildAgentRunContext({ runId, task, employee });
   const contextSummary = summarizeAgentRunContext(context);
   const runnerMode = resolveAgentRunnerMode(request.mode === "mock-error" ? "mock" : request.mode);
+  const effectiveMode = request.mode ?? runnerMode;
   const runner = getAgentRunner(runnerMode);
 
   await createAgentRun({
     id: runId,
     taskId: task.id,
     employeeId,
-    mode: request.mode ?? runnerMode,
+    mode: effectiveMode,
     status: "running",
     triggerSource: "user",
     startedAt: new Date(),
@@ -133,8 +136,38 @@ export async function runAgentTask(input: unknown): Promise<AgentRunResult> {
 
   const plan = await runner.run(context);
 
+  if (plan.runnerStatus === "submitted") {
+    const resultSummary = plan.hermesJobId ? `Hermes job submitted: ${plan.hermesJobId}` : "Hermes job submitted";
+    await updateAgentRunStatus({
+      id: runId,
+      status: "running",
+      resultSummary,
+      hermesJobId: plan.hermesJobId ?? null,
+      metadata: {
+        taskTitle: task.title,
+        contextSummary,
+        hermesJobId: plan.hermesJobId ?? null,
+        hermesStatus: plan.hermesStatus ?? "submitted",
+        hermesPayloadSummary: plan.hermesPayloadSummary ?? null,
+        eventCount: events.length,
+      } as Prisma.InputJsonValue,
+    });
+
+    return {
+      ok: true,
+      runId,
+      taskId: task.id,
+      employeeId,
+      status: "running",
+      mode: effectiveMode,
+      events,
+      resultSummary,
+      hermesJobId: plan.hermesJobId,
+    };
+  }
+
   events.push(await emit({
-    source: runnerMode === "hermes" ? "hermes" : "mock",
+    source: runnerMode === "hermes" || runnerMode === "hermes-dry-run" ? "hermes" : "mock",
     eventType: "OutputGenerated",
     employeeId,
     taskId: task.id,
@@ -197,8 +230,10 @@ export async function runAgentTask(input: unknown): Promise<AgentRunResult> {
       contextSummary,
       outputTitle: plan.outputTitle,
       approvalId: approvalId ?? null,
+      hermesStatus: plan.hermesStatus ?? null,
+      hermesPayloadSummary: plan.hermesPayloadSummary ?? null,
       eventCount: events.length,
-    },
+    } as Prisma.InputJsonValue,
   });
 
   return {
@@ -207,13 +242,13 @@ export async function runAgentTask(input: unknown): Promise<AgentRunResult> {
     taskId: task.id,
     employeeId,
     status: "succeeded",
-    mode: request.mode ?? runnerMode,
+    mode: effectiveMode,
     events,
     approvalId,
     resultSummary,
   };
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown mock agent run error";
+    const message = error instanceof Error ? error.message : "Unknown agent run error";
     await emit({
       source: "mock",
       eventType: "ErrorOccurred",
@@ -232,9 +267,10 @@ export async function runAgentTask(input: unknown): Promise<AgentRunResult> {
       errorMessage: message,
       metadata: {
         contextSummary,
+        runnerMode,
         eventCount: events.length,
-      },
+      } as Prisma.InputJsonValue,
     });
-    throw new AgentEventError("AGENT_RUN_MOCK_FAILED", message, 500);
+    throw new AgentEventError("AGENT_RUN_FAILED", message, 500);
   }
 }
