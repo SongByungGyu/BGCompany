@@ -5,6 +5,7 @@ import { createBGCompanyEvent } from "@/features/events/bg-company-events";
 import type { BGCompanyEvent, BGEmployeeStatus } from "@/features/events/types";
 import { useTimeline } from "@/features/timelines/useTimeline";
 import type { TimelineRecord } from "@/features/timelines/api";
+import { DB_SYNC_INTERVAL_MS } from "@/lib/db-sync";
 import { fetchWorkTasks } from "./api";
 import { mockWorkTasks } from "./mock-tasks";
 import type { WorkBoardProps, WorkTask, WorkTaskStatus } from "./work-board-types";
@@ -86,19 +87,21 @@ export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoard
     return () => { cancelled = true; };
   }, [refreshTasks]);
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      void refreshTasks();
+    }, DB_SYNC_INTERVAL_MS);
+    return () => window.clearInterval(intervalId);
+  }, [refreshTasks]);
+
   const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
   const tasks = useMemo(() => apiTasks.map((task) => {
     const employee = employeeById.get(task.assigneeId);
-    const status = resolveTaskStatus(task, employee?.status);
+    const status = task.status === "대기" ? resolveTaskStatus(task, employee?.status) : task.status;
     return {
       ...task,
       status,
-      progress: employee?.progress ?? task.progress,
-      model: employee?.model ?? task.model,
-      cost: employee?.cost ?? task.cost,
-      output: employee?.output ?? task.output,
-      nextAction: employee?.next ?? task.nextAction,
-      error: employee?.error ?? task.error,
+      error: task.error ?? employee?.error,
     };
   }), [apiTasks, employeeById]);
 
@@ -108,7 +111,7 @@ export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoard
   const taskEvents = selectedTask
     ? eventLog.filter((event) => event.taskId === selectedTask.id || event.employeeId === selectedTask.assigneeId).slice(0, 8)
     : [];
-  const taskTimeline = useTimeline(selectedTask ? "task" : undefined, selectedTask?.id);
+  const taskTimeline = useTimeline(selectedTask ? "task" : undefined, selectedTask?.id, { polling: Boolean(selectedTask) });
   const counts = {
     total: tasks.length,
     working: tasks.filter((task) => task.status === "진행 중").length,

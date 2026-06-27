@@ -5,6 +5,7 @@ import { createBGCompanyEvent } from "@/features/events/bg-company-events";
 import type { BGCompanyEvent } from "@/features/events/types";
 import { useTimeline } from "@/features/timelines/useTimeline";
 import type { TimelineRecord } from "@/features/timelines/api";
+import { DB_SYNC_INTERVAL_MS } from "@/lib/db-sync";
 import { fetchApprovals, updateApprovalStatus } from "./api";
 import { mockApprovals } from "./mock-approvals";
 import type { ApprovalInboxProps, ApprovalRequest, ApprovalStatus } from "./approval-types";
@@ -64,6 +65,13 @@ export function ApprovalInboxView({ employees, eventLog, onPublishEvent }: Appro
     return () => { cancelled = true; };
   }, [refreshApprovals]);
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      void refreshApprovals();
+    }, DB_SYNC_INTERVAL_MS);
+    return () => window.clearInterval(intervalId);
+  }, [refreshApprovals]);
+
   const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
   const approvals = apiApprovals.map((approval) => ({ ...approval, status: statusOverrides[approval.id] ?? approval.status }));
   const selectedApproval = approvals.find((approval) => approval.id === selectedApprovalId) ?? approvals[0];
@@ -71,7 +79,7 @@ export function ApprovalInboxView({ employees, eventLog, onPublishEvent }: Appro
   const approvalEvents = selectedApproval
     ? eventLog.filter((event) => event.taskId === selectedApproval.relatedTaskId || event.employeeId === selectedApproval.employeeId || payloadText(event, "approvalId") === selectedApproval.id).slice(0, 8)
     : [];
-  const approvalTimeline = useTimeline(selectedApproval ? "approval" : undefined, selectedApproval?.id);
+  const approvalTimeline = useTimeline(selectedApproval ? "approval" : undefined, selectedApproval?.id, { polling: Boolean(selectedApproval) });
   const counts = {
     waiting: approvals.filter((approval) => approval.status === "승인 대기").length,
     done: approvals.filter((approval) => approval.status === "승인 완료").length,

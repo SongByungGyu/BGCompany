@@ -1,9 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { DB_SYNC_INTERVAL_MS } from "@/lib/db-sync";
 import { fetchTimeline, type TimelineRecord, type TimelineTargetType } from "./api";
 
-export function useTimeline(targetType?: TimelineTargetType, targetId?: string) {
+type UseTimelineOptions = {
+  polling?: boolean;
+  intervalMs?: number;
+};
+
+export function useTimeline(targetType?: TimelineTargetType, targetId?: string, options: UseTimelineOptions = {}) {
+  const { polling = false, intervalMs = DB_SYNC_INTERVAL_MS } = options;
   const [timeline, setTimeline] = useState<TimelineRecord[]>([]);
   const [isLoading, setIsLoading] = useState(Boolean(targetType));
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +65,14 @@ export function useTimeline(targetType?: TimelineTargetType, targetId?: string) 
       });
     return () => { cancelled = true; };
   }, [targetType, targetId]);
+
+  useEffect(() => {
+    if (!polling || !targetType) return undefined;
+    const intervalId = window.setInterval(() => {
+      void refresh();
+    }, intervalMs);
+    return () => window.clearInterval(intervalId);
+  }, [intervalMs, polling, refresh, targetType]);
 
   return { timeline, isLoading, error, refresh };
 }
