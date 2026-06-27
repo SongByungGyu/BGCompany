@@ -1,4 +1,4 @@
-import type { AgentMetadata } from "./agent-runner-types";
+import type { AgentMetadata } from "./agent-context-types";
 
 export const agentRegistry: Record<string, AgentMetadata> = {
   "director": {

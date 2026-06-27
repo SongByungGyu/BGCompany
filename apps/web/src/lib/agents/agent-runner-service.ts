@@ -3,8 +3,8 @@ import { prisma } from "@/lib/db";
 import { processAgentEvent } from "@/lib/events/event-processor";
 import { createAgentRun, updateAgentRunStatus } from "@/lib/repositories/agent-runs";
 import { AgentEventError, type AgentEventInput } from "@/lib/events/agent-event-types";
-import { getAgentMetadata } from "./agent-registry";
-import { createMockAgentRunPlan } from "./mock-agent-runner";
+import { buildAgentRunContext, summarizeAgentRunContext } from "./agent-run-context-builder";
+import { getAgentRunner, resolveAgentRunnerMode } from "./agent-runner-provider";
 import type { AgentRunRequest, AgentRunResult } from "./agent-runner-types";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -24,13 +24,13 @@ function validateRequest(input: unknown): AgentRunRequest {
   if (body.employeeId !== undefined && typeof body.employeeId !== "string") {
     throw new AgentEventError("INVALID_AGENT_RUN", "employeeId must be a string", 400);
   }
-  if (body.mode !== undefined && body.mode !== "mock" && body.mode !== "mock-error") {
-    throw new AgentEventError("UNSUPPORTED_AGENT_RUN_MODE", "only mock/mock-error mode is supported", 400);
+  if (body.mode !== undefined && body.mode !== "mock" && body.mode !== "mock-error" && body.mode !== "hermes") {
+    throw new AgentEventError("UNSUPPORTED_AGENT_RUN_MODE", "only mock/mock-error/hermes mode is supported", 400);
   }
   return {
     taskId: body.taskId,
     employeeId: typeof body.employeeId === "string" ? body.employeeId : undefined,
-    mode: body.mode === "mock-error" ? "mock-error" : "mock",
+    mode: body.mode === "mock-error" ? "mock-error" : body.mode === "hermes" ? "hermes" : "mock",
   };
 }
 
@@ -80,42 +80,22 @@ export async function runAgentTask(input: unknown): Promise<AgentRunResult> {
     throw new AgentEventError("EMPLOYEE_TASK_MISMATCH", `task ${task.id} is assigned to ${task.assignedEmployeeId}`, 400);
   }
 
-  const agent = getAgentMetadata(employeeId);
-  if (!agent) throw new AgentEventError("AGENT_NOT_REGISTERED", `agent is not registered: ${employeeId}`, 400);
-
   const runId = `run-${randomUUID()}`;
-  const context = {
-    runId,
-    task: {
-      id: task.id,
-      title: task.title,
-      description: task.description,
-      department: task.department,
-      status: task.status,
-      currentStep: task.currentStep,
-      nextAction: task.nextAction,
-      assignedEmployeeId: task.assignedEmployeeId,
-    },
-    employee: {
-      id: employee.id,
-      displayName: employee.displayName,
-      department: employee.department,
-    },
-    agent,
-  };
-  const plan = createMockAgentRunPlan(context);
+  const context = buildAgentRunContext({ runId, task, employee });
+  const contextSummary = summarizeAgentRunContext(context);
+  const runnerMode = resolveAgentRunnerMode(request.mode === "mock-error" ? "mock" : request.mode);
+  const runner = getAgentRunner(runnerMode);
+
   await createAgentRun({
     id: runId,
     taskId: task.id,
     employeeId,
-    mode: request.mode ?? "mock",
+    mode: request.mode ?? runnerMode,
     status: "running",
     triggerSource: "user",
     startedAt: new Date(),
     metadata: {
-      taskTitle: task.title,
-      agentDisplayName: agent.displayName,
-      department: agent.department,
+      contextSummary,
     },
   });
 
@@ -133,7 +113,7 @@ export async function runAgentTask(input: unknown): Promise<AgentRunResult> {
     payload: {
       runId,
       title: task.title,
-      summary: `${agent.displayName} Agent가 업무 실행을 시작했습니다.`,
+      summary: `${context.agent.displayName} Agent가 업무 실행을 시작했습니다.`,
     },
   }));
   await wait(150);
@@ -146,13 +126,15 @@ export async function runAgentTask(input: unknown): Promise<AgentRunResult> {
     payload: {
       runId,
       status: employeeId === "stock-monitor" ? "조사 중" : employeeId === "qa-auditor" ? "검토 중" : "업무 중",
-      summary: `${agent.displayName} Agent가 ${task.title} 업무를 수행 중입니다.`,
+      summary: `${context.agent.displayName} Agent가 ${task.title} 업무를 수행 중입니다.`,
     },
   }));
   await wait(150);
 
+  const plan = await runner.run(context);
+
   events.push(await emit({
-    source: "mock",
+    source: runnerMode === "hermes" ? "hermes" : "mock",
     eventType: "OutputGenerated",
     employeeId,
     taskId: task.id,
@@ -199,7 +181,7 @@ export async function runAgentTask(input: unknown): Promise<AgentRunResult> {
       payload: {
         runId,
         status: plan.finalStatus,
-        summary: `${agent.displayName} Agent가 업무 실행을 마쳤습니다.`,
+        summary: `${context.agent.displayName} Agent가 업무 실행을 마쳤습니다.`,
       },
     }));
   }
@@ -212,7 +194,7 @@ export async function runAgentTask(input: unknown): Promise<AgentRunResult> {
     resultSummary,
     metadata: {
       taskTitle: task.title,
-      agentDisplayName: agent.displayName,
+      contextSummary,
       outputTitle: plan.outputTitle,
       approvalId: approvalId ?? null,
       eventCount: events.length,
@@ -225,7 +207,7 @@ export async function runAgentTask(input: unknown): Promise<AgentRunResult> {
     taskId: task.id,
     employeeId,
     status: "succeeded",
-    mode: request.mode ?? "mock",
+    mode: request.mode ?? runnerMode,
     events,
     approvalId,
     resultSummary,
@@ -239,7 +221,7 @@ export async function runAgentTask(input: unknown): Promise<AgentRunResult> {
       taskId: task.id,
       payload: {
         runId,
-        summary: `${agent.displayName} Agent 실행 실패`,
+        summary: `${context.agent.displayName} Agent 실행 실패`,
         error: message,
       },
     }).catch(() => null);
@@ -249,8 +231,7 @@ export async function runAgentTask(input: unknown): Promise<AgentRunResult> {
       completedAt: new Date(),
       errorMessage: message,
       metadata: {
-        taskTitle: task.title,
-        agentDisplayName: agent.displayName,
+        contextSummary,
         eventCount: events.length,
       },
     });

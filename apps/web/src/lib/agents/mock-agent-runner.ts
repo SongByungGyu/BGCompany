@@ -1,4 +1,5 @@
-import type { AgentRunContext, MockAgentRunPlan } from "./agent-runner-types";
+import type { AgentRunContext, AgentRunner } from "./agent-context-types";
+import type { MockAgentRunPlan } from "./agent-runner-types";
 
 const approvalKeywords = ["승인", "게시", "비용", "배포", "핫픽스", "외부", "민감", "결제"];
 
@@ -9,6 +10,8 @@ function taskText(context: AgentRunContext) {
     context.task.currentStep,
     context.task.nextAction,
     context.task.status,
+    context.outputFormat,
+    ...context.agent.approvalConditions,
   ].filter(Boolean).join(" ");
 }
 
@@ -48,15 +51,22 @@ function finalStatusFor(context: AgentRunContext, requiresApproval: boolean) {
 
 export function createMockAgentRunPlan(context: AgentRunContext): MockAgentRunPlan {
   const text = taskText(context);
-  const requiresApproval = context.task.status === "승인 대기" || approvalKeywords.some((keyword) => text.includes(keyword));
+  const requiresApproval = context.constraints.requiresApproval || approvalKeywords.some((keyword) => text.includes(keyword));
   const approvalType = inferApprovalType(context);
+  const outputTitle = outputTitleFor(context);
   return {
-    summary: `${context.agent.displayName} Agent가 ${context.task.title} 업무를 mock으로 실행했습니다.`,
-    outputTitle: outputTitleFor(context),
+    summary: `${context.agent.displayName} Agent가 ${context.task.title} 업무를 mock으로 실행했습니다. 결과 형식: ${context.outputFormat || "요약 결과"}`,
+    outputTitle,
     finalStatus: finalStatusFor(context, requiresApproval),
     requiresApproval,
     approvalType,
     approvalRisk: approvalType === "오류" ? "높음" : "보통",
-    approvalReason: `${context.task.title} 결과를 적용하기 전 대표 확인이 필요합니다.`,
+    approvalReason: context.agent.approvalConditions[0] ?? `${context.task.title} 결과를 적용하기 전 대표 확인이 필요합니다.`,
   };
+}
+
+export class MockAgentRunner implements AgentRunner {
+  async run(context: AgentRunContext): Promise<MockAgentRunPlan> {
+    return createMockAgentRunPlan(context);
+  }
 }
