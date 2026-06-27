@@ -6,7 +6,7 @@ import type { BGCompanyEvent, BGEmployeeStatus } from "@/features/events/types";
 import { useTimeline } from "@/features/timelines/useTimeline";
 import type { TimelineRecord } from "@/features/timelines/api";
 import { DB_SYNC_INTERVAL_MS } from "@/lib/db-sync";
-import { fetchWorkTasks } from "./api";
+import { fetchWorkTasks, runAgentTask } from "./api";
 import { mockWorkTasks } from "./mock-tasks";
 import type { WorkBoardProps, WorkTask, WorkTaskStatus } from "./work-board-types";
 
@@ -118,6 +118,23 @@ export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoard
     waiting: tasks.filter((task) => task.status === "승인 대기").length,
     error: tasks.filter((task) => task.status === "오류").length,
     done: tasks.filter((task) => task.status === "완료").length,
+  };
+
+  const executeSelectedTask = async () => {
+    if (!selectedTask || actionBusy) return;
+    setActionBusy(true);
+    setNotice(`${selectedTask.title} · Agent 실행을 요청했습니다.`);
+    try {
+      const result = await runAgentTask({ taskId: selectedTask.id, employeeId: selectedTask.assigneeId, mode: "mock" });
+      await refreshTasks();
+      await taskTimeline.refresh();
+      setNotice(`${selectedTask.title} · ${result.employeeId} Agent 실행 완료${result.approvalId ? " · 승인 요청 생성" : ""}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "알 수 없는 오류";
+      setNotice(`${selectedTask.title} · Agent 실행 실패 (${message})`);
+    } finally {
+      setActionBusy(false);
+    }
   };
 
   const publishTaskAction = async (action: keyof typeof taskActionLabels) => {
@@ -245,6 +262,7 @@ export function WorkBoardView({ employees, eventLog, onPublishEvent }: WorkBoard
                 <p>{selectedTask.nextAction}</p>
               </div>
               <div className="feature-actions">
+                <button disabled={actionBusy} onClick={() => void executeSelectedTask()}>실행</button>
                 <button disabled={actionBusy} onClick={() => void publishTaskAction("pause")}>일시정지</button>
                 <button disabled={actionBusy} onClick={() => void publishTaskAction("retry")}>재시도</button>
                 <button disabled={actionBusy} onClick={() => void publishTaskAction("cancel")}>취소</button>
