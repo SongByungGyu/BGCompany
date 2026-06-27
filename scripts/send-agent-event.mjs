@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const BASE_URL = process.env.BG_COMPANY_BASE_URL ?? "http://localhost:3000";
+const AGENT_API_KEY = process.env.AGENT_API_KEY;
 
 const command = process.argv[2];
 const employeeId = process.argv[3];
@@ -18,7 +19,8 @@ Examples:
   node scripts/send-agent-event.mjs output content-planner task-content-draft
 
 Environment:
-  BG_COMPANY_BASE_URL=http://localhost:3000`);
+  BG_COMPANY_BASE_URL=http://localhost:3000
+  AGENT_API_KEY=dev-secret`);
 }
 
 function buildEvent() {
@@ -72,10 +74,17 @@ async function main() {
     return;
   }
 
+  if (!AGENT_API_KEY) {
+    throw new Error("AGENT_API_KEY is required for POST /api/agent-events");
+  }
+
   const body = buildEvent();
   const response = await fetch(`${BASE_URL}/api/agent-events`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-bg-agent-key": AGENT_API_KEY,
+    },
     body: JSON.stringify(body),
   });
   const text = await response.text();

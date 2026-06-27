@@ -51,7 +51,10 @@ export async function fetchAgentRuns(input: { taskId?: string; employeeId?: stri
 export async function runAgentTask(input: { taskId: string; employeeId?: string; mode?: "mock" | "mock-error" }): Promise<AgentRunResponse> {
   const response = await fetch("/api/agent-runs", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-bg-ui-action": "work-board-agent-run",
+    },
     body: JSON.stringify(input),
   });
   if (!response.ok) throw new Error(`Failed to run agent task: ${response.status}`);

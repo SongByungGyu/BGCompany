@@ -16,6 +16,27 @@ Agent/Hermes event input
 
 ## DTO
 
+## 인증
+
+외부 Agent/Hermes가 `POST /api/agent-events`를 호출할 때는 API key header가 필요합니다.
+
+```http
+x-bg-agent-key: <AGENT_API_KEY>
+```
+
+인증 실패 응답:
+
+```json
+{
+  "ok": false,
+  "error": "UNAUTHORIZED_AGENT_REQUEST",
+  "message": "Missing or invalid agent API key"
+}
+```
+
+`AGENT_API_KEY`는 실제 secret을 Git에 커밋하지 않고, `.env.example`에는 예시값만 둡니다.
+
+
 ```ts
 type AgentEventInput = {
   source: "hermes" | "mock" | "system" | "codex" | "manual";

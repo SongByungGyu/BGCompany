@@ -26,7 +26,17 @@ POST /api/agent-events
 
 내부 Mock/UI 이벤트는 기존 `POST /api/events`를 사용할 수 있고, 외부 Agent/Hermes 입력은 `POST /api/agent-events`를 사용합니다.
 
-## 3. 공통 Payload
+## 3. 인증
+
+외부 Agent/Hermes callback은 다음 header를 포함해야 합니다.
+
+```http
+x-bg-agent-key: <AGENT_API_KEY>
+```
+
+header가 없거나 값이 다르면 `401 Unauthorized`와 `UNAUTHORIZED_AGENT_REQUEST`를 반환합니다.
+
+## 4. 공통 Payload
 
 ```ts
 type AgentEventInput = {

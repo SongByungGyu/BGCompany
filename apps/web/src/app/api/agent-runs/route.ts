@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { validateAgentApiKey } from "@/lib/auth/agent-api-auth";
 import { AgentEventError } from "@/lib/events/agent-event-types";
 import { runAgentTask } from "@/lib/agents/agent-runner-service";
 import { getAgentRuns } from "@/lib/repositories/agent-runs";
@@ -14,6 +15,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = validateAgentApiKey(request, { allowInternalUiAgentRun: true });
+  if (!auth.ok) return auth.response;
+
   try {
     const body = await request.json();
     const result = await runAgentTask(body);

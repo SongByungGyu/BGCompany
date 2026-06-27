@@ -80,6 +80,12 @@ POST /api/agent-events
 
 이 endpoint는 현재 Mock 이벤트와 같은 event processor를 사용합니다.
 
+Hermes가 BG Company로 callback을 보낼 때는 다음 header를 포함해야 합니다.
+
+```http
+x-bg-agent-key: <AGENT_API_KEY>
+```
+
 ## 테스트 방법
 
 ### mock mode
