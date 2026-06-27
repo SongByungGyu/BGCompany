@@ -36,6 +36,8 @@ x-bg-agent-key: <AGENT_API_KEY>
 
 `AGENT_API_KEY`는 실제 secret을 Git에 커밋하지 않고, `.env.example`에는 예시값만 둡니다.
 
+Hermes callback endpoint는 `POST /api/agent-events`이며, Hermes는 `x-bg-agent-key` header를 포함해야 합니다.
+
 
 ```ts
 type AgentEventInput = {
@@ -77,6 +79,7 @@ type AgentEventInput = {
 ```bash
 curl -X POST http://localhost:3000/api/agent-events \
   -H "Content-Type: application/json" \
+  -H "x-bg-agent-key: dev-secret" \
   -d '{
     "source": "hermes",
     "eventType": "EmployeeStatusChanged",
@@ -100,6 +103,7 @@ curl http://localhost:3000/api/employees
 ```bash
 curl -X POST http://localhost:3000/api/agent-events \
   -H "Content-Type: application/json" \
+  -H "x-bg-agent-key: dev-secret" \
   -d '{
     "source": "hermes",
     "eventType": "ErrorOccurred",
@@ -125,6 +129,7 @@ curl http://localhost:3000/api/tasks
 ```bash
 curl -X POST http://localhost:3000/api/agent-events \
   -H "Content-Type: application/json" \
+  -H "x-bg-agent-key: dev-secret" \
   -d '{
     "source": "hermes",
     "eventType": "OutputGenerated",

@@ -6,6 +6,7 @@ import { createAgentRun, updateAgentRunStatus } from "@/lib/repositories/agent-r
 import { AgentEventError, type AgentEventInput } from "@/lib/events/agent-event-types";
 import { buildAgentRunContext, summarizeAgentRunContext } from "./agent-run-context-builder";
 import { getAgentRunner, resolveAgentRunnerMode } from "./agent-runner-provider";
+import { HermesClientError } from "./hermes-client";
 import type { AgentRunRequest, AgentRunResult } from "./agent-runner-types";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -271,6 +272,7 @@ export async function runAgentTask(input: unknown): Promise<AgentRunResult> {
         eventCount: events.length,
       } as Prisma.InputJsonValue,
     });
-    throw new AgentEventError("AGENT_RUN_FAILED", message, 500);
+    const errorCode = error instanceof HermesClientError ? error.code : "AGENT_RUN_FAILED";
+    throw new AgentEventError(errorCode, message, error instanceof HermesClientError ? error.status ?? 500 : 500);
   }
 }

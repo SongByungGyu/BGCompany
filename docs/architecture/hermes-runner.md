@@ -13,12 +13,14 @@ AGENT_RUNNER_MODE=mock
 HERMES_BASE_URL=
 HERMES_API_KEY=
 HERMES_TIMEOUT_MS=30000
+HERMES_HEALTH_PATH=/health
 ```
 
 - `AGENT_RUNNER_MODE`: 기본 runner 모드입니다. 지원 값은 `mock`, `hermes`, `hermes-dry-run`입니다.
 - `HERMES_BASE_URL`: Hermes API base URL입니다. `hermes` 모드에서는 필수입니다.
 - `HERMES_API_KEY`: Hermes 인증 토큰입니다. 로그나 API 응답에 노출하지 않습니다.
 - `HERMES_TIMEOUT_MS`: Hermes 요청 timeout입니다.
+- `HERMES_HEALTH_PATH`: Hermes health check path입니다. 기본값은 `/health`입니다.
 
 ## runner mode
 
@@ -86,6 +88,56 @@ Hermes가 BG Company로 callback을 보낼 때는 다음 header를 포함해야 
 x-bg-agent-key: <AGENT_API_KEY>
 ```
 
+## Hermes status API
+
+BG Company 서버에서 현재 Hermes 연결 설정과 health check 결과를 확인할 수 있습니다.
+
+```bash
+curl http://localhost:3000/api/hermes/status
+```
+
+응답에는 secret 원문이 포함되지 않고, 설정 여부만 boolean으로 표시됩니다.
+
+예시:
+
+```json
+{
+  "ok": true,
+  "runnerMode": "mock",
+  "configured": {
+    "baseUrl": false,
+    "apiKey": false,
+    "timeoutMs": 30000,
+    "healthPath": "/health"
+  },
+  "available": false,
+  "message": "Hermes is not configured. Mock runner is active."
+}
+```
+
+## Hermes status script
+
+로컬 터미널에서 다음 스크립트로 상태를 확인할 수 있습니다.
+
+```bash
+node scripts/check-hermes.mjs
+```
+
+필요하면 `BG_COMPANY_BASE_URL`로 BG Company 서버 URL을 지정합니다.
+
+```bash
+BG_COMPANY_BASE_URL=http://localhost:3000 node scripts/check-hermes.mjs
+```
+
+## Hermes 연결 전 체크리스트
+
+- `AGENT_RUNNER_MODE`가 의도한 값인지 확인
+- `HERMES_BASE_URL` 설정 여부 확인
+- `HERMES_API_KEY` 설정 여부 확인
+- `HERMES_HEALTH_PATH`가 실제 Hermes health endpoint와 맞는지 확인
+- `GET /api/hermes/status`에서 `available=true`인지 확인
+- Hermes callback이 `POST /api/agent-events`로 `x-bg-agent-key` header를 포함하는지 확인
+
 ## 테스트 방법
 
 ### mock mode
@@ -93,6 +145,7 @@ x-bg-agent-key: <AGENT_API_KEY>
 ```bash
 curl -X POST http://localhost:3000/api/agent-runs \
   -H "Content-Type: application/json" \
+  -H "x-bg-agent-key: dev-secret" \
   -d '{
     "taskId": "task-content-draft",
     "employeeId": "content-planner",
@@ -105,6 +158,7 @@ curl -X POST http://localhost:3000/api/agent-runs \
 ```bash
 curl -X POST http://localhost:3000/api/agent-runs \
   -H "Content-Type: application/json" \
+  -H "x-bg-agent-key: dev-secret" \
   -d '{
     "taskId": "task-content-draft",
     "employeeId": "content-planner",
@@ -119,6 +173,7 @@ curl -X POST http://localhost:3000/api/agent-runs \
 ```bash
 curl -X POST http://localhost:3000/api/agent-runs \
   -H "Content-Type: application/json" \
+  -H "x-bg-agent-key: dev-secret" \
   -d '{
     "taskId": "task-content-draft",
     "employeeId": "content-planner",

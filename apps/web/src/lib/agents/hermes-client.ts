@@ -41,6 +41,13 @@ export type HermesRunResponse = {
   raw?: unknown;
 };
 
+export type HermesHealthResult = {
+  ok: boolean;
+  status?: number;
+  message?: string;
+  raw?: unknown;
+};
+
 export class HermesClientError extends Error {
   code: string;
   status?: number;
@@ -53,11 +60,12 @@ export class HermesClientError extends Error {
   }
 }
 
-function getHermesConfig() {
+export function getHermesConfig() {
   return {
     baseUrl: process.env.HERMES_BASE_URL?.trim() ?? "",
     apiKey: process.env.HERMES_API_KEY?.trim() ?? "",
     timeoutMs: Number(process.env.HERMES_TIMEOUT_MS ?? "30000"),
+    healthPath: process.env.HERMES_HEALTH_PATH?.trim() || "/health",
   };
 }
 
@@ -137,10 +145,52 @@ function extractMessage(raw: unknown): string | undefined {
   return typeof message === "string" ? message : undefined;
 }
 
+function normalizePath(path: string) {
+  return path.startsWith("/") ? path : `/${path}`;
+}
+
+export async function checkHermesHealth(): Promise<HermesHealthResult> {
+  const config = getHermesConfig();
+  if (!config.baseUrl) {
+    return {
+      ok: false,
+      message: "Hermes is not configured. Mock runner is active.",
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Number.isFinite(config.timeoutMs) ? config.timeoutMs : 30000);
+
+  try {
+    const response = await fetch(`${config.baseUrl.replace(/\/$/, "")}${normalizePath(config.healthPath)}`, {
+      method: "GET",
+      headers: {
+        ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
+      },
+      signal: controller.signal,
+    });
+    const raw = await response.json().catch(() => null);
+    return {
+      ok: response.ok,
+      status: response.status,
+      message: response.ok ? "Hermes health check passed." : extractMessage(raw) ?? `Hermes health check failed with status ${response.status}`,
+      raw,
+    };
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return { ok: false, message: "Hermes health check timed out." };
+    }
+    const message = error instanceof Error ? error.message : "Unknown Hermes health check error";
+    return { ok: false, message };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function sendHermesRunRequest(context: AgentRunContext): Promise<HermesRunResponse> {
   const config = getHermesConfig();
   if (!config.baseUrl) {
-    throw new HermesClientError("HERMES_NOT_CONFIGURED", "HERMES_BASE_URL is required when AGENT_RUNNER_MODE=hermes or mode=hermes", 500);
+    throw new HermesClientError("HERMES_NOT_CONFIGURED", "HERMES_BASE_URL is required when AGENT_RUNNER_MODE=hermes or mode=hermes.", 500);
   }
 
   const payload = buildHermesRunPayload(context);
