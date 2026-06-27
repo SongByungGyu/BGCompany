@@ -1,0 +1,22 @@
+.git
+.gitignore
+.dockerignore
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies and build outputs
+node_modules
+**/node_modules
+.next
+**/.next
+out
+build
+coverage
+
+# Logs and editor files
+*.log
+.DS_Store
+.vercel
