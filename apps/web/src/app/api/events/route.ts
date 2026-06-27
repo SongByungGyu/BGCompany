@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createEvent, listEvents } from "@/lib/repositories/events";
+import { processInternalEvent } from "@/lib/events/event-processor";
+import { listEvents } from "@/lib/repositories/events";
 
 export async function GET() {
   const events = await listEvents();
@@ -11,7 +12,7 @@ export async function POST(request: NextRequest) {
   if (!body || typeof body.type !== "string") {
     return NextResponse.json({ error: "type is required" }, { status: 400 });
   }
-  const event = await createEvent({
+  const event = await processInternalEvent({
     id: typeof body.id === "string" ? body.id : undefined,
     type: body.type,
     timestamp: typeof body.timestamp === "string" ? body.timestamp : undefined,

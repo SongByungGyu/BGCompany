@@ -36,25 +36,43 @@ async function applyEventSideEffects(event: { type: string; employeeId: string |
     await prisma.task.update({ where: { id: event.taskId }, data: { status: "진행 중" } }).catch(() => null);
     if (event.employeeId) await prisma.employee.update({ where: { id: event.employeeId }, data: { status: "업무 중" } }).catch(() => null);
   }
+  if (event.type === "MeetingStarted") {
+    if (event.employeeId) await prisma.employee.update({ where: { id: event.employeeId }, data: { status: "회의 중" } }).catch(() => null);
+  }
+  if (event.type === "MeetingEnded") {
+    const nextStatus = statusFromPayload(payload, "업무 중");
+    if (event.employeeId) await prisma.employee.update({ where: { id: event.employeeId }, data: { status: nextStatus } }).catch(() => null);
+  }
   if (event.type === "OutputGenerated" && event.taskId) {
     await prisma.task.update({
       where: { id: event.taskId },
       data: {
         status: taskStatusFromEmployeeStatus(status) ?? "진행 중",
-        recentOutput: typeof payload.output === "string" ? payload.output : undefined,
+        recentOutput: typeof payload.output === "string" ? payload.output : typeof payload.outputTitle === "string" ? payload.outputTitle : undefined,
       },
     }).catch(() => null);
   }
   if (event.type === "ErrorOccurred") {
-    if (event.taskId) await prisma.task.update({ where: { id: event.taskId }, data: { status: "오류", error: typeof payload.message === "string" ? payload.message : undefined } }).catch(() => null);
+    if (event.taskId) await prisma.task.update({ where: { id: event.taskId }, data: { status: "오류", error: typeof payload.message === "string" ? payload.message : typeof payload.error === "string" ? payload.error : undefined } }).catch(() => null);
     if (event.employeeId) await prisma.employee.update({ where: { id: event.employeeId }, data: { status: "오류 대응 중" } }).catch(() => null);
   }
   if (event.type === "ErrorResolved") {
-    if (event.taskId) await prisma.task.update({ where: { id: event.taskId }, data: { status: taskStatusFromEmployeeStatus(status) ?? "진행 중", error: null } }).catch(() => null);
-    if (event.employeeId) await prisma.employee.update({ where: { id: event.employeeId }, data: { status: status ?? "업무 중" } }).catch(() => null);
+    const nextStatus = statusFromPayload(payload, "업무 중");
+    if (event.taskId) await prisma.task.update({ where: { id: event.taskId }, data: { status: taskStatusFromEmployeeStatus(nextStatus) ?? "진행 중", error: null } }).catch(() => null);
+    if (event.employeeId) await prisma.employee.update({ where: { id: event.employeeId }, data: { status: nextStatus } }).catch(() => null);
   }
-  if (event.type === "ApprovalRequested" && event.approvalId) {
-    await prisma.approvalRequest.update({ where: { id: event.approvalId }, data: { status: "승인 대기" } }).catch(() => null);
+  if (event.type === "ApprovalRequested") {
+    if (event.approvalId) await prisma.approvalRequest.update({ where: { id: event.approvalId }, data: { status: "승인 대기" } }).catch(() => null);
+    if (event.employeeId) await prisma.employee.update({ where: { id: event.employeeId }, data: { status: "승인 대기" } }).catch(() => null);
+    if (event.taskId) await prisma.task.update({ where: { id: event.taskId }, data: { status: "승인 대기" } }).catch(() => null);
+  }
+  if (event.type === "ApprovalResolved") {
+    const approvalStatus = typeof payload.status === "string" ? payload.status : payload.approved === true ? "승인 완료" : "수정 요청";
+    if (event.approvalId) await prisma.approvalRequest.update({ where: { id: event.approvalId }, data: { status: approvalStatus } }).catch(() => null);
+    const employeeStatus = approvalStatus === "승인 완료" ? "업무 완료" : approvalStatus === "보류" ? "대기 중" : "수정 중";
+    const taskStatus = approvalStatus === "승인 완료" ? "완료" : approvalStatus === "보류" ? "대기" : "진행 중";
+    if (event.employeeId) await prisma.employee.update({ where: { id: event.employeeId }, data: { status: employeeStatus } }).catch(() => null);
+    if (event.taskId) await prisma.task.update({ where: { id: event.taskId }, data: { status: taskStatus } }).catch(() => null);
   }
 }
 
