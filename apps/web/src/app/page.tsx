@@ -224,9 +224,10 @@ export default function Home() {
   }, [employees]);
   const runMovementScenario = (steps = movementTestScenarios[0].steps) => steps.forEach(([employeeId,status])=>updateEmployeeStatus(employeeId,status,false));
   const resolve=(approved:boolean)=>{ setEmployees(list=>list.map((e,i)=>i===selected?{...e,status:approved?"업무 완료":"수정 중",group:approved?"done":"working",next:approved?"게시 일정 등록":"수정안 재제출"}:e));setView("selected"); };
+  const logout=async()=>{ await fetch("/api/auth/logout",{method:"POST"}).catch(()=>undefined); window.location.href="/login"; };
 
   return <main className="control-room">
-    <header className="top-bar"><div className="brand"><b>✦</b><strong>BG Company</strong><span>가상 회사 관제</span></div><div className="clock"><i/>{clock}</div><div className="kpis">{kpis.map(([label,value,kind])=><button key={label} className={kind} disabled={!kind||value==="0"} onClick={()=>kind==="error"?(setActiveNav("가상 오피스"),setDemoView("error")):kind==="waiting"?setActiveNav("승인함"):null}><span>{label}</span><strong>{value}</strong></button>)}<button className="gear">⚙</button>{view==="loading"&&<i className="kpi-loading"/>}</div></header>
+    <header className="top-bar"><div className="brand"><b>✦</b><strong>BG Company</strong><span>가상 회사 관제</span></div><div className="clock"><i/>{clock}</div><div className="kpis">{kpis.map(([label,value,kind])=><button key={label} className={kind} disabled={!kind||value==="0"} onClick={()=>kind==="error"?(setActiveNav("가상 오피스"),setDemoView("error")):kind==="waiting"?setActiveNav("승인함"):null}><span>{label}</span><strong>{value}</strong></button>)}<button className="gear">⚙</button><button className="logout-button" onClick={logout}>로그아웃</button>{view==="loading"&&<i className="kpi-loading"/>}</div></header>
     <div className="workspace">
       <nav className="left-nav">{nav.map(([icon,label])=><button key={label} className={activeNav===label?"active":""} onClick={()=>setActiveNav(label)}><b>{icon}</b><span>{label}</span>{label==="승인함"&&approvals>0&&<i>{approvals}</i>}</button>)}</nav>
       {activeNav==="가상 오피스" ? (
