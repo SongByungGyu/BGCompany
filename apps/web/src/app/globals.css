@@ -48,3 +48,13 @@
 .content-pipeline-hero{background:radial-gradient(120% 130% at 12% 0%,#eef8ff 0%,#fff 64%)}
 .content-pipeline-form{display:grid;grid-template-columns:1.5fr 1.3fr 130px 150px 140px;gap:9px;margin:12px 0;padding:12px;background:#f8fafc;border:1px solid #e6ebf2;border-radius:15px}.content-pipeline-form label{display:flex;min-width:0;flex-direction:column;gap:5px;color:#7c8798;font-size:10.5px;font-weight:850}.content-pipeline-form input,.content-pipeline-form select{height:34px;min-width:0;padding:0 10px;color:#1f2a3a;background:#fff;border:1px solid #dce5ef;border-radius:10px;font:inherit;font-size:12px;font-weight:700}.content-pipeline-form button{align-self:end;height:34px;color:#fff;font-size:12px;font-weight:850;background:var(--brand);border:0;border-radius:10px;cursor:pointer}.content-pipeline-form button:disabled{opacity:.6;cursor:wait}
 .content-pipeline-error{color:var(--error)!important}.content-pipeline-layout{display:grid;height:calc(100% - 218px);grid-template-columns:minmax(280px,.9fr) minmax(320px,1.1fr);gap:12px}.content-pipeline-list{display:flex;min-height:0;flex-direction:column;gap:9px;overflow:auto;padding-right:4px}.content-pipeline-list button{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:13px 14px;text-align:left;background:#fff;border:1px solid #e6ebf2;border-radius:15px;box-shadow:0 1px 2px #0f1b2d0a;cursor:pointer}.content-pipeline-list button:hover,.content-pipeline-list button.selected{border-color:#b8cdf6;background:#f8fbff}.content-pipeline-list strong{font-size:14px;font-weight:850}.content-pipeline-list small{color:#718096;font-size:11px;font-weight:700}.content-pipeline-list em{color:#9aa3b2;font-size:10.5px;font-style:normal;font-weight:800}.content-pipeline-detail{min-height:0;overflow:auto;padding:14px;background:#fff;border:1px solid #e6ebf2;border-radius:15px}.content-pipeline-detail .badge{margin-top:0}
+
+/* Stable scroll layout for feature screens */
+.stage{min-height:0;overflow:hidden}
+.feature-shell{display:flex;min-height:0;flex-direction:column}
+.feature-hero,.feature-toolbar,.content-pipeline-form{flex:0 0 auto}
+.task-board-list,.approval-list{height:auto;min-height:0;flex:1 1 auto;overscroll-behavior:contain;padding:0 4px 14px 0;scrollbar-gutter:stable}
+.content-pipeline-layout{height:auto;min-height:0;flex:1 1 auto;overflow:hidden}
+.content-pipeline-list,.content-pipeline-detail{min-height:0;scrollbar-gutter:stable;overscroll-behavior:contain}
+.feature-empty{height:auto;min-height:0;flex:1 1 auto}
+.panel{scrollbar-gutter:stable}
