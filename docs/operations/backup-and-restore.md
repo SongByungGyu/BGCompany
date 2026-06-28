@@ -70,13 +70,14 @@ set +a
 cat backups/<backup-file>.sql | docker compose exec -T postgres psql -U "$POSTGRES_USER" "$POSTGRES_DB"
 ```
 
-4. 앱과 API를 확인합니다.
+4. 앱과 공개 health API를 확인합니다.
 
 ```bash
-curl https://bgcompanyoffice.cloud/api/employees
-curl https://bgcompanyoffice.cloud/api/tasks
-curl https://bgcompanyoffice.cloud/api/approvals
+curl -I https://bgcompanyoffice.cloud
+curl https://bgcompanyoffice.cloud/api/health
 ```
+
+관리자 데이터 API는 로그인 세션이 필요하므로 비로그인 curl에서는 `401`이 정상입니다.
 
 ## 주의사항
 

@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
+import { requireAdminApiSession } from "@/lib/auth/admin-auth";
 import { getContentPipelineDetail } from "@/lib/content-pipeline/content-pipeline-service";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ pipelineId: string }> },
 ) {
+  const auth = await requireAdminApiSession(request);
+  if (!auth.ok) return auth.response;
+
   const { pipelineId } = await context.params;
   const detail = await getContentPipelineDetail(pipelineId);
   if (!detail) {

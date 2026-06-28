@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdminApiSession } from "@/lib/auth/admin-auth";
 import { listContentPipelines, startContentPipeline } from "@/lib/content-pipeline/content-pipeline-service";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await requireAdminApiSession(request);
+  if (!auth.ok) return auth.response;
+
   const pipelines = await listContentPipelines();
   return NextResponse.json({ pipelines });
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAdminApiSession(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const body = await request.json();
     const pipeline = await startContentPipeline(body);

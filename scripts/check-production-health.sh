@@ -74,13 +74,11 @@ check_container_health() {
 }
 
 check_http_head "Web" "$BASE_URL"
-check_http_json "Employees API" "$BASE_URL/api/employees"
-check_http_json "Tasks API" "$BASE_URL/api/tasks"
-check_http_json "Approvals API" "$BASE_URL/api/approvals"
-check_http_json "Hermes Status" "$BASE_URL/api/hermes/status"
+check_http_json "Health API" "$BASE_URL/api/health"
 
 check_container_running "Docker web" "bg-company-web"
 check_container_running "Docker postgres" "bg-company-postgres"
+check_container_health "Docker web health" "bg-company-web"
 check_container_health "Postgres health" "bg-company-postgres"
 
 if [[ "$failures" -gt 0 ]]; then

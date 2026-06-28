@@ -16,9 +16,8 @@ echo "Starting containers..."
 docker compose up -d
 docker compose ps
 
-echo "Checking APIs..."
-curl -fsS "$BASE_URL/api/employees" >/dev/null
-curl -fsS "$BASE_URL/api/hermes/status" >/dev/null
+echo "Checking public health API..."
+curl -fsS "$BASE_URL/api/health" >/dev/null
 
 cat <<'MESSAGE'
 Deployment completed successfully.

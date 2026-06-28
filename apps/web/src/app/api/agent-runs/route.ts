@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateAgentApiKey } from "@/lib/auth/agent-api-auth";
+import { validateAdminOrAgentApiKey } from "@/lib/auth/agent-api-auth";
 import { AgentEventError } from "@/lib/events/agent-event-types";
 import { runAgentTask } from "@/lib/agents/agent-runner-service";
 import { getAgentRuns } from "@/lib/repositories/agent-runs";
 
 export async function GET(request: NextRequest) {
+  const auth = await validateAdminOrAgentApiKey(request);
+  if (!auth.ok) return auth.response;
+
   const { searchParams } = new URL(request.url);
   const runs = await getAgentRuns({
     taskId: searchParams.get("taskId") ?? undefined,
@@ -15,7 +18,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = validateAgentApiKey(request, { allowInternalUiAgentRun: true });
+  const auth = await validateAdminOrAgentApiKey(request);
   if (!auth.ok) return auth.response;
 
   try {

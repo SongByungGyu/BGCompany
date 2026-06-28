@@ -55,13 +55,19 @@ npm --prefix apps/web run db:seed
 
 ## 배포 후 검증
 
+관리자 API는 로그인 세션이 필요하므로 배포 자동 검증은 공개 health endpoint를 사용합니다.
+
 ```bash
 docker compose ps
 curl -I https://bgcompanyoffice.cloud
-curl https://bgcompanyoffice.cloud/api/employees
-curl https://bgcompanyoffice.cloud/api/tasks
-curl https://bgcompanyoffice.cloud/api/approvals
-curl https://bgcompanyoffice.cloud/api/hermes/status
+curl https://bgcompanyoffice.cloud/api/health
+bash scripts/check-production-health.sh
+```
+
+비로그인 상태에서 보호 API가 `401`을 반환하는지도 확인합니다.
+
+```bash
+curl -i https://bgcompanyoffice.cloud/api/tasks
 ```
 
 포트 상태도 확인합니다.
@@ -97,11 +103,11 @@ docker compose build web
 docker compose up -d
 ```
 
-3. API를 다시 확인합니다.
+3. 앱과 공개 health API를 다시 확인합니다.
 
 ```bash
 curl -I https://bgcompanyoffice.cloud
-curl https://bgcompanyoffice.cloud/api/employees
+curl https://bgcompanyoffice.cloud/api/health
 ```
 
 주의:
@@ -109,3 +115,22 @@ curl https://bgcompanyoffice.cloud/api/employees
 - DB volume을 삭제하지 않습니다.
 - `docker compose down -v`는 운영에서 사용하지 않습니다.
 - DB schema 변경이 포함된 장애는 백업/복구 절차를 먼저 검토합니다.
+
+
+## 운영 인증 설정
+
+운영 화면은 관리자 로그인으로 보호합니다. VPS의 `/opt/bg-company/.env`에만 실제 값을 설정합니다.
+
+```env
+ADMIN_PASSWORD=<운영 관리자 비밀번호>
+AUTH_SESSION_SECRET=<openssl rand -base64 48 결과>
+```
+
+API 보호 정책:
+
+- 관리자 세션 필요: `/api/employees`, `/api/tasks`, `/api/approvals`, `/api/content-pipelines`, `/api/timelines`, `/api/events`, `/api/hermes/status`
+- Agent key 필요: `/api/agent-events`
+- 관리자 세션 또는 Agent key: `/api/agent-runs`
+- 공개: `/api/auth/*`, `/api/health`
+
+secret 원문은 로그나 문서에 남기지 않습니다.

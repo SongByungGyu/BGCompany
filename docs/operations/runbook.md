@@ -78,15 +78,36 @@ docker compose exec -T postgres psql -U "$POSTGRES_USER" "$POSTGRES_DB" -c 'sele
 
 ## API 상태 확인
 
+운영 헬스체크는 공개 API인 `/api/health`를 우선 사용합니다. 관리자 데이터 API는 로그인 세션이 없으면 `401`이 정상입니다.
+
 ```bash
 curl -I https://bgcompanyoffice.cloud
-curl https://bgcompanyoffice.cloud/api/employees
-curl https://bgcompanyoffice.cloud/api/tasks
-curl https://bgcompanyoffice.cloud/api/approvals
-curl https://bgcompanyoffice.cloud/api/events
-curl https://bgcompanyoffice.cloud/api/timelines
-curl https://bgcompanyoffice.cloud/api/hermes/status
+curl https://bgcompanyoffice.cloud/api/health
 ```
+
+관리자 세션이 필요한 API:
+
+- `/api/employees`
+- `/api/tasks`
+- `/api/approvals`
+- `/api/content-pipelines`
+- `/api/content-pipelines/[pipelineId]`
+- `/api/timelines`
+- `/api/events`
+- `/api/hermes/status`
+
+비로그인 상태에서 보호 API를 직접 호출하면 JSON `401 Unauthorized`가 정상입니다.
+
+```bash
+curl -i https://bgcompanyoffice.cloud/api/tasks
+```
+
+공개 API:
+
+- `/api/auth/login`
+- `/api/auth/logout`
+- `/api/auth/session`
+- `/api/health`
 
 ## Agent API 인증 확인
 
@@ -133,6 +154,31 @@ curl https://bgcompanyoffice.cloud/api/hermes/status
 ```
 
 현재 Hermes가 실제 연결되지 않은 경우 `runnerMode: mock`, `available: false`가 정상입니다.
+
+
+## 관리자 로그인/API 보호 정책
+
+BG Company 운영 화면은 관리자 로그인 후 접근합니다.
+
+- 페이지 접근: 비로그인 사용자는 `/login`으로 이동
+- 관리자 API: 로그인 세션 cookie 필요, 실패 시 JSON `401`
+- Agent API: `x-bg-agent-key` 필요
+- AgentRun API: 관리자 세션 또는 `x-bg-agent-key` 허용
+
+Agent key 전용 API:
+
+- `/api/agent-events`
+
+관리자 세션 또는 Agent key 허용 API:
+
+- `/api/agent-runs`
+- `/api/agent-runs/[runId]`
+
+secret 관리 주의:
+
+- `ADMIN_PASSWORD`, `AUTH_SESSION_SECRET`, `AGENT_API_KEY`는 VPS `.env`에만 둡니다.
+- secret 원문은 로그, 문서, 커밋에 남기지 않습니다.
+- `.env`는 Git 추적 대상이 아니어야 합니다.
 
 ## 자주 발생하는 장애와 대응
 

@@ -1,3 +1,5 @@
+import { NextResponse } from "next/server";
+
 export const ADMIN_SESSION_COOKIE = "bg_admin_session";
 export const ADMIN_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
@@ -42,6 +44,16 @@ async function hmacSha256(value: string) {
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }
 
+function getCookieFromHeader(request: Request, name: string) {
+  const cookieHeader = request.headers.get("cookie");
+  if (!cookieHeader) return null;
+  for (const part of cookieHeader.split(";")) {
+    const [rawKey, ...rawValue] = part.trim().split("=");
+    if (rawKey === name) return rawValue.join("=") || null;
+  }
+  return null;
+}
+
 export function getAdminPasswordConfigured() {
   return Boolean(process.env.ADMIN_PASSWORD?.trim());
 }
@@ -60,7 +72,7 @@ export async function createAdminSessionToken(now = Date.now()) {
   };
   const encodedPayload = base64UrlEncode(JSON.stringify(payload));
   const signature = await hmacSha256(encodedPayload);
-  return `${encodedPayload}.${signature}`;
+  return encodedPayload + "." + signature;
 }
 
 export async function verifyAdminSessionToken(token?: string | null, now = Date.now()) {
@@ -75,4 +87,23 @@ export async function verifyAdminSessionToken(token?: string | null, now = Date.
   } catch {
     return false;
   }
+}
+
+export async function getAdminSession(request: Request) {
+  try {
+    return await verifyAdminSessionToken(getCookieFromHeader(request, ADMIN_SESSION_COOKIE));
+  } catch {
+    return false;
+  }
+}
+
+export function unauthorizedJson() {
+  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+}
+
+export async function requireAdminApiSession(
+  request: Request,
+): Promise<{ ok: true } | { ok: false; response: NextResponse }> {
+  if (await getAdminSession(request)) return { ok: true };
+  return { ok: false, response: unauthorizedJson() };
 }

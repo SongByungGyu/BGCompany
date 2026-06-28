@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdminApiSession } from "@/lib/auth/admin-auth";
 import { checkHermesHealth, getHermesConfig } from "@/lib/agents/hermes-client";
 
 function resolveRunnerMode() {
@@ -7,7 +8,10 @@ function resolveRunnerMode() {
   return "mock";
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireAdminApiSession(request);
+  if (!auth.ok) return auth.response;
+
   const config = getHermesConfig();
   const runnerMode = resolveRunnerMode();
   const configured = {

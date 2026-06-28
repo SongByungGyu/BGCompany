@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdminApiSession } from "@/lib/auth/admin-auth";
 import { processInternalEvent } from "@/lib/events/event-processor";
 import { listEvents } from "@/lib/repositories/events";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await requireAdminApiSession(request);
+  if (!auth.ok) return auth.response;
+
   const events = await listEvents();
   return NextResponse.json({ events });
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAdminApiSession(request);
+  if (!auth.ok) return auth.response;
+
   const body = await request.json();
   if (!body || typeof body.type !== "string") {
     return NextResponse.json({ error: "type is required" }, { status: 400 });

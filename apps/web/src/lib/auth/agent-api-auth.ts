@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAdminSession } from "@/lib/auth/admin-auth";
 
 const AGENT_API_KEY_HEADER = "x-bg-agent-key";
 const INTERNAL_UI_ACTION_HEADER = "x-bg-ui-action";
@@ -19,7 +20,7 @@ function getConfiguredAgentApiKey() {
   return process.env.AGENT_API_KEY?.trim() ?? "";
 }
 
-function hasValidAgentApiKey(request: Request) {
+export function isValidAgentKey(request: Request) {
   const configuredKey = getConfiguredAgentApiKey();
   if (!configuredKey) return false;
   return request.headers.get(AGENT_API_KEY_HEADER) === configuredKey;
@@ -49,13 +50,21 @@ export function validateAgentApiKey(
   request: Request,
   options: { allowInternalUiAgentRun?: boolean } = {},
 ): { ok: true } | { ok: false; response: NextResponse } {
-  if (hasValidAgentApiKey(request)) return { ok: true };
+  if (isValidAgentKey(request)) return { ok: true };
   if (options.allowInternalUiAgentRun && isAllowedInternalUiAgentRun(request)) return { ok: true };
   return { ok: false, response: unauthorizedAgentRequest() };
 }
 
+export async function validateAdminOrAgentApiKey(
+  request: Request,
+): Promise<{ ok: true } | { ok: false; response: NextResponse }> {
+  if (isValidAgentKey(request)) return { ok: true };
+  if (await getAdminSession(request)) return { ok: true };
+  return { ok: false, response: unauthorizedAgentRequest() };
+}
+
 export function assertAgentApiKey(request: Request): void {
-  if (!hasValidAgentApiKey(request)) {
+  if (!isValidAgentKey(request)) {
     throw new Error("Missing or invalid agent API key");
   }
 }
