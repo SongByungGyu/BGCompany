@@ -13,6 +13,19 @@ export type ContentPipelineStatus =
   | "published_ready"
   | "completed";
 
+export type ContentPlannerResult = {
+  ok: boolean;
+  provider: string;
+  agentId: string;
+  title?: string;
+  summary?: string;
+  content?: string;
+  draftDirection?: string;
+  outline?: string[];
+  errorCode?: string;
+  errorMessage?: string;
+};
+
 export type ContentPipelineRun = {
   id: string;
   title: string;
@@ -25,6 +38,8 @@ export type ContentPipelineRun = {
   outputTitle?: string;
   outputSummary?: string;
   runnerMode?: "mock" | "hermes-dry-run" | "hermes";
+  plannerResult?: ContentPlannerResult;
+  hermesRequestPayload?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 };
@@ -50,10 +65,25 @@ export type ContentPipelineApproval = {
   decisionReason: string | null;
 };
 
+export type ContentPipelineAgentRun = {
+  id: string;
+  taskId: string | null;
+  employeeId: string;
+  mode: string;
+  status: string;
+  resultSummary: string | null;
+  errorMessage: string | null;
+  hermesJobId: string | null;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ContentPipelineDetail = {
   pipeline: ContentPipelineRun;
   tasks: ContentPipelineTask[];
   approval: ContentPipelineApproval | null;
+  agentRuns: ContentPipelineAgentRun[];
   timeline: TimelineRecord[];
 };
 

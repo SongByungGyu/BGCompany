@@ -37,6 +37,44 @@ function statusGroup(status: string) {
   return "working";
 }
 
+function stringifyJson(value: unknown) {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return "표시할 수 없는 payload입니다.";
+  }
+}
+
+function PlannerResultCard({ pipeline, agentRuns }: { pipeline: ContentPipelineRun; agentRuns: NonNullable<ContentPipelineDetail["agentRuns"]> }) {
+  const plannerRun = agentRuns.find((run) => run.employeeId === "content-planner");
+  const payload = pipeline.hermesRequestPayload ?? plannerRun?.metadata?.hermesPayload;
+  const result = pipeline.plannerResult;
+  const isHermesMode = pipeline.runnerMode === "hermes" || pipeline.runnerMode === "hermes-dry-run";
+  return (
+    <div className="feature-card">
+      <label>content-planner 실행 결과</label>
+      <strong>{plannerRun?.status ?? (result?.ok === false ? "failed" : "ready")} · {pipeline.runnerMode ?? "mock"}</strong>
+      {plannerRun?.errorMessage || result?.errorMessage ? (
+        <p className="content-pipeline-error">{result?.errorCode ?? "HERMES_ERROR"} · {plannerRun?.errorMessage ?? result?.errorMessage}</p>
+      ) : (
+        <p>{plannerRun?.resultSummary ?? result?.summary ?? pipeline.outputSummary ?? "기획 결과를 기다리는 중입니다."}</p>
+      )}
+      {result?.outline?.length ? (
+        <ul className="content-pipeline-outline">
+          {result.outline.map((item) => <li key={item}>{item}</li>)}
+        </ul>
+      ) : null}
+      {result?.draftDirection ? <p>초안 방향: {result.draftDirection}</p> : null}
+      {isHermesMode && payload ? (
+        <details className="content-pipeline-payload">
+          <summary>Hermes request payload 보기</summary>
+          <pre>{stringifyJson(payload)}</pre>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
 export function ContentPipelineView() {
   const [topic, setTopic] = useState("AI 개인회사 구축 과정 정리");
   const [title, setTitle] = useState("BG Company 구축기 1편");
@@ -140,7 +178,7 @@ export function ContentPipelineView() {
             <div>
               <span>Phase 1-C</span>
               <h1>콘텐츠 파이프라인</h1>
-              <p>기획 → 마케팅 검토 → QA 검토 → Director 승인 요청 흐름을 mock runner 기반으로 실행합니다.</p>
+              <p>기획 → 마케팅 검토 → QA 검토 → Director 승인 요청 흐름을 mock / Hermes dry-run / Hermes 모드로 실행합니다.</p>
             </div>
             <div className="work-summary">
               <span><b>{counts.total}</b>전체</span>
@@ -203,6 +241,7 @@ export function ContentPipelineView() {
                     <strong>{selectedPipeline.outputTitle ?? "아직 결과물이 없습니다."}</strong>
                     <p>{selectedPipeline.outputSummary ?? "파이프라인을 실행하면 결과 요약이 생성됩니다."}</p>
                   </div>
+                  <PlannerResultCard pipeline={detail?.pipeline ?? selectedPipeline} agentRuns={detail?.agentRuns ?? []} />
                   <div className="feature-card">
                     <label>관련 업무</label>
                     <ul className="audit-list">
@@ -259,7 +298,7 @@ export function ContentPipelineView() {
           </div>
           <div className="feature-card muted">
             <label>주의</label>
-            <p>이번 단계에서는 실제 블로그 게시, 외부 메시지 발송, 실제 Hermes/LLM 실행은 하지 않습니다.</p>
+            <p>이번 단계에서는 content-planner만 Hermes 계약 payload를 준비합니다. 마케팅/QA와 실제 게시 작업은 mock 상태를 유지합니다.</p>
           </div>
         </div>
       </aside>

@@ -19,6 +19,7 @@ export async function GET(request: Request) {
     apiKey: Boolean(config.apiKey),
     timeoutMs: Number.isFinite(config.timeoutMs) ? config.timeoutMs : 30000,
     healthPath: config.healthPath,
+    runPath: config.runPath,
   };
 
   if (!configured.baseUrl) {

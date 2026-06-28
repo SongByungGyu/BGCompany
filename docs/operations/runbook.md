@@ -268,3 +268,38 @@ bash scripts/backup-postgres.sh
 
 복구 전에는 반드시 현재 DB 백업을 먼저 생성합니다.
 
+
+
+## Hermes content-planner staged integration
+
+Phase 1-C supports three content pipeline runner modes:
+
+- `mock`: existing mock content result.
+- `hermes-dry-run`: generates and stores the Hermes request payload without calling Hermes.
+- `hermes`: calls Hermes only for `content-planner`.
+
+Required production variables:
+
+```env
+HERMES_BASE_URL=
+HERMES_API_KEY=
+HERMES_HEALTH_PATH=/health
+HERMES_RUN_PATH=/api/runs
+HERMES_TIMEOUT_MS=30000
+```
+
+Check status after login:
+
+```bash
+curl -i https://bgcompanyoffice.cloud/api/health
+```
+
+`/api/hermes/status` is protected by the admin session. Use the browser dashboard after login to inspect Hermes status, or test locally with an authenticated cookie.
+
+If a Hermes content-planner run fails:
+
+1. Open the content pipeline detail panel.
+2. Check the `content-planner 실행 결과` card.
+3. Review the AgentRun error and stored request payload.
+4. Confirm the timeline includes an `ErrorOccurred` entry.
+5. Fix `.env` or Hermes availability and retry with `hermes-dry-run` before `hermes`.

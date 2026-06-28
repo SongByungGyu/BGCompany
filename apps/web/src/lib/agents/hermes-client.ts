@@ -66,6 +66,7 @@ export function getHermesConfig() {
     apiKey: process.env.HERMES_API_KEY?.trim() ?? "",
     timeoutMs: Number(process.env.HERMES_TIMEOUT_MS ?? "30000"),
     healthPath: process.env.HERMES_HEALTH_PATH?.trim() || "/health",
+    runPath: process.env.HERMES_RUN_PATH?.trim() || "/api/runs",
   };
 }
 
@@ -198,7 +199,7 @@ export async function sendHermesRunRequest(context: AgentRunContext): Promise<He
   const timeout = setTimeout(() => controller.abort(), Number.isFinite(config.timeoutMs) ? config.timeoutMs : 30000);
 
   try {
-    const response = await fetch(`${config.baseUrl.replace(/\/$/, "")}/agent-runs`, {
+    const response = await fetch(`${config.baseUrl.replace(/\/$/, "")}${normalizePath(config.runPath)}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
