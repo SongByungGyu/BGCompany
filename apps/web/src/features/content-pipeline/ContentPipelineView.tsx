@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DB_SYNC_INTERVAL_MS } from "@/lib/db-sync";
-import { fetchContentPipelines, startContentPipeline } from "./api";
+import { fetchContentPipeline, fetchContentPipelines, startContentPipeline } from "./api";
 import { mockContentPipelines } from "./mock-content-pipeline";
-import type { ContentChannel, ContentPipelineRun } from "./content-pipeline-types";
+import type { ContentChannel, ContentPipelineDetail, ContentPipelineRun } from "./content-pipeline-types";
 
 const channelLabels: Record<ContentChannel, string> = {
   blog: "블로그",
@@ -20,7 +20,8 @@ const statusLabels: Record<string, string> = {
   qa_review: "QA 검토",
   director_approval: "Director 승인 대기",
   approved: "승인 완료",
-  rejected: "반려/수정 필요",
+  rejected: "반려",
+  revision_requested: "수정 요청",
   published_ready: "게시 준비",
   completed: "완료",
 };
@@ -46,6 +47,8 @@ export function ContentPipelineView() {
   const [notice, setNotice] = useState("콘텐츠 파이프라인은 task / approval / event / timeline 조합으로 실행됩니다.");
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detail, setDetail] = useState<ContentPipelineDetail | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -81,6 +84,27 @@ export function ContentPipelineView() {
     () => pipelines.find((pipeline) => pipeline.id === selectedPipelineId) ?? pipelines[0],
     [pipelines, selectedPipelineId],
   );
+
+  useEffect(() => {
+    if (!selectedPipeline?.id) return;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => fetchContentPipeline(selectedPipeline.id))
+      .then((data) => {
+        if (cancelled) return;
+        setDetail(data);
+        setDetailError(null);
+      })
+      .catch((detailFetchError: unknown) => {
+        if (cancelled) return;
+        const message = detailFetchError instanceof Error ? detailFetchError.message : "알 수 없는 오류";
+        setDetail(null);
+        setDetailError(message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPipeline?.id]);
 
   const start = async () => {
     if (isBusy) return;
@@ -180,17 +204,42 @@ export function ContentPipelineView() {
                     <p>{selectedPipeline.outputSummary ?? "파이프라인을 실행하면 결과 요약이 생성됩니다."}</p>
                   </div>
                   <div className="feature-card">
-                    <label>관련 업무 / 승인</label>
+                    <label>관련 업무</label>
                     <ul className="audit-list">
-                      {selectedPipeline.taskIds.map((taskId) => <li key={taskId}>task: {taskId}</li>)}
-                      {selectedPipeline.approvalId ? <li>approval: {selectedPipeline.approvalId}</li> : null}
+                      {(detail?.tasks.length ? detail.tasks : selectedPipeline.taskIds.map((taskId) => ({ id: taskId, title: taskId, status: "확인 중", progress: 0, assignedEmployeeId: null, currentStep: null, recentOutput: null }))).map((task) => (
+                        <li key={task.id}>{task.status} · {task.title} · {task.assignedEmployeeId ?? "미배정"} · {task.progress}%</li>
+                      ))}
                     </ul>
                   </div>
+                  <div className="feature-card">
+                    <label>승인 요청</label>
+                    {detail?.approval ? (
+                      <>
+                        <strong>{detail.approval.status} · {detail.approval.title}</strong>
+                        <p>{detail.approval.reason}</p>
+                      </>
+                    ) : selectedPipeline.approvalId ? (
+                      <p>approval: {selectedPipeline.approvalId}</p>
+                    ) : (
+                      <p>아직 승인 요청이 없습니다.</p>
+                    )}
+                  </div>
                   <div className="timeline feature-timeline">
-                    <article><i className="working" /><time>1</time><p>content-planner · 콘텐츠 기획</p></article>
-                    <article><i className="working" /><time>2</time><p>marketing-manager · 제목/홍보 문구 검토</p></article>
-                    <article><i className="working" /><time>3</time><p>qa-auditor · 사실성/정책/품질 검토</p></article>
-                    <article><i className="waiting" /><time>4</time><p>director · 최종 승인 대기</p></article>
+                    {detailError ? <article><i className="error" /><time>DB</time><p>상세 timeline 조회 실패 · {detailError}</p></article> : null}
+                    {detail?.timeline.length ? detail.timeline.map((entry) => (
+                      <article key={entry.id}>
+                        <i className={entry.title.includes("Approval") || entry.title.includes("승인") ? "waiting" : entry.title.includes("Output") || entry.title.includes("완료") ? "done" : "working"} />
+                        <time>{formatTime(entry.timestamp)}</time>
+                        <p>{entry.title} · {entry.description ?? "DB timeline 기록"}</p>
+                      </article>
+                    )) : (
+                      <>
+                        <article><i className="working" /><time>1</time><p>content-planner · 콘텐츠 기획</p></article>
+                        <article><i className="working" /><time>2</time><p>marketing-manager · 제목/홍보 문구 검토</p></article>
+                        <article><i className="working" /><time>3</time><p>qa-auditor · 사실성/정책/품질 검토</p></article>
+                        <article><i className="waiting" /><time>4</time><p>director · 최종 승인 대기</p></article>
+                      </>
+                    )}
                   </div>
                 </>
               ) : (

@@ -3,7 +3,8 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { createAgentRun, updateAgentRunStatus } from "@/lib/repositories/agent-runs";
 import { createEvent } from "@/lib/repositories/events";
-import type { ContentChannel, ContentPipelineRun } from "@/features/content-pipeline/content-pipeline-types";
+import { serializeApproval, serializeTask, serializeTimeline } from "@/lib/repositories/serializers";
+import type { ContentChannel, ContentPipelineDetail, ContentPipelineRun, ContentPipelineStatus } from "@/features/content-pipeline/content-pipeline-types";
 
 type ContentPipelineInput = {
   topic: string;
@@ -135,11 +136,107 @@ export async function listContentPipelines(): Promise<ContentPipelineRun[]> {
   return runs.map((run) => {
     const approval = run.approvalId ? approvalsById.get(run.approvalId) : undefined;
     if (!approval) return run;
-    if (approval.status === "승인 완료") return { ...run, status: "completed", currentStep: "승인 완료 · 게시 준비", updatedAt: approval.updatedAt.toISOString() };
+    if (approval.status === "승인 완료") return { ...run, status: "approved", currentStep: "승인 완료 · 게시 준비", updatedAt: approval.updatedAt.toISOString() };
     if (approval.status === "반려") return { ...run, status: "rejected", currentStep: "반려 · 수정 필요", updatedAt: approval.updatedAt.toISOString() };
-    if (approval.status === "수정 요청") return { ...run, status: "rejected", currentStep: "수정 요청", updatedAt: approval.updatedAt.toISOString() };
+    if (approval.status === "수정 요청") return { ...run, status: "revision_requested", currentStep: "수정 요청", updatedAt: approval.updatedAt.toISOString() };
     return run;
   });
+}
+
+
+function pipelineStatusFromApproval(status?: string | null): { status: ContentPipelineStatus; currentStep: string } {
+  if (status === "승인 완료") return { status: "approved", currentStep: "승인 완료 · 게시 준비" };
+  if (status === "반려") return { status: "rejected", currentStep: "반려 · 수정 필요" };
+  if (status === "수정 요청") return { status: "revision_requested", currentStep: "수정 요청" };
+  if (status === "보류") return { status: "director_approval", currentStep: "승인 보류" };
+  return { status: "director_approval", currentStep: "Director 승인 대기" };
+}
+
+function pipelineIdFromPayload(payload: Prisma.JsonValue, fallback: string) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return fallback;
+  const value = (payload as Record<string, unknown>).contentPipelineId;
+  return typeof value === "string" ? value : fallback;
+}
+
+export async function getContentPipelineDetail(pipelineId: string): Promise<ContentPipelineDetail | null> {
+  const startedEvents = await prisma.eventLog.findMany({
+    where: { type: "ContentPipelineStarted" },
+    orderBy: { timestamp: "desc" },
+    take: 100,
+  });
+  const event = startedEvents.find((candidate) => pipelineIdFromPayload(candidate.payload, candidate.id) === pipelineId);
+  if (!event) return null;
+
+  const baseRun = runFromEvent(event);
+  if (!baseRun) return null;
+
+  const tasks = baseRun.taskIds.length > 0
+    ? await prisma.task.findMany({ where: { id: { in: baseRun.taskIds } } })
+    : [];
+  const approval = baseRun.approvalId
+    ? await prisma.approvalRequest.findUnique({ where: { id: baseRun.approvalId } })
+    : null;
+  const timelineTargets = [
+    ...baseRun.taskIds.map((taskId) => ({ targetType: "task", targetId: taskId })),
+    baseRun.approvalId ? { targetType: "approval", targetId: baseRun.approvalId } : null,
+  ].filter((target): target is { targetType: string; targetId: string } => Boolean(target));
+  const timeline = timelineTargets.length > 0
+    ? await prisma.timeline.findMany({
+      where: { OR: timelineTargets },
+      include: { event: true },
+      orderBy: { timestamp: "desc" },
+      take: 50,
+    })
+    : [];
+  const status = pipelineStatusFromApproval(approval?.status);
+  const pipeline: ContentPipelineRun = {
+    ...baseRun,
+    status: status.status,
+    currentStep: status.currentStep,
+    updatedAt: approval?.updatedAt.toISOString() ?? baseRun.updatedAt,
+  };
+
+  return {
+    pipeline,
+    tasks: tasks
+      .map(serializeTask)
+      .map((task) => ({
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        progress: task.progress,
+        assignedEmployeeId: task.assignedEmployeeId,
+        currentStep: task.currentStep,
+        recentOutput: task.recentOutput,
+      })),
+    approval: approval ? (() => {
+      const item = serializeApproval(approval);
+      return {
+        id: item.id,
+        title: item.title,
+        status: item.status,
+        requestedByEmployeeId: item.requestedByEmployeeId,
+        taskId: item.taskId,
+        reason: item.reason ?? "",
+        decision: item.decision,
+        decisionReason: item.decisionReason,
+      };
+    })() : null,
+    timeline: timeline.map((item) => {
+      const serialized = serializeTimeline(item);
+      return {
+        ...serialized,
+        timestamp: serialized.timestamp.toISOString(),
+        event: item.event ? {
+          ...item.event,
+          timestamp: item.event.timestamp.toISOString(),
+          payload: typeof item.event.payload === "object" && item.event.payload !== null && !Array.isArray(item.event.payload)
+            ? item.event.payload as Record<string, unknown>
+            : {},
+        } : null,
+      };
+    }),
+  };
 }
 
 export async function startContentPipeline(input: unknown): Promise<ContentPipelineRun> {
