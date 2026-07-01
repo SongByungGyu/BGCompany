@@ -6,4 +6,4 @@ COPY services/hermes-bridge/server.py /bridge/server.py
 
 EXPOSE 8787
 
-CMD ["python3", "/bridge/server.py"]
+ENTRYPOINT ["python3", "/bridge/server.py"]
