@@ -303,3 +303,37 @@ If a Hermes content-planner run fails:
 3. Review the AgentRun error and stored request payload.
 4. Confirm the timeline includes an `ErrorOccurred` entry.
 5. Fix `.env` or Hermes availability and retry with `hermes-dry-run` before `hermes`.
+
+
+## Hermes Bridge 운영
+
+Phase 1-C.7부터 `runnerMode=hermes`는 내부 `hermes-bridge` 서비스를 통해 `content-planner`만 Hermes CLI로 실행한다.
+
+상태 확인:
+
+```bash
+docker compose ps hermes-bridge
+bash scripts/check-hermes-bridge.sh
+```
+
+실제 호출 smoke test는 비용이 발생할 수 있으므로 필요할 때만 실행한다.
+
+```bash
+RUN_BRIDGE_SMOKE=1 bash scripts/check-hermes-bridge.sh
+```
+
+운영 반영:
+
+```bash
+docker compose build hermes-bridge web
+docker compose up -d hermes-bridge web
+bash scripts/check-production-health.sh
+bash scripts/check-hermes-bridge.sh
+```
+
+주의:
+
+- `hermes-bridge`에 public port나 Traefik route를 추가하지 않는다.
+- `BRIDGE_API_KEY`는 `.env`에만 둔다.
+- bridge 장애가 있어도 `mock`/`hermes-dry-run`으로 우회 가능하다.
+- `docker compose down -v`는 절대 실행하지 않는다.

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminApiSession } from "@/lib/auth/admin-auth";
-import { checkHermesHealth, getHermesConfig } from "@/lib/agents/hermes-client";
+import { checkHermesBridgeHealth, checkHermesHealth, getHermesBridgeConfig, getHermesConfig } from "@/lib/agents/hermes-client";
 
 function resolveRunnerMode() {
   const mode = process.env.AGENT_RUNNER_MODE;
@@ -13,6 +13,7 @@ export async function GET(request: Request) {
   if (!auth.ok) return auth.response;
 
   const config = getHermesConfig();
+  const bridgeConfig = getHermesBridgeConfig();
   const runnerMode = resolveRunnerMode();
   const configured = {
     baseUrl: Boolean(config.baseUrl),
@@ -20,30 +21,32 @@ export async function GET(request: Request) {
     timeoutMs: Number.isFinite(config.timeoutMs) ? config.timeoutMs : 30000,
     healthPath: config.healthPath,
     runPath: config.runPath,
+    bridgeBaseUrl: Boolean(bridgeConfig.baseUrl),
+    bridgeApiKey: Boolean(bridgeConfig.apiKey),
+    bridgeTimeoutMs: Number.isFinite(bridgeConfig.timeoutMs) ? bridgeConfig.timeoutMs : 45000,
   };
 
-  if (!configured.baseUrl) {
-    return NextResponse.json({
-      ok: true,
-      runnerMode,
-      configured,
-      available: false,
-      message: "Hermes is not configured. Mock runner is active.",
-    });
-  }
+  const bridgeHealth = configured.bridgeBaseUrl ? await checkHermesBridgeHealth() : null;
+  const legacyHealth = configured.baseUrl ? await checkHermesHealth() : null;
+  const available = Boolean(bridgeHealth?.ok || legacyHealth?.ok);
 
-  const health = await checkHermesHealth();
   return NextResponse.json({
     ok: true,
     runnerMode,
     configured,
-    available: health.ok,
-    health: {
-      ok: health.ok,
-      status: health.status,
-      message: health.message,
-      raw: health.raw,
-    },
-    message: health.ok ? "Hermes is configured and health check passed." : health.message ?? "Hermes health check failed.",
+    available,
+    bridge: bridgeHealth ? {
+      ok: bridgeHealth.ok,
+      status: bridgeHealth.status,
+      message: bridgeHealth.message,
+      raw: bridgeHealth.raw,
+    } : null,
+    health: legacyHealth ? {
+      ok: legacyHealth.ok,
+      status: legacyHealth.status,
+      message: legacyHealth.message,
+      raw: legacyHealth.raw,
+    } : null,
+    message: available ? "Hermes bridge or Hermes API is available." : bridgeHealth?.message ?? legacyHealth?.message ?? "Hermes is not configured. Mock runner is active.",
   });
 }

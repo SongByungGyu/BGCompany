@@ -1,12 +1,16 @@
 import { getHermesConfig } from "@/lib/agents/hermes-client";
 import type { ContentPlannerHermesInput, HermesContentPlannerPayload, NormalizedHermesRunResult } from "./hermes-types";
 
-function normalizePath(path: string) {
-  return path.startsWith("/") ? path : `/${path}`;
-}
-
 function baseUrl(url: string) {
   return url.replace(/\/$/, "");
+}
+
+function getHermesBridgeConfig() {
+  return {
+    baseUrl: process.env.HERMES_BRIDGE_BASE_URL?.trim() || "http://hermes-bridge:8787",
+    apiKey: process.env.BRIDGE_API_KEY?.trim() || process.env.HERMES_BRIDGE_API_KEY?.trim() || "",
+    timeoutMs: Number(process.env.HERMES_BRIDGE_TIMEOUT_MS ?? process.env.HERMES_TIMEOUT_MS ?? "45000"),
+  };
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -103,7 +107,7 @@ export function normalizeHermesRunResponse(raw: unknown, agentId = "content-plan
 
   return {
     ok: true,
-    provider: "hermes",
+    provider: typeof record.provider === "string" && record.provider === "hermes-bridge" ? "hermes-bridge" : "hermes",
     agentId,
     title: pickString(record, ["title", "outputTitle", "headline"]),
     summary: pickString(record, ["summary", "outputSummary", "description"]),
@@ -111,18 +115,24 @@ export function normalizeHermesRunResponse(raw: unknown, agentId = "content-plan
     draftDirection: pickString(record, ["draftDirection", "direction", "strategy"]),
     outline: pickOutline(record),
     hermesJobId: extractHermesJobId(raw),
+    durationMs: typeof record.durationMs === "number" ? record.durationMs : undefined,
     raw,
   };
 }
 
 export function hermesRunConfigStatus() {
-  const config = getHermesConfig();
+  const bridge = getHermesBridgeConfig();
+  const legacy = getHermesConfig();
   return {
-    configured: Boolean(config.baseUrl && config.apiKey),
-    baseUrl: Boolean(config.baseUrl),
-    apiKey: Boolean(config.apiKey),
-    runPath: config.runPath,
-    timeoutMs: Number.isFinite(config.timeoutMs) ? config.timeoutMs : 30000,
+    configured: Boolean(bridge.baseUrl && bridge.apiKey),
+    bridgeBaseUrl: Boolean(bridge.baseUrl),
+    bridgeApiKey: Boolean(bridge.apiKey),
+    timeoutMs: Number.isFinite(bridge.timeoutMs) ? bridge.timeoutMs : 45000,
+    legacy: {
+      baseUrl: Boolean(legacy.baseUrl),
+      apiKey: Boolean(legacy.apiKey),
+      runPath: legacy.runPath,
+    },
   };
 }
 
@@ -130,61 +140,63 @@ export async function runContentPlannerHermes(input: ContentPlannerHermesInput):
   payload: HermesContentPlannerPayload;
   result: NormalizedHermesRunResult;
 }> {
-  const config = getHermesConfig();
+  const config = getHermesBridgeConfig();
   const payload = buildContentPlannerHermesPayload(input);
   if (!config.baseUrl || !config.apiKey) {
     return {
       payload,
       result: {
         ok: false,
-        provider: "hermes",
+        provider: "hermes-bridge",
         agentId: "content-planner",
-        errorCode: "HERMES_NOT_CONFIGURED",
-        errorMessage: "HERMES_BASE_URL and HERMES_API_KEY are required for runnerMode=hermes.",
+        errorCode: "HERMES_BRIDGE_NOT_CONFIGURED",
+        errorMessage: "HERMES_BRIDGE_BASE_URL and BRIDGE_API_KEY are required for runnerMode=hermes.",
       },
     };
   }
 
-  const timeoutMs = Number.isFinite(config.timeoutMs) ? config.timeoutMs : 30000;
+  const timeoutMs = Number.isFinite(config.timeoutMs) ? config.timeoutMs : 45000;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(`${baseUrl(config.baseUrl)}${normalizePath(config.runPath)}`, {
+    const response = await fetch(`${baseUrl(config.baseUrl)}/run`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
-        Authorization: `Bearer ${config.apiKey}`,
+        "x-bridge-api-key": config.apiKey,
       },
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
     const raw = await readResponseBody(response);
     if (!response.ok) {
+      const record = asRecord(raw);
       return {
         payload,
         result: {
           ok: false,
-          provider: "hermes",
+          provider: "hermes-bridge",
           agentId: "content-planner",
           raw,
-          errorCode: "HERMES_HTTP_ERROR",
-          errorMessage: extractErrorMessage(raw) ?? `Hermes request failed with HTTP ${response.status}.`,
+          errorCode: typeof record?.errorCode === "string" ? record.errorCode : response.status === 401 ? "HERMES_BRIDGE_UNAUTHORIZED" : "HERMES_BRIDGE_HTTP_ERROR",
+          errorMessage: extractErrorMessage(raw) ?? `Hermes bridge request failed with HTTP ${response.status}.`,
         },
       };
     }
-    return { payload, result: normalizeHermesRunResponse(raw, "content-planner") };
+    const result = normalizeHermesRunResponse(raw, "content-planner");
+    return { payload, result: { ...result, provider: "hermes-bridge" } };
   } catch (error: unknown) {
     const isTimeout = error instanceof Error && error.name === "AbortError";
     return {
       payload,
       result: {
         ok: false,
-        provider: "hermes",
+        provider: "hermes-bridge",
         agentId: "content-planner",
-        errorCode: isTimeout ? "HERMES_TIMEOUT" : "HERMES_REQUEST_ERROR",
-        errorMessage: isTimeout ? `Hermes request timed out after ${timeoutMs}ms.` : error instanceof Error ? error.message : "Unknown Hermes request error.",
+        errorCode: isTimeout ? "HERMES_BRIDGE_TIMEOUT" : "HERMES_BRIDGE_NETWORK_ERROR",
+        errorMessage: isTimeout ? `Hermes bridge request timed out after ${timeoutMs}ms.` : error instanceof Error ? error.message : "Unknown Hermes bridge request error.",
       },
     };
   } finally {

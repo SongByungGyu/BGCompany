@@ -67,7 +67,7 @@ function PlannerResultCard({ pipeline, agentRuns }: { pipeline: ContentPipelineR
       {result?.draftDirection ? <p>초안 방향: {result.draftDirection}</p> : null}
       {isHermesMode && payload ? (
         <details className="content-pipeline-payload">
-          <summary>Hermes request payload 보기</summary>
+          <summary>Hermes Bridge request payload 보기</summary>
           <pre>{stringifyJson(payload)}</pre>
         </details>
       ) : null}
@@ -298,7 +298,7 @@ export function ContentPipelineView() {
           </div>
           <div className="feature-card muted">
             <label>주의</label>
-            <p>이번 단계에서는 content-planner만 Hermes 계약 payload를 준비합니다. 마케팅/QA와 실제 게시 작업은 mock 상태를 유지합니다.</p>
+            <p>이번 단계에서는 content-planner만 Hermes Bridge로 실행합니다. 마케팅/QA와 실제 게시 작업은 mock 상태를 유지합니다.</p>
           </div>
         </div>
       </aside>

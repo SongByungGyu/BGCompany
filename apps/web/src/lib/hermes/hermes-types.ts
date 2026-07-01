@@ -24,7 +24,7 @@ export type HermesContentPlannerPayload = {
 
 export type NormalizedHermesRunResult = {
   ok: boolean;
-  provider: "hermes";
+  provider: "hermes" | "hermes-bridge";
   agentId: string;
   title?: string;
   summary?: string;
@@ -33,6 +33,7 @@ export type NormalizedHermesRunResult = {
   outline?: string[];
   raw?: unknown;
   hermesJobId?: string;
+  durationMs?: number;
   errorCode?: string;
   errorMessage?: string;
 };

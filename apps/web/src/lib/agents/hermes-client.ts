@@ -60,6 +60,14 @@ export class HermesClientError extends Error {
   }
 }
 
+export function getHermesBridgeConfig() {
+  return {
+    baseUrl: process.env.HERMES_BRIDGE_BASE_URL?.trim() || "http://hermes-bridge:8787",
+    apiKey: process.env.BRIDGE_API_KEY?.trim() || process.env.HERMES_BRIDGE_API_KEY?.trim() || "",
+    timeoutMs: Number(process.env.HERMES_BRIDGE_TIMEOUT_MS ?? process.env.HERMES_TIMEOUT_MS ?? "45000"),
+  };
+}
+
 export function getHermesConfig() {
   return {
     baseUrl: process.env.HERMES_BASE_URL?.trim() ?? "",
@@ -148,6 +156,38 @@ function extractMessage(raw: unknown): string | undefined {
 
 function normalizePath(path: string) {
   return path.startsWith("/") ? path : `/${path}`;
+}
+
+export async function checkHermesBridgeHealth(): Promise<HermesHealthResult> {
+  const config = getHermesBridgeConfig();
+  if (!config.baseUrl) {
+    return { ok: false, message: "Hermes bridge is not configured." };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Number.isFinite(config.timeoutMs) ? config.timeoutMs : 45000);
+
+  try {
+    const response = await fetch(`${config.baseUrl.replace(/\/$/, "")}/health`, {
+      method: "GET",
+      signal: controller.signal,
+    });
+    const raw = await response.json().catch(() => null);
+    return {
+      ok: response.ok,
+      status: response.status,
+      message: response.ok ? "Hermes bridge health check passed." : extractMessage(raw) ?? `Hermes bridge health check failed with status ${response.status}`,
+      raw,
+    };
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return { ok: false, message: "Hermes bridge health check timed out." };
+    }
+    const message = error instanceof Error ? error.message : "Unknown Hermes bridge health check error";
+    return { ok: false, message };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function checkHermesHealth(): Promise<HermesHealthResult> {

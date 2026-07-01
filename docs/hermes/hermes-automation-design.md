@@ -281,3 +281,12 @@ HERMES_BRIDGE_MAX_CONCURRENCY=1
 현재 Hermes는 독립 웹 대시보드/CLI로는 정상 동작한다. 하지만 BG Company가 자동 실행용으로 바로 호출할 수 있는 공식 REST API는 현재 배포 상태에서 확인되지 않았다.
 
 따라서 다음 구현 단계는 공식 API endpoint가 확인되면 그 경로로 연결하고, 확인되지 않으면 내부 전용 CLI Bridge를 만든다. 운영 보안상 브라우저 cookie 우회 방식은 사용하지 않는다.
+
+
+## 12. Phase 1-C.7 Bridge 0차 구현 기준
+
+Bridge 0차는 공식 REST/Gateway 미확인 상태에서 진행하는 내부 전용 실행 경로다. `runnerMode=hermes`는 `HERMES_BRIDGE_BASE_URL`의 `/run`을 호출하고, 기존 `mock`과 `hermes-dry-run`은 그대로 유지한다.
+
+초기 범위는 `content-planner` 단일 직원과 `content_planning` 작업만 허용한다. marketing/QA/게시 작업은 계속 mock으로 유지한다.
+
+운영 배포 시에는 `docker compose build hermes-bridge web` 후 `docker compose up -d hermes-bridge web`로 반영한다. `docker compose down -v`, DB 초기화, bridge public route 추가는 금지한다.

@@ -278,3 +278,9 @@ Bridge 구현 시 반드시 지킬 정책:
 따라서 다음 단계는 공식 API를 더 추적하기보다, 보안 정책을 갖춘 내부 전용 Hermes CLI Bridge를 구현하는 것이 가장 현실적이다.
 
 브라우저 login cookie 우회 방식은 계속 금지한다.
+
+## 13. Bridge 0차 후속 구현
+
+런타임 탐지 결과 Hermes CLI `hermes -z`가 실제 응답을 stdout으로 반환하는 것을 확인했다. 따라서 Bridge 0차는 같은 Hermes image를 기반으로 별도 내부 서비스에서 CLI oneshot을 실행한다.
+
+공식 API/Gateway endpoint가 확인되기 전까지 BG Company는 dashboard cookie가 필요한 URL을 호출하지 않는다.
