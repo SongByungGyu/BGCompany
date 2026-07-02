@@ -248,7 +248,7 @@ class Handler(BaseHTTPRequestHandler):
         started = time.monotonic()
         try:
             completed = subprocess.run(
-                ["hermes", "-z", build_prompt(payload), "--provider", HERMES_PROVIDER, "-m", HERMES_MODEL],
+                ["hermes", "--provider", HERMES_PROVIDER, "-m", HERMES_MODEL, "-z", build_prompt(payload)],
                 text=True,
                 capture_output=True,
                 timeout=TIMEOUT_MS / 1000,
