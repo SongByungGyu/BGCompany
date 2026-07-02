@@ -105,3 +105,19 @@ durationMs
 - `fallback_text`: JSON 파싱은 실패했지만 원문을 결과로 저장했다.
 
 운영 화면에서는 Hermes 실제 실행 선택 시 OpenAI API 비용 경고와 확인 창을 표시한다. smoke test는 비용이 발생할 수 있으므로 `RUN_BRIDGE_SMOKE=1`을 명시한 경우에만 실행한다.
+
+
+## Hermes daily run guardrail
+
+BG Company counts only real `runnerMode=hermes` Bridge attempts as paid Hermes usage. `mock`, `hermes-dry-run`, validation failures before the Bridge call, and user-cancelled confirmation dialogs are excluded.
+
+Environment defaults:
+
+```env
+HERMES_DAILY_RUN_LIMIT=5
+HERMES_DAILY_RUN_TZ=Asia/Seoul
+```
+
+The dashboard checks `GET /api/hermes/usage` before starting a real Hermes run. When the daily limit is exhausted, the content pipeline returns `HERMES_DAILY_LIMIT_EXCEEDED` and does not call Hermes/OpenAI.
+
+Manual Bridge smoke tests are intentionally not part of health checks or deploy scripts because they can trigger paid model calls.

@@ -1,4 +1,4 @@
-import type { ContentPipelineDetail, ContentPipelineRequest, ContentPipelineResponse, ContentPipelineRun } from "./content-pipeline-types";
+import type { ContentPipelineDetail, ContentPipelineRequest, ContentPipelineResponse, ContentPipelineRun, HermesUsageSummary } from "./content-pipeline-types";
 
 export async function fetchContentPipelines(): Promise<ContentPipelineRun[]> {
   const response = await fetch("/api/content-pipelines", { cache: "no-store" });
@@ -24,4 +24,11 @@ export async function startContentPipeline(input: ContentPipelineRequest): Promi
     throw new Error(data?.message ?? `Failed to start content pipeline: ${response.status}`);
   }
   return response.json() as Promise<ContentPipelineResponse>;
+}
+
+
+export async function fetchHermesUsage(): Promise<HermesUsageSummary> {
+  const response = await fetch("/api/hermes/usage", { cache: "no-store" });
+  if (!response.ok) throw new Error("Failed to fetch Hermes usage.");
+  return response.json() as Promise<HermesUsageSummary>;
 }

@@ -108,3 +108,25 @@ export type ContentPipelineResponse = {
   ok: true;
   pipeline: ContentPipelineRun;
 };
+
+
+export type HermesUsageRecentRun = {
+  id: string;
+  agentId: string;
+  status: string;
+  createdAt: string;
+  durationMs: number | null;
+  title: string | null;
+  parseStatus: string | null;
+};
+
+export type HermesUsageSummary = {
+  ok: true;
+  date: string;
+  timezone: string;
+  limit: number;
+  used: number;
+  remaining: number;
+  blocked: boolean;
+  recentRuns: HermesUsageRecentRun[];
+};

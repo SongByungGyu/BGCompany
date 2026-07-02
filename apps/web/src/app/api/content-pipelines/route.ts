@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApiSession } from "@/lib/auth/admin-auth";
 import { listContentPipelines, startContentPipeline } from "@/lib/content-pipeline/content-pipeline-service";
+import { HermesDailyLimitExceededError } from "@/lib/hermes/hermes-usage";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAdminApiSession(request);
@@ -21,6 +22,16 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     if (error instanceof SyntaxError) {
       return NextResponse.json({ ok: false, error: "INVALID_JSON", message: "request body must be valid JSON" }, { status: 400 });
+    }
+    if (error instanceof HermesDailyLimitExceededError) {
+      return NextResponse.json({
+        ok: false,
+        error: error.code,
+        message: error.message,
+        limit: error.usage.limit,
+        used: error.usage.used,
+        remaining: error.usage.remaining,
+      }, { status: error.status });
     }
     const message = error instanceof Error ? error.message : "Unknown content pipeline error";
     return NextResponse.json({ ok: false, error: "CONTENT_PIPELINE_FAILED", message }, { status: 400 });

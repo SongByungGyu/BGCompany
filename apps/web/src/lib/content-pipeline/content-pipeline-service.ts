@@ -5,6 +5,7 @@ import { createAgentRun, updateAgentRunStatus, type AgentRunStatus } from "@/lib
 import { createEvent } from "@/lib/repositories/events";
 import { serializeApproval, serializeTask, serializeTimeline } from "@/lib/repositories/serializers";
 import { buildContentPlannerHermesPayload, runContentPlannerHermes } from "@/lib/hermes/hermes-client";
+import { assertHermesDailyRunAvailable } from "@/lib/hermes/hermes-usage";
 import type { NormalizedHermesRunResult } from "@/lib/hermes/hermes-types";
 import type { ContentChannel, ContentPipelineDetail, ContentPipelineRun, ContentPipelineStatus } from "@/features/content-pipeline/content-pipeline-types";
 
@@ -482,6 +483,8 @@ export async function getContentPipelineDetail(pipelineId: string): Promise<Cont
 export async function startContentPipeline(input: unknown): Promise<ContentPipelineRun> {
   const data = assertValidInput(input);
   const runnerMode = data.runnerMode ?? "mock";
+  if (runnerMode === "hermes") await assertHermesDailyRunAvailable();
+
   const pipelineId = `content-pipeline-${randomUUID()}`;
   const suffix = pipelineId.replace("content-pipeline-", "").slice(0, 8);
   const now = new Date();

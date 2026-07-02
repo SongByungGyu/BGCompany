@@ -304,3 +304,21 @@ BG Company는 Bridge 응답을 즉시 최종 성공으로 간주하지 않고 �
 - 성공했지만 필수 필드 일부가 비어 있는 불완전 결과
 
 이 구분은 콘텐츠 파이프라인 상세 화면에 표시되며, 운영자는 payload와 raw/fallback text를 열어 확인할 수 있다. 실제 Hermes 호출은 OpenAI API 비용이 발생할 수 있으므로 UI에서 명시 확인 후에만 진행한다.
+
+
+## Phase 1-C.9 cost guardrail
+
+Hermes automation is guarded by a daily real-run limit before the Bridge call. BG Company should prefer `mock` as the default runner and require explicit confirmation before `runnerMode=hermes`. The first implementation limits only content pipeline real Hermes runs and keeps marketing, QA, and Director approval in mock mode.
+
+Limit exceeded response:
+
+```json
+{
+  "ok": false,
+  "error": "HERMES_DAILY_LIMIT_EXCEEDED",
+  "message": "오늘 Hermes 실행 가능 횟수를 모두 사용했습니다.",
+  "limit": 5,
+  "used": 5,
+  "remaining": 0
+}
+```

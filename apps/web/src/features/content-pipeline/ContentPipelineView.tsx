@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DB_SYNC_INTERVAL_MS } from "@/lib/db-sync";
-import { fetchContentPipeline, fetchContentPipelines, startContentPipeline } from "./api";
+import { fetchContentPipeline, fetchContentPipelines, fetchHermesUsage, startContentPipeline } from "./api";
 import { mockContentPipelines } from "./mock-content-pipeline";
-import type { ContentChannel, ContentPipelineDetail, ContentPipelineRun } from "./content-pipeline-types";
+import type { ContentChannel, ContentPipelineDetail, ContentPipelineRun, HermesUsageSummary } from "./content-pipeline-types";
 
 const channelLabels: Record<ContentChannel, string> = {
   blog: "블로그",
@@ -147,6 +147,21 @@ export function ContentPipelineView() {
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<ContentPipelineDetail | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [hermesUsage, setHermesUsage] = useState<HermesUsageSummary | null>(null);
+  const [hermesUsageError, setHermesUsageError] = useState<string | null>(null);
+
+  const refreshHermesUsage = useCallback(async () => {
+    try {
+      const usage = await fetchHermesUsage();
+      setHermesUsage(usage);
+      setHermesUsageError(null);
+      return usage;
+    } catch (fetchError: unknown) {
+      const message = fetchError instanceof Error ? fetchError.message : "Hermes 사용량을 불러오지 못했습니다.";
+      setHermesUsageError(message);
+      return null;
+    }
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -167,21 +182,27 @@ export function ContentPipelineView() {
   useEffect(() => {
     let cancelled = false;
     Promise.resolve().then(async () => {
-      if (!cancelled) await refresh();
+      if (!cancelled) {
+        await refresh();
+        await refreshHermesUsage();
+      }
     });
     const intervalId = window.setInterval(() => {
       void refresh();
+      void refreshHermesUsage();
     }, DB_SYNC_INTERVAL_MS);
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [refresh]);
+  }, [refresh, refreshHermesUsage]);
 
   const selectedPipeline = useMemo(
     () => pipelines.find((pipeline) => pipeline.id === selectedPipelineId) ?? pipelines[0],
     [pipelines, selectedPipelineId],
   );
+  const isHermesSelected = runnerMode === "hermes";
+  const isHermesBlocked = isHermesSelected && Boolean(hermesUsage?.blocked);
 
   useEffect(() => {
     if (!selectedPipeline?.id) return;
@@ -207,7 +228,18 @@ export function ContentPipelineView() {
   const start = async () => {
     if (isBusy) return;
     if (runnerMode === "hermes") {
-      const confirmed = window.confirm("Hermes 실제 실행은 OpenAI API 비용이 발생할 수 있습니다. 테스트 목적이면 mock 또는 hermes-dry-run을 권장합니다. 계속 실행할까요?");
+      const latestUsage = await refreshHermesUsage();
+      if (latestUsage?.blocked) {
+        setError("HERMES_DAILY_LIMIT_EXCEEDED: 오늘 Hermes 실행 가능 횟수를 모두 사용했습니다.");
+        setNotice("Hermes 일일 실행 한도에 도달해 실제 실행을 시작하지 않았습니다.");
+        return;
+      }
+      const remainingText = latestUsage
+        ? `오늘 남은 Hermes 실행 가능 횟수: ${latestUsage.remaining} / ${latestUsage.limit}회`
+        : "Hermes 사용량을 확인하지 못했습니다.";
+      const confirmed = window.confirm(
+        `Hermes 실제 실행은 OpenAI API 비용이 발생할 수 있습니다.\n${remainingText}\n\n이번 실행은 content-planner 1회만 Hermes Bridge로 실행하고, 마케팅/QA/승인 단계는 mock 상태를 유지합니다. 계속 실행할까요?`,
+      );
       if (!confirmed) {
         setNotice("Hermes 실제 실행을 취소했습니다. 비용 없는 검증은 mock 또는 hermes-dry-run을 사용하세요.");
         return;
@@ -222,6 +254,7 @@ export function ContentPipelineView() {
       setNotice(`${result.pipeline.title} · task ${result.pipeline.taskIds.length}개와 승인 요청이 생성되었습니다.`);
       setError(null);
       await refresh();
+      await refreshHermesUsage();
     } catch (startError: unknown) {
       const message = startError instanceof Error ? startError.message : "알 수 없는 오류";
       setError(message);
@@ -265,14 +298,39 @@ export function ContentPipelineView() {
               <option value="hermes-dry-run">hermes-dry-run</option>
               <option value="hermes">hermes</option>
             </select></label>
-            <button onClick={start} disabled={isBusy}>{isBusy ? "실행 중..." : "파이프라인 시작"}</button>
+            <button onClick={start} disabled={isBusy || isHermesBlocked}>{isBusy ? "실행 중..." : isHermesBlocked ? "Hermes 한도 도달" : "파이프라인 시작"}</button>
           </section>
 
           {runnerMode === "hermes" ? (
             <div className="content-pipeline-cost-notice">
-              Hermes 실제 실행은 OpenAI API 비용이 발생할 수 있습니다. 비용 없는 점검은 <b>mock</b> 또는 <b>hermes-dry-run</b>을 사용하세요.
+              Hermes 실제 실행은 OpenAI API 비용이 발생할 수 있습니다. 남은 실행 가능 횟수는 <b>{hermesUsage ? `${hermesUsage.remaining}회` : "확인 중"}</b>입니다. 비용 없는 점검은 <b>mock</b> 또는 <b>hermes-dry-run</b>을 사용하세요.
             </div>
           ) : null}
+
+          <section className={`content-pipeline-usage-card ${hermesUsage?.blocked ? "is-blocked" : ""}`}>
+            <div>
+              <strong>Hermes 오늘 실행: {hermesUsage ? `${hermesUsage.used} / ${hermesUsage.limit}회` : "확인 중"}</strong>
+              <span>남은 실행 가능 횟수: {hermesUsage ? `${hermesUsage.remaining}회` : "-"} · 기준: {hermesUsage?.timezone ?? "Asia/Seoul"}</span>
+              <small>mock / hermes-dry-run / 실행 전 취소는 사용량에 포함되지 않습니다.</small>
+              {hermesUsageError ? <small className="content-pipeline-error">{hermesUsageError}</small> : null}
+            </div>
+            <div className="content-pipeline-usage-runs">
+              <span>최근 Hermes 실행</span>
+              {hermesUsage?.recentRuns.length ? (
+                <ul>
+                  {hermesUsage.recentRuns.map((run) => (
+                    <li key={run.id}>
+                      <strong>{formatTime(run.createdAt)}</strong>
+                      <span>{run.agentId} · {run.status}{run.durationMs !== null ? ` · ${run.durationMs}ms` : ""}</span>
+                      <small>{run.title ?? "제목 없음"}{run.parseStatus ? ` · ${parseStatusLabel(run.parseStatus)}` : ""}</small>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <small>오늘 실제 Hermes 실행 기록이 없습니다.</small>
+              )}
+            </div>
+          </section>
 
           <div className="feature-toolbar">
             <p>{notice}</p>

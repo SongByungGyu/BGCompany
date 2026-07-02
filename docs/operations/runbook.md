@@ -401,3 +401,13 @@ RUN_BRIDGE_SMOKE=1 bash scripts/check-hermes-bridge.sh
 - Bridge는 외부 공개하지 않는다.
 - Browser login cookie를 재사용하지 않는다.
 - API key 원문을 로그/문서/보고서에 출력하지 않는다.
+
+
+## Hermes usage limit runbook
+
+- Usage endpoint: `GET /api/hermes/usage` (admin session required)
+- Default limit: 5 real Hermes content-planner attempts per KST day
+- Counted: real `runnerMode=hermes` Bridge attempts, including success, failure, timeout, unauthorized, fallback text, and parse failures
+- Not counted: `mock`, `hermes-dry-run`, user-cancelled confirmations, and validation failures before Hermes is called
+
+If the UI shows `HERMES_DAILY_LIMIT_EXCEEDED`, wait for the next KST day or temporarily raise `HERMES_DAILY_RUN_LIMIT` in the server `.env`, then restart the web container. Do not run Bridge smoke tests automatically during deploy.
