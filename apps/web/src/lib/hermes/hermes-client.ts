@@ -46,6 +46,27 @@ function pickOutline(record: Record<string, unknown>) {
   return values.length > 0 ? values : undefined;
 }
 
+function pickStringArray(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) {
+      const values = value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+      if (values.length > 0) return values;
+    }
+    if (typeof value === "string" && value.trim()) {
+      const values = value.split(/[,\n]/).map((item) => item.trim()).filter(Boolean);
+      if (values.length > 0) return values;
+    }
+  }
+  return undefined;
+}
+
+function pickParseStatus(record: Record<string, unknown>) {
+  const value = record.parseStatus;
+  return value === "json" || value === "json_extracted" || value === "fallback_text" ? value : undefined;
+}
+
+
 function extractHermesJobId(raw: unknown) {
   const record = asRecord(raw);
   if (!record) return undefined;
@@ -114,6 +135,13 @@ export function normalizeHermesRunResponse(raw: unknown, agentId = "content-plan
     content: pickString(record, ["content", "body", "draft", "article"]),
     draftDirection: pickString(record, ["draftDirection", "direction", "strategy"]),
     outline: pickOutline(record),
+    seoKeywords: pickStringArray(record, ["seoKeywords", "keywords", "seo"]),
+    targetAudience: pickString(record, ["targetAudience", "audience", "reader"]),
+    tone: pickString(record, ["tone", "voice", "style"]),
+    thumbnailIdea: pickString(record, ["thumbnailIdea", "thumbnail", "visualIdea"]),
+    cta: pickString(record, ["cta", "callToAction", "action"]),
+    parseStatus: pickParseStatus(record),
+    rawText: pickString(record, ["rawText"]),
     hermesJobId: extractHermesJobId(raw),
     durationMs: typeof record.durationMs === "number" ? record.durationMs : undefined,
     raw,

@@ -45,32 +45,92 @@ function stringifyJson(value: unknown) {
   }
 }
 
+function parseStatusLabel(value?: string) {
+  if (value === "json") return "JSON 정상";
+  if (value === "json_extracted") return "JSON 추출";
+  if (value === "fallback_text") return "원문 fallback";
+  return "미확인";
+}
+
+function listResultGaps(result: ContentPipelineRun["plannerResult"]) {
+  if (!result || result.ok === false) return [];
+  const gaps: string[] = [];
+  if (!result.title) gaps.push("title");
+  if (!result.summary) gaps.push("summary");
+  if (!result.outline?.length) gaps.push("outline");
+  if (!result.content && !result.draftDirection) gaps.push("content/draftDirection");
+  return gaps;
+}
+
 function PlannerResultCard({ pipeline, agentRuns }: { pipeline: ContentPipelineRun; agentRuns: NonNullable<ContentPipelineDetail["agentRuns"]> }) {
   const plannerRun = agentRuns.find((run) => run.employeeId === "content-planner");
   const payload = pipeline.hermesRequestPayload ?? plannerRun?.metadata?.hermesPayload;
   const result = pipeline.plannerResult;
   const isHermesMode = pipeline.runnerMode === "hermes" || pipeline.runnerMode === "hermes-dry-run";
+  const isFailed = plannerRun?.status === "failed" || result?.ok === false;
+  const gaps = listResultGaps(result);
+  const hasFallback = result?.parseStatus === "fallback_text";
+  const rawText = result?.rawText;
+
   return (
-    <div className="feature-card">
+    <div className="feature-card content-pipeline-result-card">
       <label>content-planner 실행 결과</label>
-      <strong>{plannerRun?.status ?? (result?.ok === false ? "failed" : "ready")} · {pipeline.runnerMode ?? "mock"}</strong>
-      {plannerRun?.errorMessage || result?.errorMessage ? (
-        <p className="content-pipeline-error">{result?.errorCode ?? "HERMES_ERROR"} · {plannerRun?.errorMessage ?? result?.errorMessage}</p>
+      <strong>{plannerRun?.status ?? (isFailed ? "failed" : "ready")} · {pipeline.runnerMode ?? "mock"}</strong>
+      <div className="content-pipeline-meta">
+        <span>provider: {result?.provider ?? pipeline.runnerMode ?? "mock"}</span>
+        <span>parse: {parseStatusLabel(result?.parseStatus)}</span>
+        {typeof result?.durationMs === "number" ? <span>{Math.round(result.durationMs / 100) / 10}s</span> : null}
+      </div>
+      {isFailed ? (
+        <p className="content-pipeline-error">{result?.errorCode ?? "HERMES_ERROR"} · {plannerRun?.errorMessage ?? result?.errorMessage ?? "Hermes 실행에 실패했습니다."}</p>
       ) : (
         <p>{plannerRun?.resultSummary ?? result?.summary ?? pipeline.outputSummary ?? "기획 결과를 기다리는 중입니다."}</p>
       )}
-      {result?.outline?.length ? (
-        <ul className="content-pipeline-outline">
-          {result.outline.map((item) => <li key={item}>{item}</li>)}
-        </ul>
+      {hasFallback ? <p className="content-pipeline-warning">Hermes 응답이 완전한 JSON은 아니어서 원문을 fallback 결과로 저장했습니다. 필요하면 payload와 원문을 확인해주세요.</p> : null}
+      {!isFailed && gaps.length ? <p className="content-pipeline-warning">응답은 저장됐지만 일부 필드가 비어 있습니다: {gaps.join(", ")}</p> : null}
+
+      {result ? (
+        <div className="content-pipeline-result-grid">
+          {result.title ? <div><label>제목</label><strong>{result.title}</strong></div> : null}
+          {result.summary ? <div><label>요약</label><p>{result.summary}</p></div> : null}
+          {result.targetAudience ? <div><label>타깃</label><p>{result.targetAudience}</p></div> : null}
+          {result.tone ? <div><label>톤</label><p>{result.tone}</p></div> : null}
+          {result.seoKeywords?.length ? <div className="content-pipeline-result-block"><label>SEO 키워드</label><div className="content-pipeline-keywords">{result.seoKeywords.map((keyword) => <span key={keyword}>{keyword}</span>)}</div></div> : null}
+          {result.outline?.length ? <div className="content-pipeline-result-block"><label>개요</label><ul className="content-pipeline-outline">{result.outline.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
+          {result.thumbnailIdea ? <div className="content-pipeline-result-block"><label>썸네일 아이디어</label><p>{result.thumbnailIdea}</p></div> : null}
+          {result.draftDirection ? <div className="content-pipeline-result-block"><label>초안 방향</label><p>{result.draftDirection}</p></div> : null}
+          {result.content ? <div className="content-pipeline-result-block"><label>본문/초안</label><p>{result.content}</p></div> : null}
+          {result.cta ? <div className="content-pipeline-result-block"><label>CTA</label><p>{result.cta}</p></div> : null}
+        </div>
       ) : null}
-      {result?.draftDirection ? <p>초안 방향: {result.draftDirection}</p> : null}
+
+      {rawText ? (
+        <details className="content-pipeline-payload">
+          <summary>Hermes raw/fallback text 보기</summary>
+          <pre>{rawText}</pre>
+        </details>
+      ) : null}
       {isHermesMode && payload ? (
         <details className="content-pipeline-payload">
           <summary>Hermes Bridge request payload 보기</summary>
           <pre>{stringifyJson(payload)}</pre>
         </details>
       ) : null}
+    </div>
+  );
+}
+
+function ApprovedResultCard({ pipeline, approval }: { pipeline: ContentPipelineRun; approval: ContentPipelineDetail["approval"] }) {
+  const result = pipeline.plannerResult;
+  const isApproved = pipeline.status === "approved" || pipeline.status === "published_ready" || pipeline.status === "completed";
+  if (!isApproved) return null;
+  return (
+    <div className="feature-card content-pipeline-approved">
+      <label>승인 완료 결과물</label>
+      <strong>{pipeline.outputTitle ?? result?.title ?? pipeline.title}</strong>
+      <p>{pipeline.outputSummary ?? result?.summary ?? "Director 승인이 완료된 콘텐츠 결과입니다."}</p>
+      {result?.content ? <p>{result.content}</p> : null}
+      <small>승인 상태: {approval?.status ?? "승인 완료"} · 최종 갱신 {formatTime(pipeline.updatedAt)}</small>
     </div>
   );
 }
@@ -146,6 +206,13 @@ export function ContentPipelineView() {
 
   const start = async () => {
     if (isBusy) return;
+    if (runnerMode === "hermes") {
+      const confirmed = window.confirm("Hermes 실제 실행은 OpenAI API 비용이 발생할 수 있습니다. 테스트 목적이면 mock 또는 hermes-dry-run을 권장합니다. 계속 실행할까요?");
+      if (!confirmed) {
+        setNotice("Hermes 실제 실행을 취소했습니다. 비용 없는 검증은 mock 또는 hermes-dry-run을 사용하세요.");
+        return;
+      }
+    }
     setIsBusy(true);
     setNotice(`${title} · 콘텐츠 파이프라인을 실행 중입니다.`);
     try {
@@ -201,6 +268,12 @@ export function ContentPipelineView() {
             <button onClick={start} disabled={isBusy}>{isBusy ? "실행 중..." : "파이프라인 시작"}</button>
           </section>
 
+          {runnerMode === "hermes" ? (
+            <div className="content-pipeline-cost-notice">
+              Hermes 실제 실행은 OpenAI API 비용이 발생할 수 있습니다. 비용 없는 점검은 <b>mock</b> 또는 <b>hermes-dry-run</b>을 사용하세요.
+            </div>
+          ) : null}
+
           <div className="feature-toolbar">
             <p>{notice}</p>
             {error ? <p className="content-pipeline-error">오류: {error}</p> : null}
@@ -242,6 +315,7 @@ export function ContentPipelineView() {
                     <p>{selectedPipeline.outputSummary ?? "파이프라인을 실행하면 결과 요약이 생성됩니다."}</p>
                   </div>
                   <PlannerResultCard pipeline={detail?.pipeline ?? selectedPipeline} agentRuns={detail?.agentRuns ?? []} />
+                  <ApprovedResultCard pipeline={detail?.pipeline ?? selectedPipeline} approval={detail?.approval ?? null} />
                   <div className="feature-card">
                     <label>관련 업무</label>
                     <ul className="audit-list">

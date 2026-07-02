@@ -290,3 +290,17 @@ Bridge 0차는 공식 REST/Gateway 미확인 상태에서 진행하는 내부 �
 초기 범위는 `content-planner` 단일 직원과 `content_planning` 작업만 허용한다. marketing/QA/게시 작업은 계속 mock으로 유지한다.
 
 운영 배포 시에는 `docker compose build hermes-bridge web` 후 `docker compose up -d hermes-bridge web`로 반영한다. `docker compose down -v`, DB 초기화, bridge public route 추가는 금지한다.
+
+## Phase 1-C.8 Bridge 결과 UX
+
+현재 운영 단계에서는 Hermes Bridge를 `content-planner`에만 사용한다. 마케팅 검토, QA 검토, Director 승인, 실제 게시 작업은 mock/DB workflow로 유지한다.
+
+BG Company는 Bridge 응답을 즉시 최종 성공으로 간주하지 않고 다음 상태를 구분한다.
+
+- 정상 JSON 결과
+- JSON 추출 결과
+- 원문 fallback 결과
+- 실행 실패 결과
+- 성공했지만 필수 필드 일부가 비어 있는 불완전 결과
+
+이 구분은 콘텐츠 파이프라인 상세 화면에 표시되며, 운영자는 payload와 raw/fallback text를 열어 확인할 수 있다. 실제 Hermes 호출은 OpenAI API 비용이 발생할 수 있으므로 UI에서 명시 확인 후에만 진행한다.

@@ -71,6 +71,14 @@ function asStringArray(value: unknown) {
   return items.length > 0 ? items : undefined;
 }
 
+function asParseStatus(value: unknown) {
+  return value === "json" || value === "json_extracted" || value === "fallback_text" ? value : undefined;
+}
+
+function asNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
 function normalizeResultForMetadata(result: NormalizedHermesRunResult): Record<string, unknown> {
   return toJsonObject({
     ok: result.ok,
@@ -81,7 +89,15 @@ function normalizeResultForMetadata(result: NormalizedHermesRunResult): Record<s
     content: result.content,
     draftDirection: result.draftDirection,
     outline: result.outline,
+    seoKeywords: result.seoKeywords,
+    targetAudience: result.targetAudience,
+    tone: result.tone,
+    thumbnailIdea: result.thumbnailIdea,
+    cta: result.cta,
+    parseStatus: result.parseStatus,
+    rawText: result.rawText,
     hermesJobId: result.hermesJobId,
+    durationMs: result.durationMs,
     errorCode: result.errorCode,
     errorMessage: result.errorMessage,
     raw: result.raw,
@@ -179,6 +195,14 @@ function mockPlannerExecution(data: ContentPipelineInput): PlannerExecution {
       summary: outputSummary,
       outline: ["주제 소개", "구축 과정", "운영 흐름", "다음 단계"],
       content: `${data.topic}를 ${channelLabel(data.channel)} 콘텐츠로 정리하는 mock 초안 방향입니다.`,
+      draftDirection: "운영 기록을 독자가 따라 할 수 있는 구축기 형식으로 구성합니다.",
+      seoKeywords: ["AI 개인회사", "BG Company", "자동화", "콘텐츠 파이프라인"],
+      targetAudience: "AI 기반 개인회사/업무 자동화에 관심 있는 실무자",
+      tone: "실무적이고 친근한 구축기 톤",
+      thumbnailIdea: "가상 오피스 대시보드와 AI 직원 카드가 보이는 미니멀 썸네일",
+      cta: "다음 편에서 실제 운영 자동화 과정을 확인해보세요.",
+      parseStatus: "json",
+      durationMs: 0,
     },
   };
 }
@@ -210,6 +234,12 @@ function dryRunPlannerExecution(data: ContentPipelineInput): PlannerExecution {
       title: outputTitle,
       summary: outputSummary,
       outline: ["Hermes 요청 payload 검증", "계약 필드 확인", "실제 호출 전 점검"],
+      seoKeywords: ["Hermes", "content-planner", "dry-run"],
+      targetAudience: "운영 전 payload를 점검하는 관리자",
+      tone: "검증 중심",
+      cta: "payload 확인 후 필요할 때만 실제 Hermes 실행을 진행하세요.",
+      parseStatus: "json",
+      durationMs: 0,
     },
   };
 }
@@ -300,6 +330,14 @@ function runFromEvent(event: {
       content: typeof plannerResult.content === "string" ? plannerResult.content : undefined,
       draftDirection: typeof plannerResult.draftDirection === "string" ? plannerResult.draftDirection : undefined,
       outline: asStringArray(plannerResult.outline),
+      seoKeywords: asStringArray(plannerResult.seoKeywords),
+      targetAudience: typeof plannerResult.targetAudience === "string" ? plannerResult.targetAudience : undefined,
+      tone: typeof plannerResult.tone === "string" ? plannerResult.tone : undefined,
+      thumbnailIdea: typeof plannerResult.thumbnailIdea === "string" ? plannerResult.thumbnailIdea : undefined,
+      cta: typeof plannerResult.cta === "string" ? plannerResult.cta : undefined,
+      parseStatus: asParseStatus(plannerResult.parseStatus),
+      rawText: typeof plannerResult.rawText === "string" ? plannerResult.rawText : undefined,
+      durationMs: asNumber(plannerResult.durationMs),
       errorCode: typeof plannerResult.errorCode === "string" ? plannerResult.errorCode : undefined,
       errorMessage: typeof plannerResult.errorMessage === "string" ? plannerResult.errorMessage : undefined,
     } : undefined,
@@ -595,6 +633,14 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
       content: typeof planner.result.content === "string" ? planner.result.content : undefined,
       draftDirection: typeof planner.result.draftDirection === "string" ? planner.result.draftDirection : undefined,
       outline: asStringArray(planner.result.outline),
+      seoKeywords: asStringArray(planner.result.seoKeywords),
+      targetAudience: typeof planner.result.targetAudience === "string" ? planner.result.targetAudience : undefined,
+      tone: typeof planner.result.tone === "string" ? planner.result.tone : undefined,
+      thumbnailIdea: typeof planner.result.thumbnailIdea === "string" ? planner.result.thumbnailIdea : undefined,
+      cta: typeof planner.result.cta === "string" ? planner.result.cta : undefined,
+      parseStatus: asParseStatus(planner.result.parseStatus),
+      rawText: typeof planner.result.rawText === "string" ? planner.result.rawText : undefined,
+      durationMs: asNumber(planner.result.durationMs),
       errorCode: typeof planner.result.errorCode === "string" ? planner.result.errorCode : undefined,
       errorMessage: typeof planner.result.errorMessage === "string" ? planner.result.errorMessage : undefined,
     },

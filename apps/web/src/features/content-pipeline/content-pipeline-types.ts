@@ -13,6 +13,8 @@ export type ContentPipelineStatus =
   | "published_ready"
   | "completed";
 
+export type ContentPlannerParseStatus = "json" | "json_extracted" | "fallback_text";
+
 export type ContentPlannerResult = {
   ok: boolean;
   provider: string;
@@ -22,6 +24,14 @@ export type ContentPlannerResult = {
   content?: string;
   draftDirection?: string;
   outline?: string[];
+  seoKeywords?: string[];
+  targetAudience?: string;
+  tone?: string;
+  thumbnailIdea?: string;
+  cta?: string;
+  parseStatus?: ContentPlannerParseStatus;
+  rawText?: string;
+  durationMs?: number;
   errorCode?: string;
   errorMessage?: string;
 };

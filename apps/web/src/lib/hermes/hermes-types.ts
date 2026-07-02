@@ -22,6 +22,8 @@ export type HermesContentPlannerPayload = {
   };
 };
 
+export type HermesParseStatus = "json" | "json_extracted" | "fallback_text";
+
 export type NormalizedHermesRunResult = {
   ok: boolean;
   provider: "hermes" | "hermes-bridge";
@@ -31,6 +33,13 @@ export type NormalizedHermesRunResult = {
   content?: string;
   draftDirection?: string;
   outline?: string[];
+  seoKeywords?: string[];
+  targetAudience?: string;
+  tone?: string;
+  thumbnailIdea?: string;
+  cta?: string;
+  parseStatus?: HermesParseStatus;
+  rawText?: string;
   raw?: unknown;
   hermesJobId?: string;
   durationMs?: number;

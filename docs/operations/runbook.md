@@ -367,3 +367,37 @@ bash scripts/check-hermes-bridge.sh
 - `BRIDGE_API_KEY`는 `.env`에만 둔다.
 - bridge 장애가 있어도 `mock`/`hermes-dry-run`으로 우회 가능하다.
 - `docker compose down -v`는 절대 실행하지 않는다.
+
+## Hermes Bridge 콘텐츠 실행 점검
+
+콘텐츠 파이프라인 Runner 선택 기준:
+
+- `mock`: 비용 없음. DB task/approval/timeline 흐름 검증용.
+- `hermes-dry-run`: 비용 없음. Hermes 요청 payload 검증용.
+- `hermes`: 실제 Hermes Bridge 호출. OpenAI API 비용이 발생할 수 있음.
+
+운영에서 실제 Hermes 실행 전 확인:
+
+```bash
+bash scripts/check-hermes-bridge.sh
+```
+
+비용이 발생할 수 있는 smoke test는 명시적으로만 실행한다.
+
+```bash
+RUN_BRIDGE_SMOKE=1 bash scripts/check-hermes-bridge.sh
+```
+
+실패 결과 확인 순서:
+
+1. 콘텐츠 파이프라인 상세의 `content-planner 실행 결과`에서 `errorCode`, `errorMessage`, `parseStatus` 확인
+2. `Hermes Bridge request payload 보기` 확인
+3. `raw/fallback text`가 있으면 원문 응답 확인
+4. Bridge 컨테이너 로그 확인
+5. OpenAI/Hermes provider 설정과 API key 상태 확인
+
+보안 원칙:
+
+- Bridge는 외부 공개하지 않는다.
+- Browser login cookie를 재사용하지 않는다.
+- API key 원문을 로그/문서/보고서에 출력하지 않는다.

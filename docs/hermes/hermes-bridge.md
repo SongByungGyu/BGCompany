@@ -75,3 +75,33 @@ RUN_BRIDGE_SMOKE=1 bash scripts/check-hermes-bridge.sh
 - browser login cookie를 저장하거나 재사용하지 않는다.
 - 운영 DB 초기화나 seed 자동 실행과 묶지 않는다.
 - 초기 단계에서는 marketing/QA를 Hermes로 실행하지 않는다.
+
+## Phase 1-C.8 결과 처리 정책
+
+Bridge는 `content-planner` 응답을 가능한 한 JSON 계약으로 정규화한다. Hermes CLI가 순수 JSON만 반환하지 않더라도 brace-balanced 방식으로 첫 JSON object를 추출하고, 그래도 실패하면 `fallback_text` 상태로 원문을 저장한다.
+
+정규화 필드:
+
+```text
+title
+summary
+outline
+content
+draftDirection
+seoKeywords
+targetAudience
+tone
+thumbnailIdea
+cta
+parseStatus
+rawText
+durationMs
+```
+
+`parseStatus` 의미:
+
+- `json`: stdout 전체가 정상 JSON이다.
+- `json_extracted`: stdout 안에서 JSON object를 추출해 사용했다.
+- `fallback_text`: JSON 파싱은 실패했지만 원문을 결과로 저장했다.
+
+운영 화면에서는 Hermes 실제 실행 선택 시 OpenAI API 비용 경고와 확인 창을 표시한다. smoke test는 비용이 발생할 수 있으므로 `RUN_BRIDGE_SMOKE=1`을 명시한 경우에만 실행한다.

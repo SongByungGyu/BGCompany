@@ -60,22 +60,49 @@ def strip_code_fence(text: str) -> str:
     return value
 
 
-def parse_jsonish_stdout(stdout: str) -> dict[str, Any] | None:
+def extract_first_json_object(text: str) -> str | None:
+    start = text.find("{")
+    if start < 0:
+        return None
+    depth = 0
+    in_string = False
+    escaped = False
+    for index in range(start, len(text)):
+        char = text[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:index + 1]
+    return None
+
+
+def parse_jsonish_stdout(stdout: str) -> tuple[dict[str, Any] | None, str]:
     value = strip_code_fence(stdout)
     try:
         parsed = json.loads(value)
-        return parsed if isinstance(parsed, dict) else {"content": parsed}
+        return (parsed if isinstance(parsed, dict) else {"content": parsed}), "json"
     except json.JSONDecodeError:
         pass
-    match = re.search(r"\{.*\}", value, flags=re.DOTALL)
-    if match:
+    extracted = extract_first_json_object(value)
+    if extracted:
         try:
-            parsed = json.loads(match.group(0))
-            return parsed if isinstance(parsed, dict) else {"content": parsed}
+            parsed = json.loads(extracted)
+            return (parsed if isinstance(parsed, dict) else {"content": parsed}), "json_extracted"
         except json.JSONDecodeError:
-            return None
-    return None
-
+            pass
+    return None, "fallback_text"
 
 def pick_string(record: dict[str, Any], *keys: str) -> str | None:
     for key in keys:
@@ -98,6 +125,19 @@ def pick_outline(record: dict[str, Any]) -> list[str] | None:
     return result or None
 
 
+def pick_string_list(record: dict[str, Any], *keys: str) -> list[str] | None:
+    for key in keys:
+        value = record.get(key)
+        if isinstance(value, list):
+            result = [item.strip() for item in value if isinstance(item, str) and item.strip()]
+            if result:
+                return result
+        if isinstance(value, str) and value.strip():
+            result = [item.strip() for item in re.split(r"[,\n]", value) if item.strip()]
+            if result:
+                return result
+    return None
+
 def build_prompt(payload: dict[str, Any]) -> str:
     input_data = payload.get("input") if isinstance(payload.get("input"), dict) else {}
     topic = str(input_data.get("topic") or "").strip()
@@ -106,37 +146,48 @@ def build_prompt(payload: dict[str, Any]) -> str:
     language = str(input_data.get("language") or "ko").strip()
     return f"""
 너는 BG Company의 content-planner AI 직원이다.
-아래 입력을 바탕으로 {language} 언어의 콘텐츠 기획 결과를 만든다.
+아래 입력을 바탕으로 {language} 언어의 {channel} 콘텐츠 기획안을 만든다.
 
 입력:
 - topic: {topic}
 - title: {title}
 - channel: {channel}
 
-규칙:
+목표:
+- BG Company 구축기, AI 개인회사, 자동화 운영 흐름을 실제 블로그 초안으로 발전시킬 수 있는 결과를 만든다.
+- 마케팅 검토와 QA 검토가 이어질 수 있도록 제목, 구조, 메시지, 독자, SEO, 썸네일 방향을 명확히 준다.
+
+엄격한 출력 규칙:
 - 반드시 JSON 객체만 출력한다.
-- markdown 코드블록을 쓰지 않는다.
+- JSON 앞뒤 설명 문장, markdown, code fence를 절대 쓰지 않는다.
 - 실제 게시, 외부 발송, 결제, 승인 처리는 하지 않는다.
-- 마케팅 검토와 QA 검토가 이어질 수 있도록 기획 결과만 만든다.
-- 너무 길게 쓰지 말고 운영 UI에 표시 가능한 분량으로 작성한다.
+- 비용을 고려해 장황한 원고 대신 운영 UI에 표시 가능한 분량으로 작성한다.
+- outline은 최소 4개 이상 작성한다.
+- content는 짧지만 바로 초안으로 확장 가능한 한국어 문단으로 작성한다.
 
 출력 JSON schema:
 {{
-  "title": "콘텐츠 제목",
-  "summary": "한두 문장 요약",
+  "title": "최종 제목",
+  "summary": "콘텐츠 요약",
   "outline": ["섹션 1", "섹션 2", "섹션 3", "섹션 4"],
   "draftDirection": "초안 작성 방향",
-  "content": "짧은 콘텐츠 초안 또는 도입부"
+  "content": "실제 블로그 초안 또는 상세 기획안",
+  "seoKeywords": ["키워드 1", "키워드 2", "키워드 3"],
+  "targetAudience": "대상 독자",
+  "tone": "문체/톤",
+  "thumbnailIdea": "썸네일 아이디어",
+  "cta": "마무리 행동 유도 문구"
 }}
 """.strip()
-
 
 def normalize_success(stdout: str, stderr: str, duration_ms: int) -> dict[str, Any]:
     stdout = mask_secrets(stdout)
     stderr = mask_secrets(stderr)
-    parsed = parse_jsonish_stdout(stdout) or {}
+    parsed, parse_status = parse_jsonish_stdout(stdout)
+    parsed = parsed or {}
     raw_stdout, stdout_truncated = truncate_bytes(stdout, MAX_STDOUT_BYTES)
     raw_stderr, stderr_truncated = truncate_bytes(stderr, MAX_STDOUT_BYTES)
+    content = pick_string(parsed, "content", "body", "draft", "article") or stdout.strip()
     return {
         "ok": True,
         "provider": "hermes-bridge",
@@ -145,7 +196,14 @@ def normalize_success(stdout: str, stderr: str, duration_ms: int) -> dict[str, A
         "summary": pick_string(parsed, "summary", "outputSummary", "description"),
         "outline": pick_outline(parsed),
         "draftDirection": pick_string(parsed, "draftDirection", "direction", "strategy"),
-        "content": pick_string(parsed, "content", "body", "draft", "article") or stdout.strip(),
+        "content": content,
+        "seoKeywords": pick_string_list(parsed, "seoKeywords", "keywords", "seo"),
+        "targetAudience": pick_string(parsed, "targetAudience", "audience", "reader"),
+        "tone": pick_string(parsed, "tone", "voice", "style"),
+        "thumbnailIdea": pick_string(parsed, "thumbnailIdea", "thumbnail", "visualIdea"),
+        "cta": pick_string(parsed, "cta", "callToAction", "action"),
+        "parseStatus": parse_status,
+        "rawText": raw_stdout,
         "durationMs": duration_ms,
         "raw": {
             "exitCode": 0,
@@ -153,9 +211,9 @@ def normalize_success(stdout: str, stderr: str, duration_ms: int) -> dict[str, A
             "stderrPreview": raw_stderr,
             "stdoutTruncated": stdout_truncated,
             "stderrTruncated": stderr_truncated,
+            "parseStatus": parse_status,
         },
     }
-
 
 def error_response(code: str, message: str, status: int, *, raw: dict[str, Any] | None = None) -> tuple[int, dict[str, Any]]:
     return status, {
