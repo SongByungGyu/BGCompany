@@ -34,10 +34,14 @@ HERMES_BRIDGE_BASE_URL=http://hermes-bridge:8787
 HERMES_BRIDGE_TIMEOUT_MS=45000
 HERMES_BRIDGE_MAX_STDOUT_BYTES=200000
 HERMES_BRIDGE_MAX_CONCURRENCY=1
+HERMES_BRIDGE_PROVIDER=openai-api
+HERMES_BRIDGE_MODEL=gpt-5.4-mini
 OPENAI_API_KEY=
 ```
 
-`OPENAI_API_KEY`는 bridge 컨테이너 안의 Hermes CLI가 provider 인증을 필요로 할 때만 설정한다. 이미 Hermes image 내부 config가 provider를 인식하는 환경이면 별도 설정 없이 동작할 수 있다.
+`HERMES_BRIDGE_PROVIDER`와 `HERMES_BRIDGE_MODEL`은 bridge가 `hermes -z`를 실행할 때 명시적으로 넘기는 provider/model이다. 운영 기본값은 `openai-api`와 `gpt-5.4-mini`이다.
+
+`OPENAI_API_KEY`는 bridge 컨테이너 안의 Hermes CLI가 OpenAI provider 인증을 위해 사용한다. key 원문은 로그나 문서에 남기지 않는다.
 
 ## 운영 확인
 

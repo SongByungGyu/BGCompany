@@ -16,6 +16,8 @@ TIMEOUT_MS = int(os.environ.get("HERMES_BRIDGE_TIMEOUT_MS", "45000"))
 MAX_STDOUT_BYTES = int(os.environ.get("HERMES_BRIDGE_MAX_STDOUT_BYTES", "200000"))
 MAX_CONCURRENCY = max(1, int(os.environ.get("HERMES_BRIDGE_MAX_CONCURRENCY", "1")))
 MAX_BODY_BYTES = int(os.environ.get("HERMES_BRIDGE_MAX_BODY_BYTES", "1048576"))
+HERMES_PROVIDER = os.environ.get("HERMES_BRIDGE_PROVIDER", "openai-api").strip()
+HERMES_MODEL = os.environ.get("HERMES_BRIDGE_MODEL", "gpt-5.4-mini").strip()
 
 ALLOWED_AGENT_IDS = {"content-planner"}
 ALLOWED_TASK_TYPES = {"content_planning"}
@@ -192,6 +194,8 @@ class Handler(BaseHTTPRequestHandler):
                 "bridgeApiKey": bool(BRIDGE_API_KEY),
                 "maxConcurrency": MAX_CONCURRENCY,
                 "timeoutMs": TIMEOUT_MS,
+                "provider": HERMES_PROVIDER,
+                "model": HERMES_MODEL,
             },
         })
 
@@ -244,7 +248,7 @@ class Handler(BaseHTTPRequestHandler):
         started = time.monotonic()
         try:
             completed = subprocess.run(
-                ["hermes", "-z", build_prompt(payload)],
+                ["hermes", "-z", build_prompt(payload), "--provider", HERMES_PROVIDER, "-m", HERMES_MODEL],
                 text=True,
                 capture_output=True,
                 timeout=TIMEOUT_MS / 1000,

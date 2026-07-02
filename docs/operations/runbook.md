@@ -180,6 +180,36 @@ secret 관리 주의:
 - secret 원문은 로그, 문서, 커밋에 남기지 않습니다.
 - `.env`는 Git 추적 대상이 아니어야 합니다.
 
+
+
+## Hermes Bridge 확인
+
+콘텐츠 파이프라인의 `runner=hermes`는 `hermes-bridge` 내부 서비스가 Hermes CLI를 oneshot으로 실행합니다.
+
+```bash
+cd /opt/bg-company
+docker compose ps hermes-bridge
+bash scripts/check-hermes-bridge.sh
+curl -s http://127.0.0.1:8787/health || true
+```
+
+운영 기본값:
+
+- `HERMES_BRIDGE_PROVIDER=openai-api`
+- `HERMES_BRIDGE_MODEL=gpt-5.4-mini`
+- `OPENAI_API_KEY`는 VPS `.env`에만 저장
+
+`HERMES_BRIDGE_EXECUTION_FAILED`가 발생하면 다음을 확인합니다.
+
+1. bridge 컨테이너에 `OPENAI_API_KEY`가 주입되어 있는지 확인합니다. key 원문은 출력하지 않습니다.
+2. bridge health의 provider/model 값이 의도와 맞는지 확인합니다.
+3. Hermes dashboard에서 OpenAI 모델이 정상 응답하는지 확인합니다.
+4. 비용이 발생할 수 있으므로 smoke test는 명시적으로만 실행합니다.
+
+```bash
+RUN_BRIDGE_SMOKE=1 bash scripts/check-hermes-bridge.sh
+```
+
 ## 자주 발생하는 장애와 대응
 
 ### HTTPS 접속이 실패함
