@@ -30,6 +30,12 @@ function formatTime(value: string) {
   return new Intl.DateTimeFormat("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value));
 }
 
+function formatDurationMs(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
+  if (value < 1000) return `${Math.round(value)}ms`;
+  return `${Math.round(value / 100) / 10}\uCD08`;
+}
+
 function statusGroup(status: string) {
   if (status === "completed" || status === "approved" || status === "published_ready") return "done";
   if (status === "rejected") return "error";
@@ -71,6 +77,7 @@ function PlannerResultCard({ pipeline, agentRuns }: { pipeline: ContentPipelineR
   const gaps = listResultGaps(result);
   const hasFallback = result?.parseStatus === "fallback_text";
   const rawText = result?.rawText;
+  const durationLabel = formatDurationMs(result?.durationMs);
 
   return (
     <div className="feature-card content-pipeline-result-card">
@@ -79,7 +86,7 @@ function PlannerResultCard({ pipeline, agentRuns }: { pipeline: ContentPipelineR
       <div className="content-pipeline-meta">
         <span>provider: {result?.provider ?? pipeline.runnerMode ?? "mock"}</span>
         <span>parse: {parseStatusLabel(result?.parseStatus)}</span>
-        {typeof result?.durationMs === "number" ? <span>{Math.round(result.durationMs / 100) / 10}s</span> : null}
+        {durationLabel ? <span>{durationLabel}</span> : null}
       </div>
       {isFailed ? (
         <p className="content-pipeline-error">{result?.errorCode ?? "HERMES_ERROR"} · {plannerRun?.errorMessage ?? result?.errorMessage ?? "Hermes 실행에 실패했습니다."}</p>
@@ -318,13 +325,16 @@ export function ContentPipelineView() {
               <span>최근 Hermes 실행</span>
               {hermesUsage?.recentRuns.length ? (
                 <ul>
-                  {hermesUsage.recentRuns.map((run) => (
-                    <li key={run.id}>
-                      <strong>{formatTime(run.createdAt)}</strong>
-                      <span>{run.agentId} · {run.status}{run.durationMs !== null ? ` · ${run.durationMs}ms` : ""}</span>
-                      <small>{run.title ?? "제목 없음"}{run.parseStatus ? ` · ${parseStatusLabel(run.parseStatus)}` : ""}</small>
-                    </li>
-                  ))}
+                  {hermesUsage.recentRuns.map((run) => {
+                    const runDurationLabel = formatDurationMs(run.durationMs);
+                    return (
+                      <li key={run.id}>
+                        <strong>{formatTime(run.createdAt)}</strong>
+                        <span>{run.agentId} - {run.status}{run.provider ? ` - ${run.provider}` : ""}{runDurationLabel ? ` - ${runDurationLabel}` : ""}</span>
+                        <small>{run.title ?? "Untitled"}{run.parseStatus ? ` - ${parseStatusLabel(run.parseStatus)}` : ""}</small>
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : (
                 <small>오늘 실제 Hermes 실행 기록이 없습니다.</small>

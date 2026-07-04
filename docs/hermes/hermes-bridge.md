@@ -121,3 +121,22 @@ HERMES_DAILY_RUN_TZ=Asia/Seoul
 The dashboard checks `GET /api/hermes/usage` before starting a real Hermes run. When the daily limit is exhausted, the content pipeline returns `HERMES_DAILY_LIMIT_EXCEEDED` and does not call Hermes/OpenAI.
 
 Manual Bridge smoke tests are intentionally not part of health checks or deploy scripts because they can trigger paid model calls.
+
+
+## Phase 1-C.10 production display policy
+
+Hermes Bridge real execution duration is read from `agentRun.metadata.plannerResult.durationMs` first. The AgentRun `startedAt`/`completedAt` delta can be very small because the row is created after the external Hermes call, so it is only a fallback value.
+
+The recent Hermes runs card displays these fields:
+
+```text
+createdAt
+agentId
+status
+provider
+actual durationMs
+parseStatus
+title/summary
+```
+
+Content pipeline detail timelines can contain the same event attached to multiple targets (`task`, `approval`, `employee`). The database audit rows are preserved. The detail response deduplicates only the display result by `eventId` so the same event is not repeated on one screen.

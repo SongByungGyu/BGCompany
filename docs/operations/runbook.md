@@ -411,3 +411,10 @@ RUN_BRIDGE_SMOKE=1 bash scripts/check-hermes-bridge.sh
 - Not counted: `mock`, `hermes-dry-run`, user-cancelled confirmations, and validation failures before Hermes is called
 
 If the UI shows `HERMES_DAILY_LIMIT_EXCEEDED`, wait for the next KST day or temporarily raise `HERMES_DAILY_RUN_LIMIT` in the server `.env`, then restart the web container. Do not run Bridge smoke tests automatically during deploy.
+
+
+## Hermes production display troubleshooting
+
+If a recent Hermes run appears as `10ms` or similarly tiny, check `agentRun.metadata.plannerResult.durationMs`. The UI/API uses that value first and falls back to AgentRun timestamp deltas only when metadata duration is unavailable.
+
+If a content pipeline detail timeline shows repeated `ApprovalRequested` or `ApprovalResolved` items, do not delete database rows. The same event can legitimately be linked to task, approval, and employee timeline targets for audit purposes. The content pipeline detail view deduplicates the response by `eventId`.

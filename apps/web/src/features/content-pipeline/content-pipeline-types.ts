@@ -118,6 +118,7 @@ export type HermesUsageRecentRun = {
   durationMs: number | null;
   title: string | null;
   parseStatus: string | null;
+  provider: string | null;
 };
 
 export type HermesUsageSummary = {

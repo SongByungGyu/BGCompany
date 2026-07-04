@@ -383,6 +383,18 @@ function pipelineIdFromPayload(payload: Prisma.JsonValue, fallback: string) {
   return typeof value === "string" ? value : fallback;
 }
 
+function dedupeTimelineRows<T extends { id: string; eventId: string | null; title: string; description: string | null; timestamp: Date }>(rows: T[]) {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const key = row.eventId
+      ? `event:${row.eventId}`
+      : `timeline:${row.title}:${row.description ?? ""}:${row.timestamp.toISOString()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export async function getContentPipelineDetail(pipelineId: string): Promise<ContentPipelineDetail | null> {
   const startedEvents = await prisma.eventLog.findMany({
     where: { type: "ContentPipelineStarted" },
@@ -416,6 +428,7 @@ export async function getContentPipelineDetail(pipelineId: string): Promise<Cont
       take: 50,
     })
     : [];
+  const dedupedTimeline = dedupeTimelineRows(timeline);
   const status = baseRun.plannerResult?.ok === false ? { status: "planning" as ContentPipelineStatus, currentStep: "content-planner 확인 필요" } : pipelineStatusFromApproval(approval?.status);
   const pipeline: ContentPipelineRun = {
     ...baseRun,
@@ -463,7 +476,7 @@ export async function getContentPipelineDetail(pipelineId: string): Promise<Cont
       createdAt: run.createdAt.toISOString(),
       updatedAt: run.updatedAt.toISOString(),
     })),
-    timeline: timeline.map((item) => {
+    timeline: dedupedTimeline.map((item) => {
       const serialized = serializeTimeline(item);
       return {
         ...serialized,

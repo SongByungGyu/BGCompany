@@ -5,6 +5,7 @@ const DEFAULT_TIMEZONE = "Asia/Seoul";
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 type AgentRunMetadata = Record<string, unknown> | null;
+type MetadataPath = string | string[];
 
 export type HermesUsageRecentRun = {
   id: string;
@@ -14,6 +15,7 @@ export type HermesUsageRecentRun = {
   durationMs: number | null;
   title: string | null;
   parseStatus: string | null;
+  provider: string | null;
 };
 
 export type HermesUsageSummary = {
@@ -117,11 +119,33 @@ function getDailyWindow(now = new Date()) {
   return { date, timezone, start, end };
 }
 
-function getMetadataValue(metadata: AgentRunMetadata, keys: string[]) {
-  if (!metadata || typeof metadata !== "object") return null;
+function getMetadataPathValue(metadata: AgentRunMetadata, path: MetadataPath) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const keys = Array.isArray(path) ? path : [path];
+  let current: unknown = metadata;
   for (const key of keys) {
-    const value = metadata[key];
-    if (typeof value === "string" && value.trim()) return value;
+    if (!current || typeof current !== "object" || Array.isArray(current)) return null;
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current ?? null;
+}
+
+function getMetadataStringValue(metadata: AgentRunMetadata, paths: MetadataPath[]) {
+  for (const path of paths) {
+    const value = getMetadataPathValue(metadata, path);
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function getMetadataNumberValue(metadata: AgentRunMetadata, paths: MetadataPath[]) {
+  for (const path of paths) {
+    const value = getMetadataPathValue(metadata, path);
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) return value;
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number.parseFloat(value);
+      if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+    }
   }
   return null;
 }
@@ -130,6 +154,14 @@ function getDurationMs(startedAt: Date | null, completedAt: Date | null) {
   if (!startedAt || !completedAt) return null;
   const duration = completedAt.getTime() - startedAt.getTime();
   return Number.isFinite(duration) && duration >= 0 ? duration : null;
+}
+
+function getHermesRunDurationMs(metadata: AgentRunMetadata, startedAt: Date | null, completedAt: Date | null) {
+  return getMetadataNumberValue(metadata, [
+    ["plannerResult", "durationMs"],
+    ["hermesResponse", "durationMs"],
+    "durationMs",
+  ]) ?? getDurationMs(startedAt, completedAt);
 }
 
 export async function getHermesUsageSummary(options?: { recentLimit?: number; now?: Date }): Promise<HermesUsageSummary> {
@@ -182,9 +214,26 @@ export async function getHermesUsageSummary(options?: { recentLimit?: number; no
         agentId: run.employeeId,
         status: run.status,
         createdAt: run.createdAt.toISOString(),
-        durationMs: getDurationMs(run.startedAt, run.completedAt),
-        title: getMetadataValue(metadata, ["contentPipelineTitle", "title", "topic"]) ?? run.resultSummary,
-        parseStatus: getMetadataValue(metadata, ["parseStatus"]),
+        durationMs: getHermesRunDurationMs(metadata, run.startedAt, run.completedAt),
+        title: getMetadataStringValue(metadata, [
+          ["plannerResult", "title"],
+          ["plannerResult", "summary"],
+          ["hermesResponse", "title"],
+          ["hermesResponse", "summary"],
+          "contentPipelineTitle",
+          "title",
+          "topic",
+        ]) ?? run.resultSummary,
+        parseStatus: getMetadataStringValue(metadata, [
+          ["plannerResult", "parseStatus"],
+          ["hermesResponse", "parseStatus"],
+          "parseStatus",
+        ]),
+        provider: getMetadataStringValue(metadata, [
+          ["plannerResult", "provider"],
+          ["hermesResponse", "provider"],
+          "provider",
+        ]),
       };
     }),
   };
