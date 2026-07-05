@@ -13,7 +13,7 @@ const channelLabels: Record<ContentChannel, string> = {
   newsletter: "뉴스레터",
 };
 
-const HERMES_PIPELINE_REQUIRED_RUNS = 2;
+const HERMES_PIPELINE_REQUIRED_RUNS = 3;
 
 const statusLabels: Record<string, string> = {
   draft_requested: "초안 요청",
@@ -77,6 +77,17 @@ function listMarketingResultGaps(result: ContentPipelineRun["marketingResult"]) 
   if (!result.recommendedTitle) gaps.push("recommendedTitle");
   if (!result.titleSuggestions?.length) gaps.push("titleSuggestions");
   if (!result.seoKeywords?.length) gaps.push("seoKeywords");
+  return gaps;
+}
+
+function listQaResultGaps(result: ContentPipelineRun["qaResult"]) {
+  if (!result || result.ok === false) return [];
+  const gaps: string[] = [];
+  if (!result.qaSummary) gaps.push("qaSummary");
+  if (!result.factCheckNotes?.length) gaps.push("factCheckNotes");
+  if (!result.qualityNotes?.length) gaps.push("qualityNotes");
+  if (!result.riskNotes?.length) gaps.push("riskNotes");
+  if (!result.finalRecommendation) gaps.push("finalRecommendation");
   return gaps;
 }
 
@@ -195,6 +206,66 @@ function MarketingResultCard({ pipeline, agentRuns }: { pipeline: ContentPipelin
       {isHermesMode && payload ? (
         <details className="content-pipeline-payload">
           <summary>Hermes Marketing request payload 보기</summary>
+          <pre>{stringifyJson(payload)}</pre>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
+function QaResultCard({ pipeline, agentRuns }: { pipeline: ContentPipelineRun; agentRuns: NonNullable<ContentPipelineDetail["agentRuns"]> }) {
+  const qaRun = agentRuns.find((run) => run.employeeId === "qa-auditor");
+  const payload = pipeline.hermesQaRequestPayload ?? qaRun?.metadata?.hermesPayload;
+  const result = pipeline.qaResult;
+  const isHermesMode = pipeline.runnerMode === "hermes" || pipeline.runnerMode === "hermes-dry-run";
+  const isFailed = qaRun?.status === "failed" || result?.ok === false;
+  const gaps = listQaResultGaps(result);
+  const hasFallback = result?.parseStatus === "fallback_text";
+  const rawText = result?.rawText;
+  const durationLabel = formatDurationMs(result?.durationMs);
+
+  return (
+    <div className="feature-card content-pipeline-result-card">
+      <label>qa-auditor ?? ??</label>
+      <strong>{qaRun?.status ?? (isFailed ? "failed" : "ready")} ? {qaRun?.mode ?? pipeline.runnerMode ?? "mock"}</strong>
+      <div className="content-pipeline-meta">
+        <span>provider: {result?.provider ?? qaRun?.mode ?? pipeline.runnerMode ?? "mock"}</span>
+        <span>parse: {parseStatusLabel(result?.parseStatus)}</span>
+        {durationLabel ? <span>{durationLabel}</span> : null}
+      </div>
+      {isFailed ? (
+        <p className="content-pipeline-error">{result?.errorCode ?? "QA_ERROR"} ? {qaRun?.errorMessage ?? result?.errorMessage ?? "qa-auditor ??? ??????."}</p>
+      ) : (
+        <p>{qaRun?.resultSummary ?? result?.qaSummary ?? "QA ?? ??? ???? ????."}</p>
+      )}
+      {hasFallback ? <p className="content-pipeline-warning">Hermes ??? ??? JSON? ???? ??? fallback ??? ??????.</p> : null}
+      {!isFailed && gaps.length ? <p className="content-pipeline-warning">??? ????? ?? ??? ?? ????: {gaps.join(", ")}</p> : null}
+
+      {result ? (
+        <div className="content-pipeline-result-grid">
+          {typeof result.qaScore === "number" ? <div><label>QA ??</label><strong>{result.qaScore}/100</strong></div> : null}
+          {result.publishReadiness ? <div><label>?? ???</label><strong>{result.publishReadiness}</strong></div> : null}
+          {result.finalRecommendation ? <div><label>?? ??</label><strong>{result.finalRecommendation}</strong></div> : null}
+          {result.qaSummary ? <div className="content-pipeline-result-block"><label>QA ??</label><p>{result.qaSummary}</p></div> : null}
+          {result.factCheckNotes?.length ? <div className="content-pipeline-result-block"><label>?? ??</label><ul className="content-pipeline-outline">{result.factCheckNotes.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
+          {result.qualityNotes?.length ? <div className="content-pipeline-result-block"><label>?? ??</label><ul className="content-pipeline-outline">{result.qualityNotes.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
+          {result.riskNotes?.length ? <div className="content-pipeline-result-block"><label>???</label><ul className="content-pipeline-outline">{result.riskNotes.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
+          {result.typoAndStyleNotes?.length ? <div className="content-pipeline-result-block"><label>??/???</label><ul className="content-pipeline-outline">{result.typoAndStyleNotes.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
+          {result.requiredRevisions?.length ? <div className="content-pipeline-result-block"><label>?? ??</label><ul className="content-pipeline-outline">{result.requiredRevisions.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
+          {result.optionalSuggestions?.length ? <div className="content-pipeline-result-block"><label>?? ??</label><ul className="content-pipeline-outline">{result.optionalSuggestions.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
+          {result.reason ? <div className="content-pipeline-result-block"><label>?? ??</label><p>{result.reason}</p></div> : null}
+        </div>
+      ) : null}
+
+      {rawText ? (
+        <details className="content-pipeline-payload">
+          <summary>Hermes QA raw/fallback text ??</summary>
+          <pre>{rawText}</pre>
+        </details>
+      ) : null}
+      {isHermesMode && payload ? (
+        <details className="content-pipeline-payload">
+          <summary>Hermes QA request payload ??</summary>
           <pre>{stringifyJson(payload)}</pre>
         </details>
       ) : null}
@@ -459,6 +530,7 @@ export function ContentPipelineView() {
                   </div>
                   <PlannerResultCard pipeline={detail?.pipeline ?? selectedPipeline} agentRuns={detail?.agentRuns ?? []} />
                   <MarketingResultCard pipeline={detail?.pipeline ?? selectedPipeline} agentRuns={detail?.agentRuns ?? []} />
+                  <QaResultCard pipeline={detail?.pipeline ?? selectedPipeline} agentRuns={detail?.agentRuns ?? []} />
                   <ApprovedResultCard pipeline={detail?.pipeline ?? selectedPipeline} approval={detail?.approval ?? null} />
                   <div className="feature-card">
                     <label>관련 업무</label>

@@ -102,6 +102,39 @@ class NormalizeSuccessTests(unittest.TestCase):
         self.assertNotIn("title", result)
         self.assertNotIn("content", result)
 
+    def test_qa_auditor_schema(self) -> None:
+        stdout = json.dumps({
+            "qaSummary": "?? ????? ?? ??? ?????.",
+            "factCheckNotes": ["?? ?? ?? ?? ??"],
+            "qualityNotes": ["??? ?????"],
+            "riskNotes": ["?? ?? ??"],
+            "typoAndStyleNotes": ["?? ?? ??"],
+            "requiredRevisions": ["?? ?? ?? ??"],
+            "optionalSuggestions": ["??? ?? ??"],
+            "publishReadiness": "needs_revision",
+            "qaScore": 81,
+            "finalRecommendation": "revise",
+            "reason": "?? ?? ? ?? ??",
+        }, ensure_ascii=False)
+        result = bridge.normalize_success(stdout, "", 3456, "qa-auditor")
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["agentId"], "qa-auditor")
+        self.assertEqual(result["provider"], "hermes-bridge")
+        self.assertEqual(result["qaSummary"], "?? ????? ?? ??? ?????.")
+        self.assertEqual(result["factCheckNotes"], ["?? ?? ?? ?? ??"])
+        self.assertEqual(result["publishReadiness"], "needs_revision")
+        self.assertEqual(result["qaScore"], 81)
+        self.assertEqual(result["finalRecommendation"], "revise")
+        self.assertNotIn("recommendedTitle", result)
+        self.assertNotIn("content", result)
+
+    def test_qa_payload_does_not_become_content_or_marketing_payload(self) -> None:
+        stdout = '{"qaSummary":"QA ??","finalRecommendation":"approve","publishReadiness":"ready"}'
+        result = bridge.normalize_success(stdout, "", 100, "qa-auditor")
+        self.assertEqual(result["qaSummary"], "QA ??")
+        self.assertNotIn("title", result)
+        self.assertNotIn("reviewSummary", result)
+
     def test_fallback_text_is_preserved(self) -> None:
         result = bridge.normalize_success("JSON? ?? Hermes ??", "", 300, "content-planner")
         self.assertEqual(result["parseStatus"], "fallback_text")
@@ -144,19 +177,20 @@ class AllowlistTests(unittest.TestCase):
     def test_allowed_agent_task_pairs(self) -> None:
         self.assertTrue(bridge.is_agent_task_allowed("content-planner", "content_planning"))
         self.assertTrue(bridge.is_agent_task_allowed("marketing-manager", "marketing_review"))
+        self.assertTrue(bridge.is_agent_task_allowed("qa-auditor", "qa_review"))
 
     def test_rejects_crossed_or_unknown_agent_task_pairs(self) -> None:
         self.assertFalse(bridge.is_agent_task_allowed("content-planner", "marketing_review"))
         self.assertFalse(bridge.is_agent_task_allowed("marketing-manager", "content_planning"))
-        self.assertFalse(bridge.is_agent_task_allowed("qa-auditor", "qa_review"))
+        self.assertFalse(bridge.is_agent_task_allowed("qa-auditor", "marketing_review"))
         self.assertFalse(bridge.is_agent_task_allowed("director", "approval"))
         self.assertFalse(bridge.is_agent_task_allowed("unknown", "content_planning"))
 
 
 class UsageGuardrailContractTests(unittest.TestCase):
-    def test_content_pipeline_requires_two_real_hermes_runs(self) -> None:
+    def test_content_pipeline_requires_three_real_hermes_runs(self) -> None:
         service_source = (REPO_ROOT / "apps/web/src/lib/content-pipeline/content-pipeline-service.ts").read_text()
-        self.assertIn("const HERMES_PIPELINE_REQUIRED_RUNS = 2", service_source)
+        self.assertIn("const HERMES_PIPELINE_REQUIRED_RUNS = 3", service_source)
         self.assertIn('if (runnerMode === "hermes") await assertHermesDailyRunAvailable(HERMES_PIPELINE_REQUIRED_RUNS);', service_source)
 
     def test_usage_summary_counts_only_real_hermes_agent_runs(self) -> None:

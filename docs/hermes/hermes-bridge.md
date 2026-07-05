@@ -192,3 +192,18 @@ python3 -B -m unittest services/hermes-bridge/test_server.py
 - `scripts/check-hermes-bridge.sh` ?? ??? health? ????.
 - ?? Hermes smoke run? ??? ??? ? ???? `RUN_BRIDGE_SMOKE=1`? ???? ??? ?? ??? ????.
 - ???? ?? ????? OpenAI API? ???? ???.
+
+## Phase 1-C.13: qa-auditor Bridge execution
+
+The content pipeline now supports a three-step Hermes Bridge sequence:
+
+1. `content-planner` with `taskType=content_draft`
+2. `marketing-manager` with `taskType=marketing_review`
+3. `qa-auditor` with `taskType=qa_review`
+
+The Bridge allowlist is intentionally strict and validates both `agentId` and `taskType`. A QA request must include the planner result and marketing result so the auditor can review factual consistency, quality, style, risk, required revisions, publish readiness, and final recommendation.
+
+The Director step remains approval-only inside BG Company. It does not call Hermes and does not publish externally.
+
+Real Hermes execution can cost money. Phase 1-C.13 treats one full Hermes content pipeline as up to three Bridge calls. Smoke runs are manual only and should never be part of automated lint/build/deploy checks.
+

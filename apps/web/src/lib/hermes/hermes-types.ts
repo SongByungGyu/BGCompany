@@ -9,6 +9,11 @@ export type MarketingReviewHermesInput = ContentPlannerHermesInput & {
   plannerResult?: Record<string, unknown>;
 };
 
+export type QaAuditHermesInput = ContentPlannerHermesInput & {
+  plannerResult?: Record<string, unknown>;
+  marketingResult?: Record<string, unknown>;
+};
+
 export type HermesContentPlannerPayload = {
   agentId: "content-planner";
   role: "content_planner";
@@ -42,6 +47,26 @@ export type HermesMarketingReviewPayload = {
     workflow: "content_pipeline";
     runnerMode: "hermes";
     dependsOn: "content-planner";
+  };
+};
+
+export type HermesQaAuditPayload = {
+  agentId: "qa-auditor";
+  role: "qa_auditor";
+  taskType: "qa_review";
+  input: {
+    topic: string;
+    title: string;
+    channel: string;
+    language: "ko" | "en";
+    plannerResult?: Record<string, unknown>;
+    marketingResult?: Record<string, unknown>;
+  };
+  context: {
+    company: "BG Company";
+    workflow: "content_pipeline";
+    runnerMode: "hermes";
+    dependsOn: ["content-planner", "marketing-manager"];
   };
 };
 
@@ -86,6 +111,31 @@ export type MarketingReviewResult = {
   improvementSuggestions?: string[];
   marketingScore?: number;
   finalRecommendation?: "approve" | "revise";
+  reason?: string;
+  parseStatus?: HermesParseStatus;
+  rawText?: string;
+  raw?: unknown;
+  hermesJobId?: string;
+  durationMs?: number;
+  errorCode?: string;
+  errorMessage?: string;
+};
+
+
+export type QaAuditResult = {
+  ok: boolean;
+  provider: "hermes" | "hermes-bridge";
+  agentId: string;
+  qaSummary?: string;
+  factCheckNotes?: string[];
+  qualityNotes?: string[];
+  riskNotes?: string[];
+  typoAndStyleNotes?: string[];
+  requiredRevisions?: string[];
+  optionalSuggestions?: string[];
+  publishReadiness?: "ready" | "needs_revision" | "blocked";
+  qaScore?: number;
+  finalRecommendation?: "approve" | "revise" | "block";
   reason?: string;
   parseStatus?: HermesParseStatus;
   rawText?: string;

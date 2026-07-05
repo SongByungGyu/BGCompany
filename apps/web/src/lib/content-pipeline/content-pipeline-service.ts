@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { createAgentRun, updateAgentRunStatus, type AgentRunStatus } from "@/lib/repositories/agent-runs";
 import { createEvent } from "@/lib/repositories/events";
 import { serializeApproval, serializeTask, serializeTimeline } from "@/lib/repositories/serializers";
-import { buildContentPlannerHermesPayload, buildMarketingReviewHermesPayload, runContentPlannerHermes, runMarketingReviewHermes } from "@/lib/hermes/hermes-client";
+import { buildContentPlannerHermesPayload, buildMarketingReviewHermesPayload, buildQaAuditHermesPayload, runContentPlannerHermes, runMarketingReviewHermes, runQaAuditHermes } from "@/lib/hermes/hermes-client";
 import { assertHermesDailyRunAvailable } from "@/lib/hermes/hermes-usage";
 import type { NormalizedHermesRunResult } from "@/lib/hermes/hermes-types";
 import type { ContentChannel, ContentPipelineDetail, ContentPipelineRun, ContentPipelineStatus } from "@/features/content-pipeline/content-pipeline-types";
@@ -51,10 +51,12 @@ type MarketingExecution = {
   hermesJobId?: string;
 };
 
+type QaExecution = MarketingExecution;
+
 type NormalizedPipelineResult = NormalizedHermesRunResult & Record<string, unknown>;
 
 const channels = new Set(["blog", "instagram", "youtube", "newsletter"]);
-const HERMES_PIPELINE_REQUIRED_RUNS = 2;
+const HERMES_PIPELINE_REQUIRED_RUNS = 3;
 
 function assertValidInput(input: unknown): ContentPipelineInput {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
@@ -126,6 +128,14 @@ function normalizeResultForMetadata(result: NormalizedPipelineResult): Record<st
     riskNotes: result.riskNotes,
     improvementSuggestions: result.improvementSuggestions,
     marketingScore: result.marketingScore,
+    qaSummary: result.qaSummary,
+    factCheckNotes: result.factCheckNotes,
+    qualityNotes: result.qualityNotes,
+    typoAndStyleNotes: result.typoAndStyleNotes,
+    requiredRevisions: result.requiredRevisions,
+    optionalSuggestions: result.optionalSuggestions,
+    publishReadiness: result.publishReadiness,
+    qaScore: result.qaScore,
     finalRecommendation: result.finalRecommendation,
     reason: result.reason,
     parseStatus: result.parseStatus,
@@ -150,8 +160,10 @@ function pipelineMetadata(input: {
   outputSummary: string;
   plannerResult: Record<string, unknown>;
   marketingResult?: Record<string, unknown>;
+  qaResult?: Record<string, unknown>;
   hermesRequestPayload?: Record<string, unknown>;
   hermesMarketingRequestPayload?: Record<string, unknown>;
+  hermesQaRequestPayload?: Record<string, unknown>;
 }): Prisma.InputJsonObject {
   return toJsonObject({
     contentPipelineId: input.pipelineId,
@@ -165,8 +177,10 @@ function pipelineMetadata(input: {
     outputSummary: input.outputSummary,
     plannerResult: input.plannerResult,
     marketingResult: input.marketingResult,
+    qaResult: input.qaResult,
     hermesRequestPayload: input.hermesRequestPayload,
     hermesMarketingRequestPayload: input.hermesMarketingRequestPayload,
+    hermesQaRequestPayload: input.hermesQaRequestPayload,
   });
 }
 
@@ -499,6 +513,191 @@ async function executeMarketing(data: ContentPipelineInput, planner: PlannerExec
   return mockMarketingExecution(data, planner);
 }
 
+
+function mockQaExecution(data: ContentPipelineInput, planner: PlannerExecution, marketing: MarketingExecution): QaExecution {
+  const qaSummary = `${data.title} was reviewed by qa-auditor for factual consistency, quality, and publishing risk in mock mode.`;
+  return {
+    status: "succeeded",
+    taskStatus: "완료",
+    progress: 100,
+    currentStep: "QA review completed",
+    outputTitle: "QA review result generated",
+    outputSummary: qaSummary,
+    recentOutput: "QA review result and publish readiness notes",
+    agentRunMode: "mock",
+    agentRunStatus: "succeeded",
+    agentRunSummary: qaSummary,
+    result: {
+      ok: true,
+      provider: "mock",
+      agentId: "qa-auditor",
+      qaSummary,
+      factCheckNotes: ["Core claims are consistent with the given topic and previous outputs."],
+      qualityNotes: ["The structure is clear enough to move to Director approval."],
+      riskNotes: ["Check exaggeration and sensitive details once before publishing."],
+      typoAndStyleNotes: ["No critical typo or style issue was found in mock review."],
+      requiredRevisions: [],
+      optionalSuggestions: ["Add one concrete operating context sentence to strengthen the opening."],
+      publishReadiness: "ready",
+      qaScore: 88,
+      finalRecommendation: "approve",
+      reason: "No mandatory revision is required before Director approval.",
+      parseStatus: "json",
+      durationMs: 0,
+      plannerResult: planner.result,
+      marketingResult: marketing.result,
+    },
+  };
+}
+
+function dryRunQaExecution(data: ContentPipelineInput, planner: PlannerExecution, marketing: MarketingExecution): QaExecution {
+  const hermesPayload = buildQaAuditHermesPayload({
+    topic: data.topic,
+    title: data.title,
+    channel: data.channel,
+    language: "ko",
+    plannerResult: planner.result,
+    marketingResult: marketing.result,
+  });
+  const outputSummary = "qa-auditor Hermes payload was generated without calling Hermes.";
+  return {
+    status: "dry-run",
+    taskStatus: "완료",
+    progress: 100,
+    currentStep: "Hermes QA dry-run payload generated",
+    outputTitle: `${data.title} · QA Hermes dry-run payload`,
+    outputSummary,
+    recentOutput: "qa-auditor payload generated",
+    agentRunMode: "hermes-dry-run",
+    agentRunStatus: "succeeded",
+    agentRunSummary: outputSummary,
+    hermesPayload: toJsonObject(hermesPayload),
+    result: {
+      ok: true,
+      provider: "hermes",
+      agentId: "qa-auditor",
+      qaSummary: outputSummary,
+      factCheckNotes: ["dry-run: no real fact checking was executed."],
+      qualityNotes: ["dry-run: payload shape was validated."],
+      riskNotes: ["No real cost was incurred."],
+      typoAndStyleNotes: [],
+      requiredRevisions: ["Run Hermes manually to produce a real QA review."],
+      optionalSuggestions: ["Review payload before running the paid Hermes call."],
+      publishReadiness: "needs_revision",
+      qaScore: 0,
+      finalRecommendation: "revise",
+      reason: "dry-run result only.",
+      parseStatus: "json",
+      durationMs: 0,
+    },
+  };
+}
+
+async function hermesQaExecution(data: ContentPipelineInput, planner: PlannerExecution, marketing: MarketingExecution): Promise<QaExecution> {
+  if (planner.agentRunStatus === "failed") {
+    const outputSummary = "qa-auditor Hermes run was skipped because content-planner failed.";
+    return {
+      status: "failed",
+      taskStatus: "오류",
+      progress: 0,
+      currentStep: "content-planner failure detected",
+      outputTitle: `${data.title} · QA run skipped`,
+      outputSummary,
+      recentOutput: outputSummary,
+      agentRunMode: "hermes-skipped",
+      agentRunStatus: "failed",
+      agentRunError: outputSummary,
+      result: {
+        ok: false,
+        provider: "hermes-bridge",
+        agentId: "qa-auditor",
+        errorCode: "QA_SKIPPED_AFTER_PLANNER_FAILURE",
+        errorMessage: outputSummary,
+      },
+    };
+  }
+
+  if (marketing.agentRunStatus === "failed") {
+    const outputSummary = "qa-auditor Hermes run was skipped because marketing-manager failed.";
+    return {
+      status: "failed",
+      taskStatus: "오류",
+      progress: 0,
+      currentStep: "marketing-manager failure detected",
+      outputTitle: `${data.title} · QA run skipped`,
+      outputSummary,
+      recentOutput: outputSummary,
+      agentRunMode: "hermes-skipped",
+      agentRunStatus: "failed",
+      agentRunError: outputSummary,
+      result: {
+        ok: false,
+        provider: "hermes-bridge",
+        agentId: "qa-auditor",
+        errorCode: "QA_SKIPPED_AFTER_MARKETING_FAILURE",
+        errorMessage: outputSummary,
+      },
+    };
+  }
+
+  const { payload, result } = await runQaAuditHermes({
+    topic: data.topic,
+    title: data.title,
+    channel: data.channel,
+    language: "ko",
+    plannerResult: planner.result,
+    marketingResult: marketing.result,
+  });
+  const hermesPayload = toJsonObject(payload);
+  const normalizedResult = normalizeResultForMetadata(result as NormalizedPipelineResult);
+
+  if (!result.ok) {
+    const outputTitle = `${data.title} · QA Hermes run failed`;
+    const outputSummary = result.errorMessage ?? "Hermes qa-auditor run failed.";
+    return {
+      status: "failed",
+      taskStatus: "오류",
+      progress: 30,
+      currentStep: "QA Hermes run failed",
+      outputTitle,
+      outputSummary,
+      recentOutput: outputSummary,
+      agentRunMode: "hermes",
+      agentRunStatus: "failed",
+      agentRunError: outputSummary,
+      hermesPayload,
+      hermesResponse: normalizedResult,
+      result: normalizedResult,
+    };
+  }
+
+  const outputTitle = `${data.title} · QA review draft`;
+  const outputSummary = result.qaSummary ?? result.reason ?? "Hermes qa-auditor returned a QA review result.";
+  return {
+    status: "succeeded",
+    taskStatus: "완료",
+    progress: 100,
+    currentStep: "Hermes QA review completed",
+    outputTitle,
+    outputSummary,
+    recentOutput: outputSummary,
+    agentRunMode: "hermes",
+    agentRunStatus: "succeeded",
+    agentRunSummary: outputSummary,
+    hermesJobId: result.hermesJobId,
+    hermesPayload,
+    hermesResponse: normalizedResult,
+    result: normalizedResult,
+  };
+}
+
+async function executeQa(data: ContentPipelineInput, planner: PlannerExecution, marketing: MarketingExecution): Promise<QaExecution> {
+  const runnerMode = data.runnerMode ?? "mock";
+  if (runnerMode === "hermes-dry-run") return dryRunQaExecution(data, planner, marketing);
+  if (runnerMode === "hermes") return hermesQaExecution(data, planner, marketing);
+  return mockQaExecution(data, planner, marketing);
+}
+
 function runFromEvent(event: {
   id: string;
   timestamp: Date;
@@ -510,6 +709,7 @@ function runFromEvent(event: {
   const taskIds = Array.isArray(payload.taskIds) ? payload.taskIds.filter((id): id is string => typeof id === "string") : [];
   const plannerResult = asRecord(payload.plannerResult);
   const marketingResult = asRecord(payload.marketingResult);
+  const qaResult = asRecord(payload.qaResult);
   return {
     id: pipelineId,
     title: typeof payload.title === "string" ? payload.title : "콘텐츠 파이프라인",
@@ -565,8 +765,31 @@ function runFromEvent(event: {
       errorCode: typeof marketingResult.errorCode === "string" ? marketingResult.errorCode : undefined,
       errorMessage: typeof marketingResult.errorMessage === "string" ? marketingResult.errorMessage : undefined,
     } : undefined,
+
+    qaResult: qaResult ? {
+      ok: qaResult.ok !== false,
+      provider: typeof qaResult.provider === "string" ? qaResult.provider : "mock",
+      agentId: typeof qaResult.agentId === "string" ? qaResult.agentId : "qa-auditor",
+      qaSummary: typeof qaResult.qaSummary === "string" ? qaResult.qaSummary : undefined,
+      factCheckNotes: asStringArray(qaResult.factCheckNotes),
+      qualityNotes: asStringArray(qaResult.qualityNotes),
+      riskNotes: asStringArray(qaResult.riskNotes),
+      typoAndStyleNotes: asStringArray(qaResult.typoAndStyleNotes),
+      requiredRevisions: asStringArray(qaResult.requiredRevisions),
+      optionalSuggestions: asStringArray(qaResult.optionalSuggestions),
+      publishReadiness: qaResult.publishReadiness === "ready" || qaResult.publishReadiness === "needs_revision" || qaResult.publishReadiness === "blocked" ? qaResult.publishReadiness : undefined,
+      qaScore: asNumber(qaResult.qaScore),
+      finalRecommendation: qaResult.finalRecommendation === "approve" || qaResult.finalRecommendation === "revise" || qaResult.finalRecommendation === "block" ? qaResult.finalRecommendation : undefined,
+      reason: typeof qaResult.reason === "string" ? qaResult.reason : undefined,
+      parseStatus: asParseStatus(qaResult.parseStatus),
+      rawText: typeof qaResult.rawText === "string" ? qaResult.rawText : undefined,
+      durationMs: asNumber(qaResult.durationMs),
+      errorCode: typeof qaResult.errorCode === "string" ? qaResult.errorCode : undefined,
+      errorMessage: typeof qaResult.errorMessage === "string" ? qaResult.errorMessage : undefined,
+    } : undefined,
     hermesRequestPayload: asRecord(payload.hermesRequestPayload),
     hermesMarketingRequestPayload: asRecord(payload.hermesMarketingRequestPayload),
+    hermesQaRequestPayload: asRecord(payload.hermesQaRequestPayload),
     createdAt: event.timestamp.toISOString(),
     updatedAt: event.timestamp.toISOString(),
   };
@@ -737,6 +960,7 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
   const taskIds = [contentTaskId, marketingTaskId, qaTaskId];
   const planner = await executePlanner(data);
   const marketing = await executeMarketing(data, planner);
+  const qa = await executeQa(data, planner, marketing);
   const metadata = pipelineMetadata({
     pipelineId,
     topic: data.topic,
@@ -746,11 +970,13 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     taskIds,
     approvalId,
     outputTitle: planner.outputTitle,
-    outputSummary: marketing.agentRunStatus === "succeeded" ? marketing.outputSummary : planner.outputSummary,
+    outputSummary: qa.agentRunStatus === "succeeded" ? qa.outputSummary : marketing.agentRunStatus === "succeeded" ? marketing.outputSummary : planner.outputSummary,
     plannerResult: planner.result,
     marketingResult: marketing.result,
+    qaResult: qa.result,
     hermesRequestPayload: planner.hermesPayload,
     hermesMarketingRequestPayload: marketing.hermesPayload,
+    hermesQaRequestPayload: qa.hermesPayload,
   });
 
   await prisma.task.createMany({
@@ -897,7 +1123,7 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     taskIds,
     approvalId,
     outputTitle: planner.outputTitle,
-    outputSummary: marketing.agentRunStatus === "succeeded" ? marketing.outputSummary : planner.outputSummary,
+    outputSummary: qa.agentRunStatus === "succeeded" ? qa.outputSummary : marketing.agentRunStatus === "succeeded" ? marketing.outputSummary : planner.outputSummary,
     runnerMode,
     plannerResult: {
       ok: planner.agentRunStatus !== "failed",
@@ -942,8 +1168,31 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
       errorCode: typeof marketing.result.errorCode === "string" ? marketing.result.errorCode : undefined,
       errorMessage: typeof marketing.result.errorMessage === "string" ? marketing.result.errorMessage : undefined,
     },
+
+    qaResult: {
+      ok: qa.agentRunStatus !== "failed",
+      provider: typeof qa.result.provider === "string" ? qa.result.provider : qa.agentRunMode,
+      agentId: "qa-auditor",
+      qaSummary: typeof qa.result.qaSummary === "string" ? qa.result.qaSummary : qa.outputSummary,
+      factCheckNotes: asStringArray(qa.result.factCheckNotes),
+      qualityNotes: asStringArray(qa.result.qualityNotes),
+      riskNotes: asStringArray(qa.result.riskNotes),
+      typoAndStyleNotes: asStringArray(qa.result.typoAndStyleNotes),
+      requiredRevisions: asStringArray(qa.result.requiredRevisions),
+      optionalSuggestions: asStringArray(qa.result.optionalSuggestions),
+      publishReadiness: qa.result.publishReadiness === "ready" || qa.result.publishReadiness === "needs_revision" || qa.result.publishReadiness === "blocked" ? qa.result.publishReadiness : undefined,
+      qaScore: asNumber(qa.result.qaScore),
+      finalRecommendation: qa.result.finalRecommendation === "approve" || qa.result.finalRecommendation === "revise" || qa.result.finalRecommendation === "block" ? qa.result.finalRecommendation : undefined,
+      reason: typeof qa.result.reason === "string" ? qa.result.reason : undefined,
+      parseStatus: asParseStatus(qa.result.parseStatus),
+      rawText: typeof qa.result.rawText === "string" ? qa.result.rawText : undefined,
+      durationMs: asNumber(qa.result.durationMs),
+      errorCode: typeof qa.result.errorCode === "string" ? qa.result.errorCode : undefined,
+      errorMessage: typeof qa.result.errorMessage === "string" ? qa.result.errorMessage : undefined,
+    },
     hermesRequestPayload: planner.hermesPayload,
     hermesMarketingRequestPayload: marketing.hermesPayload,
+    hermesQaRequestPayload: qa.hermesPayload,
     createdAt: now.toISOString(),
     updatedAt: new Date().toISOString(),
   };

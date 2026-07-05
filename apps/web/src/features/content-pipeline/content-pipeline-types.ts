@@ -60,6 +60,28 @@ export type MarketingReviewResult = {
   errorMessage?: string;
 };
 
+export type QaAuditResult = {
+  ok: boolean;
+  provider: string;
+  agentId: string;
+  qaSummary?: string;
+  factCheckNotes?: string[];
+  qualityNotes?: string[];
+  riskNotes?: string[];
+  typoAndStyleNotes?: string[];
+  requiredRevisions?: string[];
+  optionalSuggestions?: string[];
+  publishReadiness?: "ready" | "needs_revision" | "blocked";
+  qaScore?: number;
+  finalRecommendation?: "approve" | "revise" | "block";
+  reason?: string;
+  parseStatus?: ContentPlannerParseStatus;
+  rawText?: string;
+  durationMs?: number;
+  errorCode?: string;
+  errorMessage?: string;
+};
+
 export type ContentPipelineRun = {
   id: string;
   title: string;
@@ -74,8 +96,10 @@ export type ContentPipelineRun = {
   runnerMode?: "mock" | "hermes-dry-run" | "hermes";
   plannerResult?: ContentPlannerResult;
   marketingResult?: MarketingReviewResult;
+  qaResult?: QaAuditResult;
   hermesRequestPayload?: Record<string, unknown>;
   hermesMarketingRequestPayload?: Record<string, unknown>;
+  hermesQaRequestPayload?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 };

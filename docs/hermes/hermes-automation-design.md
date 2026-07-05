@@ -350,3 +350,16 @@ content-planner Hermes
 - dry-run/mock은 비용이 발생하지 않는다.
 
 이 설계는 실제 게시, SNS 발행, 외부 메시지 발송을 포함하지 않는다.
+
+## Phase 1-C.13 qa-auditor extension
+
+The Hermes automation path has been extended from two execution agents to three:
+
+- `content-planner`: draft/outline generation
+- `marketing-manager`: marketing review and promotion copy
+- `qa-auditor`: fact, quality, risk, typo/style, and publish-readiness review
+
+BG Company stores the QA result in pipeline metadata, related task output, AgentRun metadata/result, events, and timelines. The UI exposes QA parse status and review fields alongside planner and marketing results.
+
+The execution boundary is unchanged: Hermes Bridge is the only allowed server-to-server execution path, browser cookie reuse is forbidden, and Director approval remains a BG Company workflow step rather than a Hermes run.
+

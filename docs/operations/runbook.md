@@ -471,3 +471,16 @@ bash scripts/check-hermes-bridge.sh
 ```bash
 RUN_BRIDGE_SMOKE=1 bash scripts/check-hermes-bridge.sh
 ```
+
+## Phase 1-C.13 Hermes QA run notes
+
+A real Hermes content pipeline can now execute up to three paid Bridge calls: planner, marketing, and QA. Before running `runnerMode=hermes`, confirm the daily Hermes usage guardrail has enough remaining allowance for all three calls.
+
+Operational checks:
+
+- `content-planner/content_draft`, `marketing-manager/marketing_review`, and `qa-auditor/qa_review` must be allowed by the Bridge.
+- QA failures should be visible in the content pipeline detail, related task, AgentRun result, and timeline.
+- `hermes-dry-run` remains the preferred no-cost validation path.
+- Do not run Bridge smoke tests automatically during deploys.
+- Do not expose Bridge keys, OpenAI keys, or `.env` contents in logs or reports.
+
