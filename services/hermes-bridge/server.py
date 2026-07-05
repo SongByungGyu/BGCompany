@@ -19,8 +19,8 @@ MAX_BODY_BYTES = int(os.environ.get("HERMES_BRIDGE_MAX_BODY_BYTES", "1048576"))
 HERMES_PROVIDER = os.environ.get("HERMES_BRIDGE_PROVIDER", "openai-api").strip()
 HERMES_MODEL = os.environ.get("HERMES_BRIDGE_MODEL", "gpt-5.4-mini").strip()
 
-ALLOWED_AGENT_IDS = {"content-planner"}
-ALLOWED_TASK_TYPES = {"content_planning"}
+ALLOWED_AGENT_IDS = {"content-planner", "marketing-manager"}
+ALLOWED_TASK_TYPES = {"content_planning", "marketing_review"}
 SECRET_PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9_\-]{12,}"),
     re.compile(r"Bearer\s+[A-Za-z0-9._\-]{12,}", re.IGNORECASE),
@@ -138,7 +138,7 @@ def pick_string_list(record: dict[str, Any], *keys: str) -> list[str] | None:
                 return result
     return None
 
-def build_prompt(payload: dict[str, Any]) -> str:
+def build_content_planner_prompt(payload: dict[str, Any]) -> str:
     input_data = payload.get("input") if isinstance(payload.get("input"), dict) else {}
     topic = str(input_data.get("topic") or "").strip()
     title = str(input_data.get("title") or "").strip()
@@ -180,7 +180,65 @@ def build_prompt(payload: dict[str, Any]) -> str:
 }}
 """.strip()
 
-def normalize_success(stdout: str, stderr: str, duration_ms: int) -> dict[str, Any]:
+
+def build_marketing_review_prompt(payload: dict[str, Any]) -> str:
+    input_data = payload.get("input") if isinstance(payload.get("input"), dict) else {}
+    topic = str(input_data.get("topic") or "").strip()
+    title = str(input_data.get("title") or "").strip()
+    channel = str(input_data.get("channel") or "blog").strip()
+    language = str(input_data.get("language") or "ko").strip()
+    planner_result = input_data.get("plannerResult") if isinstance(input_data.get("plannerResult"), dict) else {}
+    planner_json = json.dumps(planner_result, ensure_ascii=False, indent=2)
+    return f"""
+너는 BG Company의 marketing-manager AI 직원이다.
+content-planner가 만든 결과를 바탕으로 {language} 언어의 {channel} 콘텐츠 마케팅 검토안을 작성한다.
+
+입력:
+- topic: {topic}
+- original title: {title}
+- channel: {channel}
+- content-planner result:
+{planner_json}
+
+역할:
+- 제목 개선, 썸네일 문구, SEO 키워드, 도입부 hook, SNS/홍보 문구, 클릭 포인트를 제안한다.
+- 마케팅 리스크와 개선 제안을 점검한다.
+- 과장 광고, 허위 주장, 실제보다 큰 성과 표현은 피한다.
+- 실제 게시, 외부 발송, 결제, 승인 처리는 하지 않는다.
+
+엄격한 출력 규칙:
+- 반드시 JSON 객체만 출력한다.
+- JSON 앞뒤 설명 문장, markdown, code fence를 절대 쓰지 않는다.
+- 한국어로 작성한다.
+- marketingScore는 0부터 100 사이 숫자다.
+- finalRecommendation은 approve 또는 revise 중 하나다.
+
+출력 JSON schema:
+{{
+  "reviewSummary": "마케팅 검토 요약",
+  "titleSuggestions": ["제목 후보 1", "제목 후보 2", "제목 후보 3"],
+  "recommendedTitle": "추천 제목",
+  "thumbnailCopy": "썸네일 문구",
+  "seoKeywords": ["키워드 1", "키워드 2", "키워드 3"],
+  "introHook": "도입부 hook",
+  "promotionCopy": {{ "short": "짧은 홍보 문구", "long": "긴 홍보 문구" }},
+  "clickPoints": ["클릭 포인트 1", "클릭 포인트 2"],
+  "riskNotes": ["주의사항 1"],
+  "improvementSuggestions": ["개선 제안 1", "개선 제안 2"],
+  "marketingScore": 80,
+  "finalRecommendation": "approve",
+  "reason": "판단 이유"
+}}
+""".strip()
+
+
+def build_prompt(payload: dict[str, Any]) -> str:
+    agent_id = payload.get("agentId")
+    if agent_id == "marketing-manager":
+        return build_marketing_review_prompt(payload)
+    return build_content_planner_prompt(payload)
+
+def normalize_success(stdout: str, stderr: str, duration_ms: int, agent_id: str) -> dict[str, Any]:
     stdout = mask_secrets(stdout)
     stderr = mask_secrets(stderr)
     parsed, parse_status = parse_jsonish_stdout(stdout)
@@ -191,7 +249,7 @@ def normalize_success(stdout: str, stderr: str, duration_ms: int) -> dict[str, A
     return {
         "ok": True,
         "provider": "hermes-bridge",
-        "agentId": "content-planner",
+        "agentId": agent_id,
         "title": pick_string(parsed, "title", "outputTitle", "headline"),
         "summary": pick_string(parsed, "summary", "outputSummary", "description"),
         "outline": pick_outline(parsed),
@@ -202,6 +260,18 @@ def normalize_success(stdout: str, stderr: str, duration_ms: int) -> dict[str, A
         "tone": pick_string(parsed, "tone", "voice", "style"),
         "thumbnailIdea": pick_string(parsed, "thumbnailIdea", "thumbnail", "visualIdea"),
         "cta": pick_string(parsed, "cta", "callToAction", "action"),
+        "reviewSummary": pick_string(parsed, "reviewSummary", "summary", "outputSummary"),
+        "titleSuggestions": pick_string_list(parsed, "titleSuggestions", "titles", "headlineSuggestions"),
+        "recommendedTitle": pick_string(parsed, "recommendedTitle", "title", "bestTitle"),
+        "thumbnailCopy": pick_string(parsed, "thumbnailCopy", "thumbnail", "thumbnailText"),
+        "introHook": pick_string(parsed, "introHook", "hook", "opening"),
+        "promotionCopy": parsed.get("promotionCopy") if isinstance(parsed.get("promotionCopy"), dict) else None,
+        "clickPoints": pick_string_list(parsed, "clickPoints", "sellingPoints", "appealPoints"),
+        "riskNotes": pick_string_list(parsed, "riskNotes", "risks", "risk"),
+        "improvementSuggestions": pick_string_list(parsed, "improvementSuggestions", "suggestions", "improvements"),
+        "marketingScore": parsed.get("marketingScore") if isinstance(parsed.get("marketingScore"), (int, float)) else None,
+        "finalRecommendation": parsed.get("finalRecommendation") if parsed.get("finalRecommendation") in ("approve", "revise") else None,
+        "reason": pick_string(parsed, "reason", "recommendationReason"),
         "parseStatus": parse_status,
         "rawText": raw_stdout,
         "durationMs": duration_ms,
@@ -215,11 +285,11 @@ def normalize_success(stdout: str, stderr: str, duration_ms: int) -> dict[str, A
         },
     }
 
-def error_response(code: str, message: str, status: int, *, raw: dict[str, Any] | None = None) -> tuple[int, dict[str, Any]]:
+def error_response(code: str, message: str, status: int, *, agent_id: str = "content-planner", raw: dict[str, Any] | None = None) -> tuple[int, dict[str, Any]]:
     return status, {
         "ok": False,
         "provider": "hermes-bridge",
-        "agentId": "content-planner",
+        "agentId": agent_id,
         "errorCode": code,
         "errorMessage": mask_secrets(message),
         "raw": raw or {},
@@ -289,11 +359,13 @@ class Handler(BaseHTTPRequestHandler):
             status, body = error_response("HERMES_BRIDGE_INVALID_REQUEST", body_error or "Invalid request body.", 400)
             self.send_json(status, body)
             return
-        if payload.get("agentId") not in ALLOWED_AGENT_IDS or payload.get("taskType") not in ALLOWED_TASK_TYPES:
+        agent_id = str(payload.get("agentId") or "")
+        if agent_id not in ALLOWED_AGENT_IDS or payload.get("taskType") not in ALLOWED_TASK_TYPES:
             status, body = error_response(
                 "HERMES_BRIDGE_AGENT_NOT_ALLOWED",
-                "Only content-planner content_planning runs are allowed by this bridge.",
+                "Only content-planner/content_planning and marketing-manager/marketing_review runs are allowed by this bridge.",
                 403,
+                agent_id=agent_id or "unknown",
                 raw={"agentId": payload.get("agentId"), "taskType": payload.get("taskType")},
             )
             self.send_json(status, body)

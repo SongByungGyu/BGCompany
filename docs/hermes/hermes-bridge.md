@@ -140,3 +140,28 @@ title/summary
 ```
 
 Content pipeline detail timelines can contain the same event attached to multiple targets (`task`, `approval`, `employee`). The database audit rows are preserved. The detail response deduplicates only the display result by `eventId` so the same event is not repeated on one screen.
+
+
+## Phase 1-C.11: marketing-manager Hermes review
+
+Phase 1-C.11부터 `runnerMode=hermes` 콘텐츠 파이프라인은 최대 두 번의 Hermes Bridge 실행을 사용한다.
+
+1. `content-planner` / `content_planning`: 콘텐츠 기획 초안 생성
+2. `marketing-manager` / `marketing_review`: 기획 결과를 기반으로 제목, 썸네일 문구, SEO 키워드, 홍보 문안, 리스크, 개선안을 검토
+
+Bridge allowlist는 여전히 내부 전용 최소 범위로 유지한다.
+
+- 허용 agent: `content-planner`, `marketing-manager`
+- 허용 task type: `content_planning`, `marketing_review`
+- 미허용: `qa-auditor`, `director`, 게시/외부 발행, 임의 CLI 작업
+
+`marketing-manager` 실행 payload에는 `content-planner` 결과 요약이 포함된다. Bridge는 Hermes CLI 응답에서 JSON object를 우선 추출하고, 파싱 실패 시 원문 fallback을 보존한다.
+
+비용 가드레일은 파이프라인 시작 전에 남은 Hermes 실행 가능 횟수가 2회 이상인지 확인한다. `mock`과 `hermes-dry-run`은 실제 Hermes Bridge를 호출하지 않으므로 이 제한에서 제외된다.
+
+보안 원칙은 변하지 않는다.
+
+- Hermes dashboard cookie 재사용/우회 금지
+- 외부 공개 endpoint로 Bridge 노출 금지
+- Docker socket mount 금지
+- 실제 Hermes smoke run은 사용자 승인 후 수동 1회만 실행

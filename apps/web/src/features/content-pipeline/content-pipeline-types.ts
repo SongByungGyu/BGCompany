@@ -36,6 +36,30 @@ export type ContentPlannerResult = {
   errorMessage?: string;
 };
 
+export type MarketingReviewResult = {
+  ok: boolean;
+  provider: string;
+  agentId: string;
+  reviewSummary?: string;
+  titleSuggestions?: string[];
+  recommendedTitle?: string;
+  thumbnailCopy?: string;
+  seoKeywords?: string[];
+  introHook?: string;
+  promotionCopy?: { short?: string; long?: string };
+  clickPoints?: string[];
+  riskNotes?: string[];
+  improvementSuggestions?: string[];
+  marketingScore?: number;
+  finalRecommendation?: "approve" | "revise";
+  reason?: string;
+  parseStatus?: ContentPlannerParseStatus;
+  rawText?: string;
+  durationMs?: number;
+  errorCode?: string;
+  errorMessage?: string;
+};
+
 export type ContentPipelineRun = {
   id: string;
   title: string;
@@ -49,7 +73,9 @@ export type ContentPipelineRun = {
   outputSummary?: string;
   runnerMode?: "mock" | "hermes-dry-run" | "hermes";
   plannerResult?: ContentPlannerResult;
+  marketingResult?: MarketingReviewResult;
   hermesRequestPayload?: Record<string, unknown>;
+  hermesMarketingRequestPayload?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 };

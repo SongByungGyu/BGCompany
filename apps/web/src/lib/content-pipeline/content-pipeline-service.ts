@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { createAgentRun, updateAgentRunStatus, type AgentRunStatus } from "@/lib/repositories/agent-runs";
 import { createEvent } from "@/lib/repositories/events";
 import { serializeApproval, serializeTask, serializeTimeline } from "@/lib/repositories/serializers";
-import { buildContentPlannerHermesPayload, runContentPlannerHermes } from "@/lib/hermes/hermes-client";
+import { buildContentPlannerHermesPayload, buildMarketingReviewHermesPayload, runContentPlannerHermes, runMarketingReviewHermes } from "@/lib/hermes/hermes-client";
 import { assertHermesDailyRunAvailable } from "@/lib/hermes/hermes-usage";
 import type { NormalizedHermesRunResult } from "@/lib/hermes/hermes-types";
 import type { ContentChannel, ContentPipelineDetail, ContentPipelineRun, ContentPipelineStatus } from "@/features/content-pipeline/content-pipeline-types";
@@ -33,7 +33,28 @@ type PlannerExecution = {
   hermesJobId?: string;
 };
 
+type MarketingExecution = {
+  status: "succeeded" | "failed" | "dry-run";
+  taskStatus: "완료" | "오류";
+  progress: number;
+  currentStep: string;
+  outputTitle: string;
+  outputSummary: string;
+  recentOutput: string;
+  result: Record<string, unknown>;
+  hermesPayload?: Record<string, unknown>;
+  hermesResponse?: Record<string, unknown>;
+  agentRunMode: string;
+  agentRunStatus: AgentRunStatus;
+  agentRunSummary?: string;
+  agentRunError?: string;
+  hermesJobId?: string;
+};
+
+type NormalizedPipelineResult = NormalizedHermesRunResult & Record<string, unknown>;
+
 const channels = new Set(["blog", "instagram", "youtube", "newsletter"]);
+const HERMES_PIPELINE_REQUIRED_RUNS = 2;
 
 function assertValidInput(input: unknown): ContentPipelineInput {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
@@ -80,7 +101,7 @@ function asNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-function normalizeResultForMetadata(result: NormalizedHermesRunResult): Record<string, unknown> {
+function normalizeResultForMetadata(result: NormalizedPipelineResult): Record<string, unknown> {
   return toJsonObject({
     ok: result.ok,
     provider: result.provider,
@@ -95,6 +116,18 @@ function normalizeResultForMetadata(result: NormalizedHermesRunResult): Record<s
     tone: result.tone,
     thumbnailIdea: result.thumbnailIdea,
     cta: result.cta,
+    reviewSummary: result.reviewSummary,
+    titleSuggestions: result.titleSuggestions,
+    recommendedTitle: result.recommendedTitle,
+    thumbnailCopy: result.thumbnailCopy,
+    introHook: result.introHook,
+    promotionCopy: result.promotionCopy,
+    clickPoints: result.clickPoints,
+    riskNotes: result.riskNotes,
+    improvementSuggestions: result.improvementSuggestions,
+    marketingScore: result.marketingScore,
+    finalRecommendation: result.finalRecommendation,
+    reason: result.reason,
     parseStatus: result.parseStatus,
     rawText: result.rawText,
     hermesJobId: result.hermesJobId,
@@ -116,7 +149,9 @@ function pipelineMetadata(input: {
   outputTitle: string;
   outputSummary: string;
   plannerResult: Record<string, unknown>;
+  marketingResult?: Record<string, unknown>;
   hermesRequestPayload?: Record<string, unknown>;
+  hermesMarketingRequestPayload?: Record<string, unknown>;
 }): Prisma.InputJsonObject {
   return toJsonObject({
     contentPipelineId: input.pipelineId,
@@ -129,7 +164,9 @@ function pipelineMetadata(input: {
     outputTitle: input.outputTitle,
     outputSummary: input.outputSummary,
     plannerResult: input.plannerResult,
+    marketingResult: input.marketingResult,
     hermesRequestPayload: input.hermesRequestPayload,
+    hermesMarketingRequestPayload: input.hermesMarketingRequestPayload,
   });
 }
 
@@ -300,6 +337,168 @@ async function executePlanner(data: ContentPipelineInput): Promise<PlannerExecut
   return mockPlannerExecution(data);
 }
 
+function mockMarketingExecution(data: ContentPipelineInput, planner: PlannerExecution): MarketingExecution {
+  const recommendedTitle = planner.result.title && typeof planner.result.title === "string" ? planner.result.title : data.title;
+  const reviewSummary = `${recommendedTitle}의 제목, 썸네일, SEO, 홍보 문구를 mock 기준으로 검토했습니다.`;
+  return {
+    status: "succeeded",
+    taskStatus: "완료",
+    progress: 100,
+    currentStep: "마케팅 검토 완료",
+    outputTitle: "마케팅 검토안 생성",
+    outputSummary: reviewSummary,
+    recentOutput: "제목/홍보 문구 검토안 생성",
+    agentRunMode: "mock",
+    agentRunStatus: "succeeded",
+    agentRunSummary: reviewSummary,
+    result: {
+      ok: true,
+      provider: "mock",
+      agentId: "marketing-manager",
+      reviewSummary,
+      titleSuggestions: [recommendedTitle, `${recommendedTitle} · 운영자가 바로 따라 하는 구축기`, `${data.topic} 실전 기록`],
+      recommendedTitle,
+      thumbnailCopy: "AI 개인회사 구축기",
+      seoKeywords: ["AI 개인회사", "BG Company", "콘텐츠 자동화", "Hermes"],
+      introHook: "혼자 운영하는 회사가 실제로 일하는 화면을 만든다면 어디서부터 시작해야 할까요?",
+      promotionCopy: { short: "BG Company 구축 과정을 한 편으로 정리했습니다.", long: "가상 오피스, 업무 보드, 승인함, 콘텐츠 파이프라인이 어떻게 연결되는지 실제 운영 흐름 기준으로 소개합니다." },
+      clickPoints: ["실제 구축 과정", "운영 화면 중심", "AI 직원 협업 구조"],
+      riskNotes: ["과장된 자동화 표현은 피하고 현재 구현 범위를 명확히 표시"],
+      improvementSuggestions: ["초반에 결과 화면을 먼저 보여주고 구축 과정을 이어서 설명"],
+      marketingScore: 82,
+      finalRecommendation: "approve",
+      reason: "콘텐츠 주제와 운영 화면의 연결성이 명확합니다.",
+      parseStatus: "json",
+      durationMs: 0,
+    },
+  };
+}
+
+function dryRunMarketingExecution(data: ContentPipelineInput, planner: PlannerExecution): MarketingExecution {
+  const hermesPayload = buildMarketingReviewHermesPayload({
+    topic: data.topic,
+    title: data.title,
+    channel: data.channel,
+    language: "ko",
+    plannerResult: planner.result,
+  });
+  const outputSummary = "Hermes를 실제 호출하지 않고 marketing-manager 요청 payload를 생성했습니다.";
+  return {
+    status: "dry-run",
+    taskStatus: "완료",
+    progress: 100,
+    currentStep: "Hermes marketing dry-run payload 생성",
+    outputTitle: `${data.title} · Marketing Hermes dry-run payload`,
+    outputSummary,
+    recentOutput: "marketing-manager payload 생성",
+    agentRunMode: "hermes-dry-run",
+    agentRunStatus: "succeeded",
+    agentRunSummary: outputSummary,
+    hermesPayload: toJsonObject(hermesPayload),
+    result: {
+      ok: true,
+      provider: "hermes",
+      agentId: "marketing-manager",
+      reviewSummary: outputSummary,
+      titleSuggestions: [data.title],
+      recommendedTitle: data.title,
+      thumbnailCopy: "dry-run thumbnail copy",
+      seoKeywords: ["Hermes", "marketing-manager", "dry-run"],
+      introHook: "dry-run hook",
+      promotionCopy: { short: "dry-run short copy", long: "dry-run long copy" },
+      clickPoints: ["payload 검증"],
+      riskNotes: ["실제 호출 없음"],
+      improvementSuggestions: ["payload 확인 후 실제 실행"],
+      marketingScore: 0,
+      finalRecommendation: "revise",
+      reason: "dry-run 결과입니다.",
+      parseStatus: "json",
+      durationMs: 0,
+    },
+  };
+}
+
+async function hermesMarketingExecution(data: ContentPipelineInput, planner: PlannerExecution): Promise<MarketingExecution> {
+  if (planner.agentRunStatus === "failed") {
+    const outputSummary = "content-planner 실패로 marketing-manager Hermes 실행을 건너뛰었습니다.";
+    return {
+      status: "failed",
+      taskStatus: "오류",
+      progress: 0,
+      currentStep: "content-planner 확인 필요",
+      outputTitle: `${data.title} · 마케팅 실행 보류`,
+      outputSummary,
+      recentOutput: outputSummary,
+      agentRunMode: "hermes-skipped",
+      agentRunStatus: "failed",
+      agentRunError: outputSummary,
+      result: {
+        ok: false,
+        provider: "hermes-bridge",
+        agentId: "marketing-manager",
+        errorCode: "MARKETING_SKIPPED_AFTER_PLANNER_FAILURE",
+        errorMessage: outputSummary,
+      },
+    };
+  }
+
+  const { payload, result } = await runMarketingReviewHermes({
+    topic: data.topic,
+    title: data.title,
+    channel: data.channel,
+    language: "ko",
+    plannerResult: planner.result,
+  });
+  const hermesPayload = toJsonObject(payload);
+  const normalizedResult = normalizeResultForMetadata(result as NormalizedPipelineResult);
+
+  if (!result.ok) {
+    const outputTitle = `${data.title} · Marketing Hermes 실행 실패`;
+    const outputSummary = result.errorMessage ?? "Hermes marketing-manager 실행에 실패했습니다.";
+    return {
+      status: "failed",
+      taskStatus: "오류",
+      progress: 30,
+      currentStep: "Marketing Hermes 실행 실패",
+      outputTitle,
+      outputSummary,
+      recentOutput: outputSummary,
+      agentRunMode: "hermes",
+      agentRunStatus: "failed",
+      agentRunError: outputSummary,
+      hermesPayload,
+      hermesResponse: normalizedResult,
+      result: normalizedResult,
+    };
+  }
+
+  const outputTitle = result.recommendedTitle ?? `${data.title} · 마케팅 검토안`;
+  const outputSummary = result.reviewSummary ?? result.reason ?? "Hermes marketing-manager가 마케팅 검토 결과를 반환했습니다.";
+  return {
+    status: "succeeded",
+    taskStatus: "완료",
+    progress: 100,
+    currentStep: "Hermes 마케팅 검토 완료",
+    outputTitle,
+    outputSummary,
+    recentOutput: outputTitle,
+    agentRunMode: "hermes",
+    agentRunStatus: "succeeded",
+    agentRunSummary: outputSummary,
+    hermesJobId: result.hermesJobId,
+    hermesPayload,
+    hermesResponse: normalizedResult,
+    result: normalizedResult,
+  };
+}
+
+async function executeMarketing(data: ContentPipelineInput, planner: PlannerExecution): Promise<MarketingExecution> {
+  const runnerMode = data.runnerMode ?? "mock";
+  if (runnerMode === "hermes-dry-run") return dryRunMarketingExecution(data, planner);
+  if (runnerMode === "hermes") return hermesMarketingExecution(data, planner);
+  return mockMarketingExecution(data, planner);
+}
+
 function runFromEvent(event: {
   id: string;
   timestamp: Date;
@@ -310,13 +509,14 @@ function runFromEvent(event: {
   const pipelineId = typeof payload.contentPipelineId === "string" ? payload.contentPipelineId : event.id;
   const taskIds = Array.isArray(payload.taskIds) ? payload.taskIds.filter((id): id is string => typeof id === "string") : [];
   const plannerResult = asRecord(payload.plannerResult);
+  const marketingResult = asRecord(payload.marketingResult);
   return {
     id: pipelineId,
     title: typeof payload.title === "string" ? payload.title : "콘텐츠 파이프라인",
     topic: typeof payload.topic === "string" ? payload.topic : "주제 미정",
     channel: channels.has(String(payload.channel)) ? payload.channel as ContentChannel : "blog",
-    status: plannerResult?.ok === false ? "planning" : "director_approval",
-    currentStep: plannerResult?.ok === false ? "content-planner 확인 필요" : "Director 승인 대기",
+    status: plannerResult?.ok === false ? "planning" : marketingResult?.ok === false ? "marketing_review" : "director_approval",
+    currentStep: plannerResult?.ok === false ? "content-planner 확인 필요" : marketingResult?.ok === false ? "marketing-manager 확인 필요" : "Director 승인 대기",
     taskIds,
     approvalId: typeof payload.approvalId === "string" ? payload.approvalId : undefined,
     outputTitle: typeof payload.outputTitle === "string" ? payload.outputTitle : undefined,
@@ -342,7 +542,31 @@ function runFromEvent(event: {
       errorCode: typeof plannerResult.errorCode === "string" ? plannerResult.errorCode : undefined,
       errorMessage: typeof plannerResult.errorMessage === "string" ? plannerResult.errorMessage : undefined,
     } : undefined,
+    marketingResult: marketingResult ? {
+      ok: marketingResult.ok !== false,
+      provider: typeof marketingResult.provider === "string" ? marketingResult.provider : "mock",
+      agentId: typeof marketingResult.agentId === "string" ? marketingResult.agentId : "marketing-manager",
+      reviewSummary: typeof marketingResult.reviewSummary === "string" ? marketingResult.reviewSummary : undefined,
+      titleSuggestions: asStringArray(marketingResult.titleSuggestions),
+      recommendedTitle: typeof marketingResult.recommendedTitle === "string" ? marketingResult.recommendedTitle : undefined,
+      thumbnailCopy: typeof marketingResult.thumbnailCopy === "string" ? marketingResult.thumbnailCopy : undefined,
+      seoKeywords: asStringArray(marketingResult.seoKeywords),
+      introHook: typeof marketingResult.introHook === "string" ? marketingResult.introHook : undefined,
+      promotionCopy: asRecord(marketingResult.promotionCopy) as { short?: string; long?: string } | undefined,
+      clickPoints: asStringArray(marketingResult.clickPoints),
+      riskNotes: asStringArray(marketingResult.riskNotes),
+      improvementSuggestions: asStringArray(marketingResult.improvementSuggestions),
+      marketingScore: asNumber(marketingResult.marketingScore),
+      finalRecommendation: marketingResult.finalRecommendation === "approve" || marketingResult.finalRecommendation === "revise" ? marketingResult.finalRecommendation : undefined,
+      reason: typeof marketingResult.reason === "string" ? marketingResult.reason : undefined,
+      parseStatus: asParseStatus(marketingResult.parseStatus),
+      rawText: typeof marketingResult.rawText === "string" ? marketingResult.rawText : undefined,
+      durationMs: asNumber(marketingResult.durationMs),
+      errorCode: typeof marketingResult.errorCode === "string" ? marketingResult.errorCode : undefined,
+      errorMessage: typeof marketingResult.errorMessage === "string" ? marketingResult.errorMessage : undefined,
+    } : undefined,
     hermesRequestPayload: asRecord(payload.hermesRequestPayload),
+    hermesMarketingRequestPayload: asRecord(payload.hermesMarketingRequestPayload),
     createdAt: event.timestamp.toISOString(),
     updatedAt: event.timestamp.toISOString(),
   };
@@ -365,6 +589,7 @@ export async function listContentPipelines(): Promise<ContentPipelineRun[]> {
     if (approval.status === "반려") return { ...run, status: "rejected", currentStep: "반려 · 수정 필요", updatedAt: approval.updatedAt.toISOString() };
     if (approval.status === "수정 요청") return { ...run, status: "revision_requested", currentStep: "수정 요청", updatedAt: approval.updatedAt.toISOString() };
     if (run.plannerResult?.ok === false) return { ...run, status: "planning", currentStep: "content-planner 확인 필요", updatedAt: approval.updatedAt.toISOString() };
+    if (run.marketingResult?.ok === false) return { ...run, status: "marketing_review", currentStep: "marketing-manager 확인 필요", updatedAt: approval.updatedAt.toISOString() };
     return run;
   });
 }
@@ -429,7 +654,11 @@ export async function getContentPipelineDetail(pipelineId: string): Promise<Cont
     })
     : [];
   const dedupedTimeline = dedupeTimelineRows(timeline);
-  const status = baseRun.plannerResult?.ok === false ? { status: "planning" as ContentPipelineStatus, currentStep: "content-planner 확인 필요" } : pipelineStatusFromApproval(approval?.status);
+  const status = baseRun.plannerResult?.ok === false
+    ? { status: "planning" as ContentPipelineStatus, currentStep: "content-planner 확인 필요" }
+    : baseRun.marketingResult?.ok === false
+      ? { status: "marketing_review" as ContentPipelineStatus, currentStep: "marketing-manager 확인 필요" }
+      : pipelineStatusFromApproval(approval?.status);
   const pipeline: ContentPipelineRun = {
     ...baseRun,
     status: status.status,
@@ -496,7 +725,7 @@ export async function getContentPipelineDetail(pipelineId: string): Promise<Cont
 export async function startContentPipeline(input: unknown): Promise<ContentPipelineRun> {
   const data = assertValidInput(input);
   const runnerMode = data.runnerMode ?? "mock";
-  if (runnerMode === "hermes") await assertHermesDailyRunAvailable();
+  if (runnerMode === "hermes") await assertHermesDailyRunAvailable(HERMES_PIPELINE_REQUIRED_RUNS);
 
   const pipelineId = `content-pipeline-${randomUUID()}`;
   const suffix = pipelineId.replace("content-pipeline-", "").slice(0, 8);
@@ -507,6 +736,7 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
   const approvalId = `approval-content-${suffix}`;
   const taskIds = [contentTaskId, marketingTaskId, qaTaskId];
   const planner = await executePlanner(data);
+  const marketing = await executeMarketing(data, planner);
   const metadata = pipelineMetadata({
     pipelineId,
     topic: data.topic,
@@ -516,9 +746,11 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     taskIds,
     approvalId,
     outputTitle: planner.outputTitle,
-    outputSummary: planner.outputSummary,
+    outputSummary: marketing.agentRunStatus === "succeeded" ? marketing.outputSummary : planner.outputSummary,
     plannerResult: planner.result,
+    marketingResult: marketing.result,
     hermesRequestPayload: planner.hermesPayload,
+    hermesMarketingRequestPayload: marketing.hermesPayload,
   });
 
   await prisma.task.createMany({
@@ -546,15 +778,16 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
         description: `${data.topic} 콘텐츠의 제목, 썸네일, 홍보 문구를 검토합니다.`,
         department: "콘텐츠팀",
         assignedEmployeeId: "marketing-manager",
-        status: "완료",
-        progress: 100,
+        status: marketing.taskStatus,
+        progress: marketing.progress,
         startedAt: now,
-        completedAt: now,
-        model: "Mock Agent",
+        completedAt: marketing.agentRunStatus === "succeeded" ? now : null,
+        model: marketing.agentRunMode === "mock" ? "Mock Agent" : marketing.agentRunMode === "hermes-dry-run" ? "Hermes Dry Run" : "Hermes Agent",
         cost: "0.0000",
-        currentStep: "마케팅 검토 완료",
-        recentOutput: "제목/홍보 문구 검토안 생성",
-        nextAction: "QA 검토",
+        currentStep: marketing.currentStep,
+        recentOutput: marketing.recentOutput,
+        nextAction: marketing.agentRunStatus === "failed" ? "Marketing Hermes 설정/응답 확인" : "QA 검토",
+        error: marketing.agentRunError ?? null,
       },
       {
         id: qaTaskId,
@@ -581,11 +814,11 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
       requestedByEmployeeId: "director",
       taskId: qaTaskId,
       approvalType: "콘텐츠",
-      riskLevel: planner.agentRunStatus === "failed" ? "높음" : "보통",
+      riskLevel: planner.agentRunStatus === "failed" || marketing.agentRunStatus === "failed" ? "높음" : "보통",
       estimatedCost: "0.0000",
       status: "승인 대기",
       reason: `${data.topic} 콘텐츠를 ${channelLabel(data.channel)} 채널에 게시하기 전 대표 최종 승인이 필요합니다.`,
-      plannedAction: planner.agentRunStatus === "failed" ? "Hermes 실패 사유를 확인한 뒤 재실행 또는 mock 결과로 검토합니다." : "승인 후 게시 준비 상태로 전환합니다.",
+      plannedAction: planner.agentRunStatus === "failed" || marketing.agentRunStatus === "failed" ? "Hermes 실패 사유를 확인한 뒤 재실행 또는 mock 결과로 검토합니다." : "승인 후 게시 준비 상태로 전환합니다.",
       expectedResult: "콘텐츠 결과물이 게시 준비 상태가 됩니다.",
     },
   });
@@ -606,7 +839,23 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
       plannerResult: planner.result,
     },
   });
-  await createPipelineAgentRun({ pipelineId, taskId: marketingTaskId, employeeId: "marketing-manager", mode: "mock", status: "succeeded", summary: "제목/홍보 문구 검토 완료", metadata: { role: "marketing-manager", outputTitle: "마케팅 검토안 생성" } });
+  await createPipelineAgentRun({
+    pipelineId,
+    taskId: marketingTaskId,
+    employeeId: "marketing-manager",
+    mode: marketing.agentRunMode,
+    status: marketing.agentRunStatus,
+    summary: marketing.agentRunSummary,
+    errorMessage: marketing.agentRunError,
+    hermesJobId: marketing.hermesJobId,
+    metadata: {
+      role: "marketing-manager",
+      hermesPayload: marketing.hermesPayload,
+      hermesResponse: marketing.hermesResponse,
+      plannerResult: planner.result,
+      marketingResult: marketing.result,
+    },
+  });
   await createPipelineAgentRun({ pipelineId, taskId: qaTaskId, employeeId: "qa-auditor", mode: "mock", status: "succeeded", summary: "사실성/정책/품질 검토 완료", metadata: { role: "qa-auditor", outputTitle: "QA 검토 결과 생성" } });
 
   await createEvent({ type: "ContentPipelineStarted", payload: metadata, summary: `${data.title} 콘텐츠 파이프라인 시작` });
@@ -623,7 +872,17 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     await createEvent({ type: "OutputGenerated", employeeId: "content-planner", taskId: contentTaskId, payload: { ...metadata, outputTitle: planner.outputTitle, output: planner.outputTitle, status: "업무 완료" }, summary: "콘텐츠 기획 초안 생성" });
   }
   await createEvent({ type: "TaskStarted", employeeId: "marketing-manager", taskId: marketingTaskId, payload: { ...metadata, title: data.title }, summary: "마케팅 검토 시작" });
-  await createEvent({ type: "OutputGenerated", employeeId: "marketing-manager", taskId: marketingTaskId, payload: { ...metadata, outputTitle: "마케팅 검토안 생성", output: "제목/홍보 문구 검토안", status: "업무 완료" }, summary: "마케팅 검토 완료" });
+  if (marketing.agentRunStatus === "failed") {
+    await createEvent({
+      type: "ErrorOccurred",
+      employeeId: "marketing-manager",
+      taskId: marketingTaskId,
+      payload: { ...metadata, error: marketing.agentRunError, message: marketing.agentRunError, status: "오류 대응 중" },
+      summary: `marketing-manager Hermes 실행 실패 · ${marketing.agentRunError ?? "원인 미상"}`,
+    });
+  } else {
+    await createEvent({ type: "OutputGenerated", employeeId: "marketing-manager", taskId: marketingTaskId, payload: { ...metadata, outputTitle: marketing.outputTitle, output: marketing.outputSummary, status: "업무 완료" }, summary: "마케팅 검토 완료" });
+  }
   await createEvent({ type: "TaskStarted", employeeId: "qa-auditor", taskId: qaTaskId, payload: { ...metadata, title: data.title }, summary: "QA 검토 시작" });
   await createEvent({ type: "OutputGenerated", employeeId: "qa-auditor", taskId: qaTaskId, payload: { ...metadata, outputTitle: "QA 검토 결과 생성", output: "QA 검토 통과 · 최종 승인 필요", status: "검토 중" }, summary: "QA 검토 결과 생성" });
   await createEvent({ type: "ApprovalRequested", employeeId: "director", taskId: qaTaskId, approvalId, payload: { ...metadata, title: `[콘텐츠 최종 승인] ${data.title}`, status: "승인 대기" }, summary: "Director 콘텐츠 최종 승인 요청" });
@@ -633,12 +892,12 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     title: data.title,
     topic: data.topic,
     channel: data.channel,
-    status: planner.agentRunStatus === "failed" ? "planning" : "director_approval",
-    currentStep: planner.agentRunStatus === "failed" ? "content-planner 확인 필요" : "Director 승인 대기",
+    status: planner.agentRunStatus === "failed" ? "planning" : marketing.agentRunStatus === "failed" ? "marketing_review" : "director_approval",
+    currentStep: planner.agentRunStatus === "failed" ? "content-planner 확인 필요" : marketing.agentRunStatus === "failed" ? "marketing-manager 확인 필요" : "Director 승인 대기",
     taskIds,
     approvalId,
     outputTitle: planner.outputTitle,
-    outputSummary: planner.outputSummary,
+    outputSummary: marketing.agentRunStatus === "succeeded" ? marketing.outputSummary : planner.outputSummary,
     runnerMode,
     plannerResult: {
       ok: planner.agentRunStatus !== "failed",
@@ -660,7 +919,31 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
       errorCode: typeof planner.result.errorCode === "string" ? planner.result.errorCode : undefined,
       errorMessage: typeof planner.result.errorMessage === "string" ? planner.result.errorMessage : undefined,
     },
+    marketingResult: {
+      ok: marketing.agentRunStatus !== "failed",
+      provider: typeof marketing.result.provider === "string" ? marketing.result.provider : marketing.agentRunMode,
+      agentId: "marketing-manager",
+      reviewSummary: typeof marketing.result.reviewSummary === "string" ? marketing.result.reviewSummary : marketing.outputSummary,
+      titleSuggestions: asStringArray(marketing.result.titleSuggestions),
+      recommendedTitle: typeof marketing.result.recommendedTitle === "string" ? marketing.result.recommendedTitle : undefined,
+      thumbnailCopy: typeof marketing.result.thumbnailCopy === "string" ? marketing.result.thumbnailCopy : undefined,
+      seoKeywords: asStringArray(marketing.result.seoKeywords),
+      introHook: typeof marketing.result.introHook === "string" ? marketing.result.introHook : undefined,
+      promotionCopy: asRecord(marketing.result.promotionCopy) as { short?: string; long?: string } | undefined,
+      clickPoints: asStringArray(marketing.result.clickPoints),
+      riskNotes: asStringArray(marketing.result.riskNotes),
+      improvementSuggestions: asStringArray(marketing.result.improvementSuggestions),
+      marketingScore: asNumber(marketing.result.marketingScore),
+      finalRecommendation: marketing.result.finalRecommendation === "approve" || marketing.result.finalRecommendation === "revise" ? marketing.result.finalRecommendation : undefined,
+      reason: typeof marketing.result.reason === "string" ? marketing.result.reason : undefined,
+      parseStatus: asParseStatus(marketing.result.parseStatus),
+      rawText: typeof marketing.result.rawText === "string" ? marketing.result.rawText : undefined,
+      durationMs: asNumber(marketing.result.durationMs),
+      errorCode: typeof marketing.result.errorCode === "string" ? marketing.result.errorCode : undefined,
+      errorMessage: typeof marketing.result.errorMessage === "string" ? marketing.result.errorMessage : undefined,
+    },
     hermesRequestPayload: planner.hermesPayload,
+    hermesMarketingRequestPayload: marketing.hermesPayload,
     createdAt: now.toISOString(),
     updatedAt: new Date().toISOString(),
   };

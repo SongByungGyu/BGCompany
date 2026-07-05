@@ -1,5 +1,12 @@
 import { getHermesConfig } from "@/lib/agents/hermes-client";
-import type { ContentPlannerHermesInput, HermesContentPlannerPayload, NormalizedHermesRunResult } from "./hermes-types";
+import type {
+  ContentPlannerHermesInput,
+  HermesContentPlannerPayload,
+  HermesMarketingReviewPayload,
+  MarketingReviewHermesInput,
+  MarketingReviewResult,
+  NormalizedHermesRunResult,
+} from "./hermes-types";
 
 function baseUrl(url: string) {
   return url.replace(/\/$/, "");
@@ -37,6 +44,18 @@ function pickString(record: Record<string, unknown>, keys: string[]) {
   return undefined;
 }
 
+function pickNumber(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number.parseFloat(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return undefined;
+}
+
 function pickOutline(record: Record<string, unknown>) {
   const outline = record.outline ?? record.sections ?? record.headings;
   if (!Array.isArray(outline)) return undefined;
@@ -61,11 +80,23 @@ function pickStringArray(record: Record<string, unknown>, keys: string[]) {
   return undefined;
 }
 
+function pickPromotionCopy(record: Record<string, unknown>) {
+  const value = asRecord(record.promotionCopy);
+  if (!value) return undefined;
+  const short = typeof value.short === "string" && value.short.trim() ? value.short : undefined;
+  const long = typeof value.long === "string" && value.long.trim() ? value.long : undefined;
+  return short || long ? { short, long } : undefined;
+}
+
+function pickRecommendation(record: Record<string, unknown>) {
+  const value = record.finalRecommendation;
+  return value === "approve" || value === "revise" ? value : undefined;
+}
+
 function pickParseStatus(record: Record<string, unknown>) {
   const value = record.parseStatus;
   return value === "json" || value === "json_extracted" || value === "fallback_text" ? value : undefined;
 }
-
 
 function extractHermesJobId(raw: unknown) {
   const record = asRecord(raw);
@@ -113,6 +144,27 @@ export function buildContentPlannerHermesPayload(input: ContentPlannerHermesInpu
   };
 }
 
+export function buildMarketingReviewHermesPayload(input: MarketingReviewHermesInput): HermesMarketingReviewPayload {
+  return {
+    agentId: "marketing-manager",
+    role: "marketing_reviewer",
+    taskType: "marketing_review",
+    input: {
+      topic: input.topic,
+      title: input.title,
+      channel: input.channel,
+      language: input.language ?? "ko",
+      plannerResult: input.plannerResult,
+    },
+    context: {
+      company: "BG Company",
+      workflow: "content_pipeline",
+      runnerMode: "hermes",
+      dependsOn: "content-planner",
+    },
+  };
+}
+
 export function normalizeHermesRunResponse(raw: unknown, agentId = "content-planner"): NormalizedHermesRunResult {
   const record = pickRecord(raw);
   if (!record) {
@@ -148,6 +200,44 @@ export function normalizeHermesRunResponse(raw: unknown, agentId = "content-plan
   };
 }
 
+export function normalizeMarketingReviewHermesResponse(raw: unknown): MarketingReviewResult {
+  const record = pickRecord(raw);
+  if (!record) {
+    return {
+      ok: false,
+      provider: "hermes",
+      agentId: "marketing-manager",
+      raw,
+      errorCode: "HERMES_INVALID_RESPONSE",
+      errorMessage: "Hermes response did not contain an object result.",
+    };
+  }
+
+  return {
+    ok: true,
+    provider: typeof record.provider === "string" && record.provider === "hermes-bridge" ? "hermes-bridge" : "hermes",
+    agentId: "marketing-manager",
+    reviewSummary: pickString(record, ["reviewSummary", "summary", "outputSummary"]),
+    titleSuggestions: pickStringArray(record, ["titleSuggestions", "titles", "headlineSuggestions"]),
+    recommendedTitle: pickString(record, ["recommendedTitle", "title", "bestTitle"]),
+    thumbnailCopy: pickString(record, ["thumbnailCopy", "thumbnail", "thumbnailText"]),
+    seoKeywords: pickStringArray(record, ["seoKeywords", "keywords", "seo"]),
+    introHook: pickString(record, ["introHook", "hook", "opening"]),
+    promotionCopy: pickPromotionCopy(record),
+    clickPoints: pickStringArray(record, ["clickPoints", "sellingPoints", "appealPoints"]),
+    riskNotes: pickStringArray(record, ["riskNotes", "risks", "risk"]),
+    improvementSuggestions: pickStringArray(record, ["improvementSuggestions", "suggestions", "improvements"]),
+    marketingScore: pickNumber(record, ["marketingScore", "score"]),
+    finalRecommendation: pickRecommendation(record),
+    reason: pickString(record, ["reason", "recommendationReason"]),
+    parseStatus: pickParseStatus(record),
+    rawText: pickString(record, ["rawText"]),
+    hermesJobId: extractHermesJobId(raw),
+    durationMs: typeof record.durationMs === "number" ? record.durationMs : undefined,
+    raw,
+  };
+}
+
 export function hermesRunConfigStatus() {
   const bridge = getHermesBridgeConfig();
   const legacy = getHermesConfig();
@@ -164,22 +254,20 @@ export function hermesRunConfigStatus() {
   };
 }
 
-export async function runContentPlannerHermes(input: ContentPlannerHermesInput): Promise<{
-  payload: HermesContentPlannerPayload;
-  result: NormalizedHermesRunResult;
-}> {
+type HermesBridgePayload = HermesContentPlannerPayload | HermesMarketingReviewPayload;
+
+async function postHermesBridge<T>(payload: HermesBridgePayload, agentId: string, normalize: (raw: unknown) => T): Promise<{ payload: HermesBridgePayload; result: T }> {
   const config = getHermesBridgeConfig();
-  const payload = buildContentPlannerHermesPayload(input);
   if (!config.baseUrl || !config.apiKey) {
     return {
       payload,
       result: {
         ok: false,
         provider: "hermes-bridge",
-        agentId: "content-planner",
+        agentId,
         errorCode: "HERMES_BRIDGE_NOT_CONFIGURED",
         errorMessage: "HERMES_BRIDGE_BASE_URL and BRIDGE_API_KEY are required for runnerMode=hermes.",
-      },
+      } as T,
     };
   }
 
@@ -206,15 +294,15 @@ export async function runContentPlannerHermes(input: ContentPlannerHermesInput):
         result: {
           ok: false,
           provider: "hermes-bridge",
-          agentId: "content-planner",
+          agentId,
           raw,
           errorCode: typeof record?.errorCode === "string" ? record.errorCode : response.status === 401 ? "HERMES_BRIDGE_UNAUTHORIZED" : "HERMES_BRIDGE_HTTP_ERROR",
           errorMessage: extractErrorMessage(raw) ?? `Hermes bridge request failed with HTTP ${response.status}.`,
-        },
+        } as T,
       };
     }
-    const result = normalizeHermesRunResponse(raw, "content-planner");
-    return { payload, result: { ...result, provider: "hermes-bridge" } };
+    const result = normalize(raw);
+    return { payload, result: { ...(result as Record<string, unknown>), provider: "hermes-bridge" } as T };
   } catch (error: unknown) {
     const isTimeout = error instanceof Error && error.name === "AbortError";
     return {
@@ -222,12 +310,30 @@ export async function runContentPlannerHermes(input: ContentPlannerHermesInput):
       result: {
         ok: false,
         provider: "hermes-bridge",
-        agentId: "content-planner",
+        agentId,
         errorCode: isTimeout ? "HERMES_BRIDGE_TIMEOUT" : "HERMES_BRIDGE_NETWORK_ERROR",
         errorMessage: isTimeout ? `Hermes bridge request timed out after ${timeoutMs}ms.` : error instanceof Error ? error.message : "Unknown Hermes bridge request error.",
-      },
+      } as T,
     };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function runContentPlannerHermes(input: ContentPlannerHermesInput): Promise<{
+  payload: HermesContentPlannerPayload;
+  result: NormalizedHermesRunResult;
+}> {
+  const payload = buildContentPlannerHermesPayload(input);
+  const response = await postHermesBridge(payload, "content-planner", (raw) => normalizeHermesRunResponse(raw, "content-planner"));
+  return { payload, result: response.result };
+}
+
+export async function runMarketingReviewHermes(input: MarketingReviewHermesInput): Promise<{
+  payload: HermesMarketingReviewPayload;
+  result: MarketingReviewResult;
+}> {
+  const payload = buildMarketingReviewHermesPayload(input);
+  const response = await postHermesBridge(payload, "marketing-manager", normalizeMarketingReviewHermesResponse);
+  return { payload, result: response.result };
 }

@@ -418,3 +418,27 @@ If the UI shows `HERMES_DAILY_LIMIT_EXCEEDED`, wait for the next KST day or temp
 If a recent Hermes run appears as `10ms` or similarly tiny, check `agentRun.metadata.plannerResult.durationMs`. The UI/API uses that value first and falls back to AgentRun timestamp deltas only when metadata duration is unavailable.
 
 If a content pipeline detail timeline shows repeated `ApprovalRequested` or `ApprovalResolved` items, do not delete database rows. The same event can legitimately be linked to task, approval, and employee timeline targets for audit purposes. The content pipeline detail view deduplicates the response by `eventId`.
+
+
+## Hermes content pipeline runbook update
+
+Phase 1-C.11 운영 기준에서 `runnerMode=hermes`는 콘텐츠 파이프라인당 최대 두 번 Hermes Bridge를 호출한다.
+
+- 1차: `content-planner` 콘텐츠 기획
+- 2차: `marketing-manager` 마케팅 검토
+- QA/Director/게시 단계: Hermes 미사용
+
+운영 확인 순서:
+
+1. `/api/health`와 production health script가 정상인지 확인한다.
+2. `scripts/check-hermes-bridge.sh`로 Bridge health를 확인한다.
+3. UI에서 `runnerMode=mock` 또는 `hermes-dry-run`으로 회귀 테스트를 먼저 수행한다.
+4. 실제 Hermes 실행은 비용이 발생하므로 사용자 승인 후 1회만 수동 실행한다.
+
+문제 발생 시:
+
+- `HERMES_DAILY_LIMIT_EXCEEDED`: 일일 Hermes 실행 제한 또는 남은 횟수 부족
+- `HERMES_BRIDGE_EXECUTION_FAILED`: Bridge는 호출됐지만 Hermes CLI 실행/응답 처리 실패
+- `HERMES_NOT_CONFIGURED`: BG Company web 컨테이너에 Hermes Bridge 환경변수 누락
+
+Bridge allowlist는 `content-planner`와 `marketing-manager`만 허용한다. 임의 agent 실행, cookie 기반 dashboard 우회, Docker socket 접근은 허용하지 않는다.

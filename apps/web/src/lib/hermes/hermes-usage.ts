@@ -33,11 +33,13 @@ export class HermesDailyLimitExceededError extends Error {
   code = "HERMES_DAILY_LIMIT_EXCEEDED";
   status = 429;
   usage: HermesUsageSummary;
+  requiredRuns: number;
 
-  constructor(usage: HermesUsageSummary) {
-    super("오늘 Hermes 실행 가능 횟수를 모두 사용했습니다.");
+  constructor(usage: HermesUsageSummary, requiredRuns = 1) {
+    super(`오늘 남은 Hermes 실행 가능 횟수가 부족합니다. 이번 파이프라인은 ${requiredRuns}회가 필요하지만 현재 ${usage.remaining}회만 남아 있습니다.`);
     this.name = "HermesDailyLimitExceededError";
     this.usage = usage;
+    this.requiredRuns = requiredRuns;
   }
 }
 
@@ -218,6 +220,8 @@ export async function getHermesUsageSummary(options?: { recentLimit?: number; no
         title: getMetadataStringValue(metadata, [
           ["plannerResult", "title"],
           ["plannerResult", "summary"],
+          ["marketingResult", "recommendedTitle"],
+          ["marketingResult", "reviewSummary"],
           ["hermesResponse", "title"],
           ["hermesResponse", "summary"],
           "contentPipelineTitle",
@@ -226,11 +230,13 @@ export async function getHermesUsageSummary(options?: { recentLimit?: number; no
         ]) ?? run.resultSummary,
         parseStatus: getMetadataStringValue(metadata, [
           ["plannerResult", "parseStatus"],
+          ["marketingResult", "parseStatus"],
           ["hermesResponse", "parseStatus"],
           "parseStatus",
         ]),
         provider: getMetadataStringValue(metadata, [
           ["plannerResult", "provider"],
+          ["marketingResult", "provider"],
           ["hermesResponse", "provider"],
           "provider",
         ]),
@@ -239,8 +245,8 @@ export async function getHermesUsageSummary(options?: { recentLimit?: number; no
   };
 }
 
-export async function assertHermesDailyRunAvailable() {
+export async function assertHermesDailyRunAvailable(requiredRuns = 1) {
   const usage = await getHermesUsageSummary({ recentLimit: 5 });
-  if (usage.blocked) throw new HermesDailyLimitExceededError(usage);
+  if (usage.remaining < requiredRuns) throw new HermesDailyLimitExceededError(usage, requiredRuns);
   return usage;
 }
