@@ -410,7 +410,7 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 self.send_json(status, body)
                 return
-            self.send_json(200, normalize_success(stdout, stderr, duration_ms))
+            self.send_json(200, normalize_success(stdout, stderr, duration_ms, agent_id))
         except subprocess.TimeoutExpired:
             duration_ms = int((time.monotonic() - started) * 1000)
             status, body = error_response(
