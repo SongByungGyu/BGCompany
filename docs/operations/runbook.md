@@ -306,7 +306,7 @@ Phase 1-C supports three content pipeline runner modes:
 
 - `mock`: existing mock content result.
 - `hermes-dry-run`: generates and stores the Hermes request payload without calling Hermes.
-- `hermes`: calls Hermes only for `content-planner`.
+- `hermes`: calls Hermes Bridge only for allowed content pipeline agents (`content-planner`, `marketing-manager`).
 
 Required production variables:
 
@@ -442,3 +442,32 @@ Phase 1-C.11 운영 기준에서 `runnerMode=hermes`는 콘텐츠 파이프라�
 - `HERMES_NOT_CONFIGURED`: BG Company web 컨테이너에 Hermes Bridge 환경변수 누락
 
 Bridge allowlist는 `content-planner`와 `marketing-manager`만 허용한다. 임의 agent 실행, cookie 기반 dashboard 우회, Docker socket 접근은 허용하지 않는다.
+
+
+## Hermes Bridge regression test runbook
+
+Phase 1-C.12?? Bridge ??? ??? ?? ?? unittest? ?? ????.
+
+```bash
+python3 -B -m unittest services/hermes-bridge/test_server.py
+```
+
+? ???? ?? Hermes/OpenAI? ???? ?? ?? ??? ????.
+
+- JSON/code fence/embedded JSON/fallback text parser
+- content-planner? marketing-manager ??? schema ??
+- error response shape? secret masking
+- content-planner/content_planning, marketing-manager/marketing_review allowlist
+- ?? `runnerMode=hermes` ??? usage? ?????, content pipeline?? ?? ?? ?? ?? 2?? ????? ??
+
+?? health ??? ?? ?? ???? ??. ? ??? ????? smoke run? ?? ???.
+
+```bash
+bash scripts/check-hermes-bridge.sh
+```
+
+?? Bridge smoke run? ??? ??? ? ???? ??? ?? ? ????? ????.
+
+```bash
+RUN_BRIDGE_SMOKE=1 bash scripts/check-hermes-bridge.sh
+```

@@ -21,6 +21,10 @@ HERMES_MODEL = os.environ.get("HERMES_BRIDGE_MODEL", "gpt-5.4-mini").strip()
 
 ALLOWED_AGENT_IDS = {"content-planner", "marketing-manager"}
 ALLOWED_TASK_TYPES = {"content_planning", "marketing_review"}
+AGENT_TASK_TYPE_PAIRS = {
+    "content-planner": "content_planning",
+    "marketing-manager": "marketing_review",
+}
 SECRET_PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9_\-]{12,}"),
     re.compile(r"Bearer\s+[A-Za-z0-9._\-]{12,}", re.IGNORECASE),
@@ -238,40 +242,22 @@ def build_prompt(payload: dict[str, Any]) -> str:
         return build_marketing_review_prompt(payload)
     return build_content_planner_prompt(payload)
 
-def normalize_success(stdout: str, stderr: str, duration_ms: int, agent_id: str) -> dict[str, Any]:
+
+def is_agent_task_allowed(agent_id: str, task_type: str) -> bool:
+    return AGENT_TASK_TYPE_PAIRS.get(agent_id) == task_type
+
+
+def normalize_common(stdout: str, stderr: str, duration_ms: int, agent_id: str) -> tuple[dict[str, Any], dict[str, Any], str]:
     stdout = mask_secrets(stdout)
     stderr = mask_secrets(stderr)
     parsed, parse_status = parse_jsonish_stdout(stdout)
     parsed = parsed or {}
     raw_stdout, stdout_truncated = truncate_bytes(stdout, MAX_STDOUT_BYTES)
     raw_stderr, stderr_truncated = truncate_bytes(stderr, MAX_STDOUT_BYTES)
-    content = pick_string(parsed, "content", "body", "draft", "article") or stdout.strip()
-    return {
+    common = {
         "ok": True,
         "provider": "hermes-bridge",
         "agentId": agent_id,
-        "title": pick_string(parsed, "title", "outputTitle", "headline"),
-        "summary": pick_string(parsed, "summary", "outputSummary", "description"),
-        "outline": pick_outline(parsed),
-        "draftDirection": pick_string(parsed, "draftDirection", "direction", "strategy"),
-        "content": content,
-        "seoKeywords": pick_string_list(parsed, "seoKeywords", "keywords", "seo"),
-        "targetAudience": pick_string(parsed, "targetAudience", "audience", "reader"),
-        "tone": pick_string(parsed, "tone", "voice", "style"),
-        "thumbnailIdea": pick_string(parsed, "thumbnailIdea", "thumbnail", "visualIdea"),
-        "cta": pick_string(parsed, "cta", "callToAction", "action"),
-        "reviewSummary": pick_string(parsed, "reviewSummary", "summary", "outputSummary"),
-        "titleSuggestions": pick_string_list(parsed, "titleSuggestions", "titles", "headlineSuggestions"),
-        "recommendedTitle": pick_string(parsed, "recommendedTitle", "title", "bestTitle"),
-        "thumbnailCopy": pick_string(parsed, "thumbnailCopy", "thumbnail", "thumbnailText"),
-        "introHook": pick_string(parsed, "introHook", "hook", "opening"),
-        "promotionCopy": parsed.get("promotionCopy") if isinstance(parsed.get("promotionCopy"), dict) else None,
-        "clickPoints": pick_string_list(parsed, "clickPoints", "sellingPoints", "appealPoints"),
-        "riskNotes": pick_string_list(parsed, "riskNotes", "risks", "risk"),
-        "improvementSuggestions": pick_string_list(parsed, "improvementSuggestions", "suggestions", "improvements"),
-        "marketingScore": parsed.get("marketingScore") if isinstance(parsed.get("marketingScore"), (int, float)) else None,
-        "finalRecommendation": parsed.get("finalRecommendation") if parsed.get("finalRecommendation") in ("approve", "revise") else None,
-        "reason": pick_string(parsed, "reason", "recommendationReason"),
         "parseStatus": parse_status,
         "rawText": raw_stdout,
         "durationMs": duration_ms,
@@ -284,6 +270,57 @@ def normalize_success(stdout: str, stderr: str, duration_ms: int, agent_id: str)
             "parseStatus": parse_status,
         },
     }
+    return common, parsed, raw_stdout
+
+
+def normalize_content_planner_success(stdout: str, stderr: str, duration_ms: int, agent_id: str) -> dict[str, Any]:
+    common, parsed, raw_stdout = normalize_common(stdout, stderr, duration_ms, agent_id)
+    content = pick_string(parsed, "content", "body", "draft", "article") or raw_stdout.strip()
+    return {
+        **common,
+        "title": pick_string(parsed, "title", "outputTitle", "headline"),
+        "summary": pick_string(parsed, "summary", "outputSummary", "description"),
+        "outline": pick_outline(parsed),
+        "draftDirection": pick_string(parsed, "draftDirection", "direction", "strategy"),
+        "content": content,
+        "seoKeywords": pick_string_list(parsed, "seoKeywords", "keywords", "seo"),
+        "targetAudience": pick_string(parsed, "targetAudience", "audience", "reader"),
+        "tone": pick_string(parsed, "tone", "voice", "style"),
+        "thumbnailIdea": pick_string(parsed, "thumbnailIdea", "thumbnail", "visualIdea"),
+        "cta": pick_string(parsed, "cta", "callToAction", "action"),
+    }
+
+
+def normalize_marketing_manager_success(stdout: str, stderr: str, duration_ms: int, agent_id: str) -> dict[str, Any]:
+    common, parsed, raw_stdout = normalize_common(stdout, stderr, duration_ms, agent_id)
+    promotion_copy = parsed.get("promotionCopy") if isinstance(parsed.get("promotionCopy"), dict) else None
+    if promotion_copy is not None:
+        promotion_copy = {
+            "short": pick_string(promotion_copy, "short"),
+            "long": pick_string(promotion_copy, "long"),
+        }
+    return {
+        **common,
+        "reviewSummary": pick_string(parsed, "reviewSummary", "summary", "outputSummary") or raw_stdout.strip(),
+        "titleSuggestions": pick_string_list(parsed, "titleSuggestions", "titles", "headlineSuggestions"),
+        "recommendedTitle": pick_string(parsed, "recommendedTitle", "bestTitle"),
+        "thumbnailCopy": pick_string(parsed, "thumbnailCopy", "thumbnail", "thumbnailText"),
+        "seoKeywords": pick_string_list(parsed, "seoKeywords", "keywords", "seo"),
+        "introHook": pick_string(parsed, "introHook", "hook", "opening"),
+        "promotionCopy": promotion_copy,
+        "clickPoints": pick_string_list(parsed, "clickPoints", "sellingPoints", "appealPoints"),
+        "riskNotes": pick_string_list(parsed, "riskNotes", "risks", "risk"),
+        "improvementSuggestions": pick_string_list(parsed, "improvementSuggestions", "suggestions", "improvements"),
+        "marketingScore": parsed.get("marketingScore") if isinstance(parsed.get("marketingScore"), (int, float)) else None,
+        "finalRecommendation": parsed.get("finalRecommendation") if parsed.get("finalRecommendation") in ("approve", "revise") else None,
+        "reason": pick_string(parsed, "reason", "recommendationReason"),
+    }
+
+
+def normalize_success(stdout: str, stderr: str, duration_ms: int, agent_id: str) -> dict[str, Any]:
+    if agent_id == "marketing-manager":
+        return normalize_marketing_manager_success(stdout, stderr, duration_ms, agent_id)
+    return normalize_content_planner_success(stdout, stderr, duration_ms, agent_id)
 
 def error_response(code: str, message: str, status: int, *, agent_id: str = "content-planner", raw: dict[str, Any] | None = None) -> tuple[int, dict[str, Any]]:
     return status, {
@@ -360,7 +397,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(status, body)
             return
         agent_id = str(payload.get("agentId") or "")
-        if agent_id not in ALLOWED_AGENT_IDS or payload.get("taskType") not in ALLOWED_TASK_TYPES:
+        task_type = str(payload.get("taskType") or "")
+        if not is_agent_task_allowed(agent_id, task_type):
             status, body = error_response(
                 "HERMES_BRIDGE_AGENT_NOT_ALLOWED",
                 "Only content-planner/content_planning and marketing-manager/marketing_review runs are allowed by this bridge.",
@@ -371,7 +409,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(status, body)
             return
         if not semaphore.acquire(blocking=False):
-            status, body = error_response("HERMES_BRIDGE_BUSY", "Hermes bridge concurrency limit reached.", 429)
+            status, body = error_response("HERMES_BRIDGE_BUSY", "Hermes bridge concurrency limit reached.", 429, agent_id=agent_id)
             self.send_json(status, body)
             return
 
@@ -392,6 +430,7 @@ class Handler(BaseHTTPRequestHandler):
                     "HERMES_BRIDGE_STDOUT_TOO_LARGE",
                     f"Hermes stdout exceeded {MAX_STDOUT_BYTES} bytes.",
                     502,
+                    agent_id=agent_id,
                     raw={"durationMs": duration_ms},
                 )
                 self.send_json(status, body)
@@ -401,6 +440,7 @@ class Handler(BaseHTTPRequestHandler):
                     "HERMES_BRIDGE_EXECUTION_FAILED",
                     stderr.strip() or stdout.strip() or f"Hermes exited with code {completed.returncode}.",
                     502,
+                    agent_id=agent_id,
                     raw={
                         "exitCode": completed.returncode,
                         "stdoutPreview": truncate_bytes(mask_secrets(stdout), MAX_STDOUT_BYTES)[0],
@@ -417,11 +457,12 @@ class Handler(BaseHTTPRequestHandler):
                 "HERMES_BRIDGE_TIMEOUT",
                 f"Hermes command timed out after {TIMEOUT_MS}ms.",
                 504,
+                agent_id=agent_id,
                 raw={"durationMs": duration_ms},
             )
             self.send_json(status, body)
         except Exception as exc:
-            status, body = error_response("HERMES_BRIDGE_INTERNAL_ERROR", str(exc), 500)
+            status, body = error_response("HERMES_BRIDGE_INTERNAL_ERROR", str(exc), 500, agent_id=agent_id or "unknown")
             self.send_json(status, body)
         finally:
             semaphore.release()
