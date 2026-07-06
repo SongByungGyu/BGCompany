@@ -19,11 +19,12 @@ MAX_BODY_BYTES = int(os.environ.get("HERMES_BRIDGE_MAX_BODY_BYTES", "1048576"))
 HERMES_PROVIDER = os.environ.get("HERMES_BRIDGE_PROVIDER", "openai-api").strip()
 HERMES_MODEL = os.environ.get("HERMES_BRIDGE_MODEL", "gpt-5.4-mini").strip()
 
-ALLOWED_AGENT_IDS = {"content-planner", "marketing-manager", "qa-auditor"}
-ALLOWED_TASK_TYPES = {"content_planning", "marketing_review", "qa_review"}
+ALLOWED_AGENT_IDS = {"content-planner", "marketing-manager", "content-writer", "qa-auditor"}
+ALLOWED_TASK_TYPES = {"content_planning", "marketing_review", "content_writing", "qa_review"}
 AGENT_TASK_TYPE_PAIRS = {
     "content-planner": "content_planning",
     "marketing-manager": "marketing_review",
+    "content-writer": "content_writing",
     "qa-auditor": "qa_review",
 }
 SECRET_PATTERNS = [
@@ -237,7 +238,7 @@ content-planner가 만든 결과를 바탕으로 {language} 언어의 {channel} 
 """.strip()
 
 
-def build_qa_audit_prompt(payload: dict[str, Any]) -> str:
+def build_content_writer_prompt(payload: dict[str, Any]) -> str:
     input_data = payload.get("input") if isinstance(payload.get("input"), dict) else {}
     topic = str(input_data.get("topic") or "").strip()
     title = str(input_data.get("title") or "").strip()
@@ -248,8 +249,8 @@ def build_qa_audit_prompt(payload: dict[str, Any]) -> str:
     planner_json = json.dumps(planner_result, ensure_ascii=False, indent=2)
     marketing_json = json.dumps(marketing_result, ensure_ascii=False, indent=2)
     return f"""
-너는 BG Company의 qa-auditor AI 직원이다.
-content-planner와 marketing-manager가 만든 결과를 바탕으로 {language} 언어의 {channel} 콘텐츠 게시 전 QA/감사 검토를 수행한다.
+너는 BG Company의 content-writer AI 직원이다.
+content-planner의 기획안과 marketing-manager의 검토안을 바탕으로 {language} 언어의 {channel} 게시용 본문 초안을 작성한다.
 
 입력:
 - topic: {topic}
@@ -261,7 +262,67 @@ content-planner와 marketing-manager가 만든 결과를 바탕으로 {language}
 {marketing_json}
 
 역할:
-- 사실성, 과장 표현, 논리 흐름, 오탈자/문체, 광고성/허위 표현 리스크를 검토한다.
+- 기획 의도와 마케팅 검토를 반영해 실제 게시 가능한 본문 초안을 작성한다.
+- 제목, 메타 설명, 도입부, 본문 섹션, 결론, CTA를 분리한다.
+- 과장 광고, 검증되지 않은 수치, 실제 운영으로 오해될 표현은 피한다.
+- 실제 게시, 외부 발송, 결제, 승인 처리는 하지 않는다.
+
+엄격한 출력 규칙:
+- 반드시 JSON 객체만 출력한다.
+- JSON 앞뒤 설명 문장, markdown, code fence를 절대 쓰지 않는다.
+- 한국어로 작성한다.
+- sections는 최소 3개 이상이며 각 항목은 heading과 body를 가진다.
+- fullDraft 또는 markdownDraft 중 하나 이상은 반드시 작성한다.
+
+출력 JSON schema:
+{{
+  "finalTitle": "최종 게시 제목",
+  "metaDescription": "검색/공유용 메타 설명",
+  "introduction": "도입부 문단",
+  "sections": [
+    {{ "heading": "섹션 제목 1", "body": "섹션 본문 1" }},
+    {{ "heading": "섹션 제목 2", "body": "섹션 본문 2" }},
+    {{ "heading": "섹션 제목 3", "body": "섹션 본문 3" }}
+  ],
+  "conclusion": "마무리 문단",
+  "cta": "행동 유도 문구",
+  "fullDraft": "게시 가능한 전체 초안",
+  "markdownDraft": "Markdown 형식 초안",
+  "usedSeoKeywords": ["키워드 1", "키워드 2"],
+  "writingNotes": ["작성 메모 1"]
+}}
+""".strip()
+
+
+def build_qa_audit_prompt(payload: dict[str, Any]) -> str:
+    input_data = payload.get("input") if isinstance(payload.get("input"), dict) else {}
+    topic = str(input_data.get("topic") or "").strip()
+    title = str(input_data.get("title") or "").strip()
+    channel = str(input_data.get("channel") or "blog").strip()
+    language = str(input_data.get("language") or "ko").strip()
+    planner_result = input_data.get("plannerResult") if isinstance(input_data.get("plannerResult"), dict) else {}
+    marketing_result = input_data.get("marketingResult") if isinstance(input_data.get("marketingResult"), dict) else {}
+    writer_result = input_data.get("writerResult") if isinstance(input_data.get("writerResult"), dict) else {}
+    planner_json = json.dumps(planner_result, ensure_ascii=False, indent=2)
+    marketing_json = json.dumps(marketing_result, ensure_ascii=False, indent=2)
+    writer_json = json.dumps(writer_result, ensure_ascii=False, indent=2)
+    return f"""
+너는 BG Company의 qa-auditor AI 직원이다.
+content-planner, marketing-manager, content-writer가 만든 결과를 바탕으로 {language} 언어의 {channel} 콘텐츠 게시 전 QA/감사 검토를 수행한다.
+
+입력:
+- topic: {topic}
+- original title: {title}
+- channel: {channel}
+- content-planner result:
+{planner_json}
+- marketing-manager result:
+{marketing_json}
+- content-writer result:
+{writer_json}
+
+역할:
+- content-writer가 작성한 최종 초안을 기준으로 사실성, 과장 표현, 논리 흐름, 오탈자/문체, 광고성/허위 표현 리스크를 검토한다.
 - 게시 전 반드시 수정해야 할 사항과 선택 개선 사항을 구분한다.
 - 모르는 사실은 추측하지 말고 "추가 확인 필요"라고 표시한다.
 - 실제 게시, 외부 발송, 결제, 승인 처리는 하지 않는다.
@@ -295,6 +356,8 @@ def build_prompt(payload: dict[str, Any]) -> str:
     agent_id = payload.get("agentId")
     if agent_id == "marketing-manager":
         return build_marketing_review_prompt(payload)
+    if agent_id == "content-writer":
+        return build_content_writer_prompt(payload)
     if agent_id == "qa-auditor":
         return build_qa_audit_prompt(payload)
     return build_content_planner_prompt(payload)
@@ -374,6 +437,41 @@ def normalize_marketing_manager_success(stdout: str, stderr: str, duration_ms: i
     }
 
 
+def pick_writer_sections(record: dict[str, Any]) -> list[dict[str, str]] | None:
+    value = record.get("sections") or record.get("bodySections")
+    if not isinstance(value, list):
+        return None
+    result: list[dict[str, str]] = []
+    for item in value:
+        if isinstance(item, str) and item.strip():
+            result.append({"heading": f"Section {len(result) + 1}", "body": item.strip()})
+        elif isinstance(item, dict):
+            heading = pick_string(item, "heading", "title", "name") or f"Section {len(result) + 1}"
+            body = pick_string(item, "body", "content", "text", "draft")
+            if body:
+                result.append({"heading": heading, "body": body})
+    return result or None
+
+
+def normalize_content_writer_success(stdout: str, stderr: str, duration_ms: int, agent_id: str) -> dict[str, Any]:
+    common, parsed, raw_stdout = normalize_common(stdout, stderr, duration_ms, agent_id)
+    full_draft = pick_string(parsed, "fullDraft", "draft", "content", "article", "body") or raw_stdout.strip()
+    return {
+        **common,
+        "finalTitle": pick_string(parsed, "finalTitle", "title", "headline"),
+        "metaDescription": pick_string(parsed, "metaDescription", "description", "summary"),
+        "introduction": pick_string(parsed, "introduction", "intro", "opening"),
+        "sections": pick_writer_sections(parsed),
+        "conclusion": pick_string(parsed, "conclusion", "closing"),
+        "cta": pick_string(parsed, "cta", "callToAction", "action"),
+        "fullDraft": full_draft,
+        "markdownDraft": pick_string(parsed, "markdownDraft", "markdown", "fullDraft"),
+        "htmlDraft": pick_string(parsed, "htmlDraft", "html"),
+        "usedSeoKeywords": pick_string_list(parsed, "usedSeoKeywords", "seoKeywords", "keywords"),
+        "writingNotes": pick_string_list(parsed, "writingNotes", "notes", "memo"),
+    }
+
+
 def normalize_qa_auditor_success(stdout: str, stderr: str, duration_ms: int, agent_id: str) -> dict[str, Any]:
     common, parsed, raw_stdout = normalize_common(stdout, stderr, duration_ms, agent_id)
     publish_readiness = parsed.get("publishReadiness")
@@ -397,6 +495,8 @@ def normalize_qa_auditor_success(stdout: str, stderr: str, duration_ms: int, age
 def normalize_success(stdout: str, stderr: str, duration_ms: int, agent_id: str) -> dict[str, Any]:
     if agent_id == "marketing-manager":
         return normalize_marketing_manager_success(stdout, stderr, duration_ms, agent_id)
+    if agent_id == "content-writer":
+        return normalize_content_writer_success(stdout, stderr, duration_ms, agent_id)
     if agent_id == "qa-auditor":
         return normalize_qa_auditor_success(stdout, stderr, duration_ms, agent_id)
     return normalize_content_planner_success(stdout, stderr, duration_ms, agent_id)
@@ -480,7 +580,7 @@ class Handler(BaseHTTPRequestHandler):
         if not is_agent_task_allowed(agent_id, task_type):
             status, body = error_response(
                 "HERMES_BRIDGE_AGENT_NOT_ALLOWED",
-                "Only content-planner/content_planning, marketing-manager/marketing_review, and qa-auditor/qa_review runs are allowed by this bridge.",
+                "Only content-planner/content_planning, marketing-manager/marketing_review, content-writer/content_writing, and qa-auditor/qa_review runs are allowed by this bridge.",
                 403,
                 agent_id=agent_id or "unknown",
                 raw={"agentId": payload.get("agentId"), "taskType": payload.get("taskType")},

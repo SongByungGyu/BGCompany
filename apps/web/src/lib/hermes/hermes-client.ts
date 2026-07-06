@@ -1,7 +1,10 @@
 import { getHermesConfig } from "@/lib/agents/hermes-client";
 import type {
   ContentPlannerHermesInput,
+  ContentWriterHermesInput,
+  ContentWriterResult,
   HermesContentPlannerPayload,
+  HermesContentWriterPayload,
   HermesMarketingReviewPayload,
   HermesQaAuditPayload,
   MarketingReviewHermesInput,
@@ -81,6 +84,24 @@ function pickStringArray(record: Record<string, unknown>, keys: string[]) {
     }
   }
   return undefined;
+}
+
+type PickedWriterSection = { heading?: string; body?: string };
+
+function pickWriterSections(record: Record<string, unknown>): PickedWriterSection[] | undefined {
+  const value = record.sections ?? record.bodySections ?? record.articleSections;
+  if (!Array.isArray(value)) return undefined;
+  const sections = value
+    .map((item): PickedWriterSection | null => {
+      if (typeof item === "string" && item.trim()) return { body: item.trim() };
+      const section = asRecord(item);
+      if (!section) return null;
+      const heading = pickString(section, ["heading", "title", "sectionTitle"]);
+      const body = pickString(section, ["body", "content", "text", "paragraph"]);
+      return heading || body ? { heading, body } : null;
+    })
+    .filter((item): item is PickedWriterSection => Boolean(item));
+  return sections.length > 0 ? sections : undefined;
 }
 
 function pickPromotionCopy(record: Record<string, unknown>) {
@@ -178,11 +199,11 @@ export function buildMarketingReviewHermesPayload(input: MarketingReviewHermesIn
   };
 }
 
-export function buildQaAuditHermesPayload(input: QaAuditHermesInput): HermesQaAuditPayload {
+export function buildContentWriterHermesPayload(input: ContentWriterHermesInput): HermesContentWriterPayload {
   return {
-    agentId: "qa-auditor",
-    role: "qa_auditor",
-    taskType: "qa_review",
+    agentId: "content-writer",
+    role: "content_writer",
+    taskType: "content_writing",
     input: {
       topic: input.topic,
       title: input.title,
@@ -196,6 +217,29 @@ export function buildQaAuditHermesPayload(input: QaAuditHermesInput): HermesQaAu
       workflow: "content_pipeline",
       runnerMode: "hermes",
       dependsOn: ["content-planner", "marketing-manager"],
+    },
+  };
+}
+
+export function buildQaAuditHermesPayload(input: QaAuditHermesInput): HermesQaAuditPayload {
+  return {
+    agentId: "qa-auditor",
+    role: "qa_auditor",
+    taskType: "qa_review",
+    input: {
+      topic: input.topic,
+      title: input.title,
+      channel: input.channel,
+      language: input.language ?? "ko",
+      plannerResult: input.plannerResult,
+      marketingResult: input.marketingResult,
+      writerResult: input.writerResult,
+    },
+    context: {
+      company: "BG Company",
+      workflow: "content_pipeline",
+      runnerMode: "hermes",
+      dependsOn: ["content-planner", "marketing-manager", "content-writer"],
     },
   };
 }
@@ -273,6 +317,42 @@ export function normalizeMarketingReviewHermesResponse(raw: unknown): MarketingR
   };
 }
 
+export function normalizeContentWriterHermesResponse(raw: unknown): ContentWriterResult {
+  const record = pickRecord(raw);
+  if (!record) {
+    return {
+      ok: false,
+      provider: "hermes",
+      agentId: "content-writer",
+      raw,
+      errorCode: "HERMES_INVALID_RESPONSE",
+      errorMessage: "Hermes response did not contain an object result.",
+    };
+  }
+
+  return {
+    ok: true,
+    provider: typeof record.provider === "string" && record.provider === "hermes-bridge" ? "hermes-bridge" : "hermes",
+    agentId: "content-writer",
+    finalTitle: pickString(record, ["finalTitle", "title", "headline"]),
+    metaDescription: pickString(record, ["metaDescription", "description", "summary"]),
+    introduction: pickString(record, ["introduction", "intro", "opening"]),
+    sections: pickWriterSections(record),
+    conclusion: pickString(record, ["conclusion", "closing"]),
+    cta: pickString(record, ["cta", "callToAction"]),
+    fullDraft: pickString(record, ["fullDraft", "draft", "content", "article", "body"]),
+    markdownDraft: pickString(record, ["markdownDraft", "markdown", "md"]),
+    htmlDraft: pickString(record, ["htmlDraft", "html"]),
+    usedSeoKeywords: pickStringArray(record, ["usedSeoKeywords", "seoKeywords", "keywords", "seo"]),
+    writingNotes: pickStringArray(record, ["writingNotes", "notes", "writerNotes"]),
+    parseStatus: pickParseStatus(record),
+    rawText: pickString(record, ["rawText"]),
+    hermesJobId: extractHermesJobId(raw),
+    durationMs: typeof record.durationMs === "number" ? record.durationMs : undefined,
+    raw,
+  };
+}
+
 export function normalizeQaAuditHermesResponse(raw: unknown): QaAuditResult {
   const record = pickRecord(raw);
   if (!record) {
@@ -325,7 +405,7 @@ export function hermesRunConfigStatus() {
   };
 }
 
-type HermesBridgePayload = HermesContentPlannerPayload | HermesMarketingReviewPayload | HermesQaAuditPayload;
+type HermesBridgePayload = HermesContentPlannerPayload | HermesMarketingReviewPayload | HermesContentWriterPayload | HermesQaAuditPayload;
 
 async function postHermesBridge<T>(payload: HermesBridgePayload, agentId: string, normalize: (raw: unknown) => T): Promise<{ payload: HermesBridgePayload; result: T }> {
   const config = getHermesBridgeConfig();
@@ -409,6 +489,15 @@ export async function runMarketingReviewHermes(input: MarketingReviewHermesInput
   return { payload, result: response.result };
 }
 
+
+export async function runContentWriterHermes(input: ContentWriterHermesInput): Promise<{
+  payload: HermesContentWriterPayload;
+  result: ContentWriterResult;
+}> {
+  const payload = buildContentWriterHermesPayload(input);
+  const response = await postHermesBridge(payload, "content-writer", normalizeContentWriterHermesResponse);
+  return { payload, result: response.result };
+}
 
 export async function runQaAuditHermes(input: QaAuditHermesInput): Promise<{
   payload: HermesQaAuditPayload;

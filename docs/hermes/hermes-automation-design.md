@@ -324,9 +324,9 @@ Limit exceeded response:
 ```
 
 
-## Phase 1-C.11 execution scope update
+## Phase 1-C.14 execution scope update
 
-Hermes 자동 실행 범위가 `content-planner` 단일 실행에서 `content-planner`와 `marketing-manager` 2단계 실행으로 확장되었다.
+Hermes 자동 실행 범위가 `content-planner`, `marketing-manager`, `content-writer`, `qa-auditor` 4단계 실행으로 확장되었다.
 
 실행 순서:
 
@@ -335,17 +335,20 @@ content-planner Hermes
 → content planning result 저장
 → marketing-manager Hermes
 → marketing review result 저장
-→ qa-auditor mock
+→ content-writer Hermes
+→ publish-ready draft result 저장
+→ qa-auditor Hermes
+→ QA result 저장
 → Director approval
 → task / approval / event / timeline 반영
 ```
 
-`marketing-manager`는 콘텐츠 기획 결과를 입력으로 받아 마케팅 검토 JSON을 생성한다. QA와 Director 승인 단계는 아직 Hermes로 전환하지 않고 기존 mock/DB workflow를 유지한다.
+`content-writer`는 기획 결과와 마케팅 검토 결과를 입력으로 받아 게시용 본문 초안 JSON을 생성한다. `qa-auditor`는 기획/마케팅/본문 결과를 모두 입력으로 받아 게시 준비 상태와 리스크를 검토한다. Director 승인 단계는 BG Company 내부 승인 workflow로 유지하며 Hermes가 실제 게시, SNS 발행, 외부 메시지 발송을 수행하지 않는다.
 
 운영 비용 정책:
 
-- Hermes 실제 실행 파이프라인 1건은 최대 2회 bridge call을 사용할 수 있다.
-- 시작 전 남은 일일 실행 가능 횟수가 2회 미만이면 차단한다.
+- Hermes 실제 실행 파이프라인 1건은 최대 4회 bridge call을 사용할 수 있다.
+- 시작 전 남은 일일 실행 가능 횟수가 4회 미만이면 차단한다.
 - 실패한 실제 Hermes 실행도 AgentRun 기록 기준으로 사용량에 포함한다.
 - dry-run/mock은 비용이 발생하지 않는다.
 

@@ -9,9 +9,15 @@ export type MarketingReviewHermesInput = ContentPlannerHermesInput & {
   plannerResult?: Record<string, unknown>;
 };
 
+export type ContentWriterHermesInput = ContentPlannerHermesInput & {
+  plannerResult?: Record<string, unknown>;
+  marketingResult?: Record<string, unknown>;
+};
+
 export type QaAuditHermesInput = ContentPlannerHermesInput & {
   plannerResult?: Record<string, unknown>;
   marketingResult?: Record<string, unknown>;
+  writerResult?: Record<string, unknown>;
 };
 
 export type HermesContentPlannerPayload = {
@@ -50,10 +56,10 @@ export type HermesMarketingReviewPayload = {
   };
 };
 
-export type HermesQaAuditPayload = {
-  agentId: "qa-auditor";
-  role: "qa_auditor";
-  taskType: "qa_review";
+export type HermesContentWriterPayload = {
+  agentId: "content-writer";
+  role: "content_writer";
+  taskType: "content_writing";
   input: {
     topic: string;
     title: string;
@@ -67,6 +73,27 @@ export type HermesQaAuditPayload = {
     workflow: "content_pipeline";
     runnerMode: "hermes";
     dependsOn: ["content-planner", "marketing-manager"];
+  };
+};
+
+export type HermesQaAuditPayload = {
+  agentId: "qa-auditor";
+  role: "qa_auditor";
+  taskType: "qa_review";
+  input: {
+    topic: string;
+    title: string;
+    channel: string;
+    language: "ko" | "en";
+    plannerResult?: Record<string, unknown>;
+    marketingResult?: Record<string, unknown>;
+    writerResult?: Record<string, unknown>;
+  };
+  context: {
+    company: "BG Company";
+    workflow: "content_pipeline";
+    runnerMode: "hermes";
+    dependsOn: ["content-planner", "marketing-manager", "content-writer"];
   };
 };
 
@@ -121,6 +148,35 @@ export type MarketingReviewResult = {
   errorMessage?: string;
 };
 
+
+export type ContentWriterSection = {
+  heading?: string;
+  body?: string;
+};
+
+export type ContentWriterResult = {
+  ok: boolean;
+  provider: "hermes" | "hermes-bridge";
+  agentId: string;
+  finalTitle?: string;
+  metaDescription?: string;
+  introduction?: string;
+  sections?: ContentWriterSection[];
+  conclusion?: string;
+  cta?: string;
+  fullDraft?: string;
+  markdownDraft?: string;
+  htmlDraft?: string;
+  usedSeoKeywords?: string[];
+  writingNotes?: string[];
+  parseStatus?: HermesParseStatus;
+  rawText?: string;
+  raw?: unknown;
+  hermesJobId?: string;
+  durationMs?: number;
+  errorCode?: string;
+  errorMessage?: string;
+};
 
 export type QaAuditResult = {
   ok: boolean;

@@ -2,7 +2,7 @@
 
 ## 목적
 
-`hermes-bridge`는 BG Company Phase 1-C.7에서 `content-planner`만 실제 Hermes CLI로 실행하기 위한 내부 전용 서비스다. Hermes dashboard의 로그인 cookie를 재사용하지 않고, `hermes -z` oneshot 경로만 제한적으로 감싼다.
+`hermes-bridge`는 BG Company Phase 1-C에서 콘텐츠 파이프라인의 허용된 Hermes 실행 단계만 실제 Hermes CLI로 실행하기 위한 내부 전용 서비스다. Hermes dashboard의 로그인 cookie를 재사용하지 않고, `hermes -z` oneshot 경로만 제한적으로 감싼다.
 
 ## 구조
 
@@ -22,7 +22,7 @@ BG Company web
 - Docker socket mount 없음
 - web 컨테이너에서 `docker exec` 직접 실행 없음
 - `/run`은 `x-bridge-api-key` 필요
-- allowlist: `content-planner/content_planning`, `marketing-manager/marketing_review`
+- allowlist: `content-planner/content_planning`, `marketing-manager/marketing_review`, `content-writer/content_writing`, `qa-auditor/qa_review`
 - shell command 문자열을 만들지 않고 argv 배열로 실행
 - timeout/stdout size/concurrency 제한 적용
 
@@ -142,22 +142,24 @@ title/summary
 Content pipeline detail timelines can contain the same event attached to multiple targets (`task`, `approval`, `employee`). The database audit rows are preserved. The detail response deduplicates only the display result by `eventId` so the same event is not repeated on one screen.
 
 
-## Phase 1-C.11: marketing-manager Hermes review
+## Phase 1-C.14: four-agent Hermes content pipeline
 
-Phase 1-C.11부터 `runnerMode=hermes` 콘텐츠 파이프라인은 최대 두 번의 Hermes Bridge 실행을 사용한다.
+Phase 1-C.14부터 `runnerMode=hermes` 콘텐츠 파이프라인은 최대 네 번의 Hermes Bridge 실행을 사용한다.
 
 1. `content-planner` / `content_planning`: 콘텐츠 기획 초안 생성
-2. `marketing-manager` / `marketing_review`: 기획 결과를 기반으로 제목, 썸네일 문구, SEO 키워드, 홍보 문안, 리스크, 개선안을 검토
+2. `marketing-manager` / `marketing_review`: 기획 결과를 기반으로 제목, SEO 키워드, 홍보 문안, 리스크, 개선안을 검토
+3. `content-writer` / `content_writing`: 기획/마케팅 결과를 기반으로 게시용 본문 초안 작성
+4. `qa-auditor` / `qa_review`: 기획/마케팅/본문 결과를 기반으로 품질, 사실성, 리스크, 게시 준비 상태 검토
 
-Bridge allowlist는 여전히 내부 전용 최소 범위로 유지한다.
+Bridge allowlist는 내부 전용 최소 범위로 유지한다.
 
-- 허용 agent: `content-planner`, `marketing-manager`
-- 허용 task type: `content_planning`, `marketing_review`
-- 미허용: `qa-auditor`, `director`, 게시/외부 발행, 임의 CLI 작업
+- 허용 agent: `content-planner`, `marketing-manager`, `content-writer`, `qa-auditor`
+- 허용 task type: `content_planning`, `marketing_review`, `content_writing`, `qa_review`
+- 미허용: `director`, 게시/외부 발행, 임의 CLI 작업, allowlist에 없는 agent/task 조합
 
-`marketing-manager` 실행 payload에는 `content-planner` 결과 요약이 포함된다. Bridge는 Hermes CLI 응답에서 JSON object를 우선 추출하고, 파싱 실패 시 원문 fallback을 보존한다.
+`content-writer` 실행 payload에는 `content-planner` 결과와 `marketing-manager` 결과가 포함된다. `qa-auditor` 실행 payload에는 planner/marketing/writer 결과가 모두 포함된다. Bridge는 Hermes CLI 응답에서 JSON object를 우선 추출하고, 파싱 실패 시 원문 fallback을 보존한다.
 
-비용 가드레일은 파이프라인 시작 전에 남은 Hermes 실행 가능 횟수가 2회 이상인지 확인한다. `mock`과 `hermes-dry-run`은 실제 Hermes Bridge를 호출하지 않으므로 이 제한에서 제외된다.
+비용 가드레일은 파이프라인 시작 전에 남은 Hermes 실행 가능 횟수가 4회 이상인지 확인한다. `mock`과 `hermes-dry-run`은 실제 Hermes Bridge를 호출하지 않으므로 이 제한에서 제외된다.
 
 보안 원칙은 변하지 않는다.
 
@@ -184,7 +186,7 @@ python3 -B -m unittest services/hermes-bridge/test_server.py
 - `agentId`? schema ??: content ??? marketing schema?, marketing ??? content schema? ??? ??
 - Bridge error response shape? secret masking
 - timeout/error ??? `ok=false`, `provider=hermes-bridge`, `agentId`, `errorCode`, `errorMessage` ??
-- allowlist: `content-planner/content_planning`, `marketing-manager/marketing_review`? ??
+- allowlist: `content-planner/content_planning`, `marketing-manager/marketing_review`, `content-writer/content_writing`, `qa-auditor/qa_review`? ??
 - usage guardrail contract: ?? `runnerMode=hermes` content pipeline AgentRun? ????? ?????? 2? ?? ?? ??? ??
 
 ??:

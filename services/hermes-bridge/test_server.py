@@ -61,6 +61,29 @@ class NormalizeSuccessTests(unittest.TestCase):
         self.assertNotIn("reviewSummary", result)
         self.assertNotIn("recommendedTitle", result)
 
+    def test_content_writer_schema(self) -> None:
+        stdout = json.dumps({
+            "finalTitle": "BG Company 구축기",
+            "metaDescription": "AI 개인회사 구축 과정 요약",
+            "introduction": "도입부입니다.",
+            "sections": [{"heading": "시작", "body": "본문입니다."}, "문자열 섹션"],
+            "conclusion": "마무리입니다.",
+            "cta": "다음 편을 확인하세요.",
+            "markdownDraft": "# BG Company 구축기",
+            "usedSeoKeywords": ["AI 개인회사", "Hermes"],
+            "writingNotes": ["과장 표현 없음"],
+        }, ensure_ascii=False)
+        result = bridge.normalize_success(stdout, "", 1500, "content-writer")
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["agentId"], "content-writer")
+        self.assertEqual(result["finalTitle"], "BG Company 구축기")
+        self.assertEqual(result["sections"][0], {"heading": "시작", "body": "본문입니다."})
+        self.assertEqual(result["sections"][1], {"heading": "Section 2", "body": "문자열 섹션"})
+        self.assertEqual(result["markdownDraft"], "# BG Company 구축기")
+        self.assertEqual(result["usedSeoKeywords"], ["AI 개인회사", "Hermes"])
+        self.assertNotIn("reviewSummary", result)
+        self.assertNotIn("qaSummary", result)
+
     def test_marketing_manager_schema(self) -> None:
         stdout = json.dumps({
             "reviewSummary": "??? ??? ?????.",
@@ -177,20 +200,22 @@ class AllowlistTests(unittest.TestCase):
     def test_allowed_agent_task_pairs(self) -> None:
         self.assertTrue(bridge.is_agent_task_allowed("content-planner", "content_planning"))
         self.assertTrue(bridge.is_agent_task_allowed("marketing-manager", "marketing_review"))
+        self.assertTrue(bridge.is_agent_task_allowed("content-writer", "content_writing"))
         self.assertTrue(bridge.is_agent_task_allowed("qa-auditor", "qa_review"))
 
     def test_rejects_crossed_or_unknown_agent_task_pairs(self) -> None:
         self.assertFalse(bridge.is_agent_task_allowed("content-planner", "marketing_review"))
         self.assertFalse(bridge.is_agent_task_allowed("marketing-manager", "content_planning"))
+        self.assertFalse(bridge.is_agent_task_allowed("content-writer", "qa_review"))
         self.assertFalse(bridge.is_agent_task_allowed("qa-auditor", "marketing_review"))
         self.assertFalse(bridge.is_agent_task_allowed("director", "approval"))
         self.assertFalse(bridge.is_agent_task_allowed("unknown", "content_planning"))
 
 
 class UsageGuardrailContractTests(unittest.TestCase):
-    def test_content_pipeline_requires_three_real_hermes_runs(self) -> None:
+    def test_content_pipeline_requires_four_real_hermes_runs(self) -> None:
         service_source = (REPO_ROOT / "apps/web/src/lib/content-pipeline/content-pipeline-service.ts").read_text()
-        self.assertIn("const HERMES_PIPELINE_REQUIRED_RUNS = 3", service_source)
+        self.assertIn("const HERMES_PIPELINE_REQUIRED_RUNS = 4", service_source)
         self.assertIn('if (runnerMode === "hermes") await assertHermesDailyRunAvailable(HERMES_PIPELINE_REQUIRED_RUNS);', service_source)
 
     def test_usage_summary_counts_only_real_hermes_agent_runs(self) -> None:

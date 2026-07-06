@@ -5,6 +5,7 @@ export type ContentPipelineStatus =
   | "draft_requested"
   | "planning"
   | "marketing_review"
+  | "content_writing"
   | "qa_review"
   | "director_approval"
   | "approved"
@@ -60,6 +61,33 @@ export type MarketingReviewResult = {
   errorMessage?: string;
 };
 
+export type ContentWriterSection = {
+  heading?: string;
+  body?: string;
+};
+
+export type ContentWriterResult = {
+  ok: boolean;
+  provider: string;
+  agentId: string;
+  finalTitle?: string;
+  metaDescription?: string;
+  introduction?: string;
+  sections?: ContentWriterSection[];
+  conclusion?: string;
+  cta?: string;
+  fullDraft?: string;
+  markdownDraft?: string;
+  htmlDraft?: string;
+  usedSeoKeywords?: string[];
+  writingNotes?: string[];
+  parseStatus?: ContentPlannerParseStatus;
+  rawText?: string;
+  durationMs?: number;
+  errorCode?: string;
+  errorMessage?: string;
+};
+
 export type QaAuditResult = {
   ok: boolean;
   provider: string;
@@ -96,9 +124,11 @@ export type ContentPipelineRun = {
   runnerMode?: "mock" | "hermes-dry-run" | "hermes";
   plannerResult?: ContentPlannerResult;
   marketingResult?: MarketingReviewResult;
+  writerResult?: ContentWriterResult;
   qaResult?: QaAuditResult;
   hermesRequestPayload?: Record<string, unknown>;
   hermesMarketingRequestPayload?: Record<string, unknown>;
+  hermesWriterRequestPayload?: Record<string, unknown>;
   hermesQaRequestPayload?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;

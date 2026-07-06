@@ -23,4 +23,4 @@ backups/
 *.dump
 *.sql.gz
 logs/
-n__pycache__/n
+__pycache__/

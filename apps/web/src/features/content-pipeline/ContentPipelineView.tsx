@@ -13,12 +13,13 @@ const channelLabels: Record<ContentChannel, string> = {
   newsletter: "뉴스레터",
 };
 
-const HERMES_PIPELINE_REQUIRED_RUNS = 3;
+const HERMES_PIPELINE_REQUIRED_RUNS = 4;
 
 const statusLabels: Record<string, string> = {
   draft_requested: "초안 요청",
   planning: "기획 중",
   marketing_review: "마케팅 검토",
+  content_writing: "본문 작성",
   qa_review: "QA 검토",
   director_approval: "Director 승인 대기",
   approved: "승인 완료",
@@ -77,6 +78,16 @@ function listMarketingResultGaps(result: ContentPipelineRun["marketingResult"]) 
   if (!result.recommendedTitle) gaps.push("recommendedTitle");
   if (!result.titleSuggestions?.length) gaps.push("titleSuggestions");
   if (!result.seoKeywords?.length) gaps.push("seoKeywords");
+  return gaps;
+}
+
+function listWriterResultGaps(result: ContentPipelineRun["writerResult"]) {
+  if (!result || result.ok === false) return [];
+  const gaps: string[] = [];
+  if (!result.finalTitle) gaps.push("finalTitle");
+  if (!result.metaDescription) gaps.push("metaDescription");
+  if (!result.sections?.length) gaps.push("sections");
+  if (!result.fullDraft && !result.markdownDraft) gaps.push("fullDraft/markdownDraft");
   return gaps;
 }
 
@@ -213,6 +224,64 @@ function MarketingResultCard({ pipeline, agentRuns }: { pipeline: ContentPipelin
   );
 }
 
+function WriterResultCard({ pipeline, agentRuns }: { pipeline: ContentPipelineRun; agentRuns: NonNullable<ContentPipelineDetail["agentRuns"]> }) {
+  const writerRun = agentRuns.find((run) => run.employeeId === "content-writer");
+  const payload = pipeline.hermesWriterRequestPayload ?? writerRun?.metadata?.hermesPayload;
+  const result = pipeline.writerResult;
+  const isHermesMode = pipeline.runnerMode === "hermes" || pipeline.runnerMode === "hermes-dry-run";
+  const isFailed = writerRun?.status === "failed" || result?.ok === false;
+  const gaps = listWriterResultGaps(result);
+  const hasFallback = result?.parseStatus === "fallback_text";
+  const rawText = result?.rawText;
+  const durationLabel = formatDurationMs(result?.durationMs);
+
+  return (
+    <div className="feature-card content-pipeline-result-card">
+      <label>content-writer 실행 결과</label>
+      <strong>{writerRun?.status ?? (isFailed ? "failed" : "ready")} · {writerRun?.mode ?? pipeline.runnerMode ?? "mock"}</strong>
+      <div className="content-pipeline-meta">
+        <span>provider: {result?.provider ?? writerRun?.mode ?? pipeline.runnerMode ?? "mock"}</span>
+        <span>parse: {parseStatusLabel(result?.parseStatus)}</span>
+        {durationLabel ? <span>{durationLabel}</span> : null}
+      </div>
+      {isFailed ? (
+        <p className="content-pipeline-error">{result?.errorCode ?? "WRITER_ERROR"} · {writerRun?.errorMessage ?? result?.errorMessage ?? "content-writer 실행에 실패했습니다."}</p>
+      ) : (
+        <p>{writerRun?.resultSummary ?? result?.metaDescription ?? result?.introduction ?? "본문 작성 결과를 기다리는 중입니다."}</p>
+      )}
+      {hasFallback ? <p className="content-pipeline-warning">Hermes 응답이 완전한 JSON은 아니어서 원문을 fallback 결과로 저장했습니다.</p> : null}
+      {!isFailed && gaps.length ? <p className="content-pipeline-warning">응답은 저장됐지만 일부 필드가 비어 있습니다: {gaps.join(", ")}</p> : null}
+
+      {result ? (
+        <div className="content-pipeline-result-grid">
+          {result.finalTitle ? <div><label>최종 제목</label><strong>{result.finalTitle}</strong></div> : null}
+          {result.metaDescription ? <div className="content-pipeline-result-block"><label>메타 설명</label><p>{result.metaDescription}</p></div> : null}
+          {result.introduction ? <div className="content-pipeline-result-block"><label>도입부</label><p>{result.introduction}</p></div> : null}
+          {result.sections?.length ? <div className="content-pipeline-result-block"><label>본문 섹션</label><ul className="content-pipeline-outline">{result.sections.map((section, index) => <li key={`${section.heading}-${index}`}><strong>{section.heading}</strong><p>{section.body}</p></li>)}</ul></div> : null}
+          {result.conclusion ? <div className="content-pipeline-result-block"><label>결론</label><p>{result.conclusion}</p></div> : null}
+          {result.cta ? <div className="content-pipeline-result-block"><label>CTA</label><p>{result.cta}</p></div> : null}
+          {result.usedSeoKeywords?.length ? <div className="content-pipeline-result-block"><label>사용 키워드</label><div className="content-pipeline-keywords">{result.usedSeoKeywords.map((keyword) => <span key={keyword}>{keyword}</span>)}</div></div> : null}
+          {result.writingNotes?.length ? <div className="content-pipeline-result-block"><label>작성 메모</label><ul className="content-pipeline-outline">{result.writingNotes.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
+          {result.markdownDraft || result.fullDraft ? <div className="content-pipeline-result-block"><label>게시 초안</label><pre className="content-pipeline-draft">{result.markdownDraft ?? result.fullDraft}</pre></div> : null}
+        </div>
+      ) : null}
+
+      {rawText ? (
+        <details className="content-pipeline-payload">
+          <summary>Hermes writer raw/fallback text 보기</summary>
+          <pre>{rawText}</pre>
+        </details>
+      ) : null}
+      {isHermesMode && payload ? (
+        <details className="content-pipeline-payload">
+          <summary>Hermes Writer request payload 보기</summary>
+          <pre>{stringifyJson(payload)}</pre>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
 function QaResultCard({ pipeline, agentRuns }: { pipeline: ContentPipelineRun; agentRuns: NonNullable<ContentPipelineDetail["agentRuns"]> }) {
   const qaRun = agentRuns.find((run) => run.employeeId === "qa-auditor");
   const payload = pipeline.hermesQaRequestPayload ?? qaRun?.metadata?.hermesPayload;
@@ -226,46 +295,46 @@ function QaResultCard({ pipeline, agentRuns }: { pipeline: ContentPipelineRun; a
 
   return (
     <div className="feature-card content-pipeline-result-card">
-      <label>qa-auditor ?? ??</label>
-      <strong>{qaRun?.status ?? (isFailed ? "failed" : "ready")} ? {qaRun?.mode ?? pipeline.runnerMode ?? "mock"}</strong>
+      <label>qa-auditor 실행 결과</label>
+      <strong>{qaRun?.status ?? (isFailed ? "failed" : "ready")} · {qaRun?.mode ?? pipeline.runnerMode ?? "mock"}</strong>
       <div className="content-pipeline-meta">
         <span>provider: {result?.provider ?? qaRun?.mode ?? pipeline.runnerMode ?? "mock"}</span>
         <span>parse: {parseStatusLabel(result?.parseStatus)}</span>
         {durationLabel ? <span>{durationLabel}</span> : null}
       </div>
       {isFailed ? (
-        <p className="content-pipeline-error">{result?.errorCode ?? "QA_ERROR"} ? {qaRun?.errorMessage ?? result?.errorMessage ?? "qa-auditor ??? ??????."}</p>
+        <p className="content-pipeline-error">{result?.errorCode ?? "QA_ERROR"} · {qaRun?.errorMessage ?? result?.errorMessage ?? "qa-auditor 실행에 실패했습니다."}</p>
       ) : (
-        <p>{qaRun?.resultSummary ?? result?.qaSummary ?? "QA ?? ??? ???? ????."}</p>
+        <p>{qaRun?.resultSummary ?? result?.qaSummary ?? "QA 검토 결과를 기다리는 중입니다."}</p>
       )}
-      {hasFallback ? <p className="content-pipeline-warning">Hermes ??? ??? JSON? ???? ??? fallback ??? ??????.</p> : null}
-      {!isFailed && gaps.length ? <p className="content-pipeline-warning">??? ????? ?? ??? ?? ????: {gaps.join(", ")}</p> : null}
+      {hasFallback ? <p className="content-pipeline-warning">Hermes 응답이 완전한 JSON은 아니어서 원문을 fallback 결과로 저장했습니다.</p> : null}
+      {!isFailed && gaps.length ? <p className="content-pipeline-warning">응답은 저장됐지만 일부 필드가 비어 있습니다: {gaps.join(", ")}</p> : null}
 
       {result ? (
         <div className="content-pipeline-result-grid">
-          {typeof result.qaScore === "number" ? <div><label>QA ??</label><strong>{result.qaScore}/100</strong></div> : null}
-          {result.publishReadiness ? <div><label>?? ???</label><strong>{result.publishReadiness}</strong></div> : null}
-          {result.finalRecommendation ? <div><label>?? ??</label><strong>{result.finalRecommendation}</strong></div> : null}
-          {result.qaSummary ? <div className="content-pipeline-result-block"><label>QA ??</label><p>{result.qaSummary}</p></div> : null}
-          {result.factCheckNotes?.length ? <div className="content-pipeline-result-block"><label>?? ??</label><ul className="content-pipeline-outline">{result.factCheckNotes.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
-          {result.qualityNotes?.length ? <div className="content-pipeline-result-block"><label>?? ??</label><ul className="content-pipeline-outline">{result.qualityNotes.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
-          {result.riskNotes?.length ? <div className="content-pipeline-result-block"><label>???</label><ul className="content-pipeline-outline">{result.riskNotes.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
-          {result.typoAndStyleNotes?.length ? <div className="content-pipeline-result-block"><label>??/???</label><ul className="content-pipeline-outline">{result.typoAndStyleNotes.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
-          {result.requiredRevisions?.length ? <div className="content-pipeline-result-block"><label>?? ??</label><ul className="content-pipeline-outline">{result.requiredRevisions.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
-          {result.optionalSuggestions?.length ? <div className="content-pipeline-result-block"><label>?? ??</label><ul className="content-pipeline-outline">{result.optionalSuggestions.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
-          {result.reason ? <div className="content-pipeline-result-block"><label>?? ??</label><p>{result.reason}</p></div> : null}
+          {typeof result.qaScore === "number" ? <div><label>QA 점수</label><strong>{result.qaScore}/100</strong></div> : null}
+          {result.publishReadiness ? <div><label>게시 준비도</label><strong>{result.publishReadiness}</strong></div> : null}
+          {result.finalRecommendation ? <div><label>최종 판단</label><strong>{result.finalRecommendation}</strong></div> : null}
+          {result.qaSummary ? <div className="content-pipeline-result-block"><label>QA 요약</label><p>{result.qaSummary}</p></div> : null}
+          {result.factCheckNotes?.length ? <div className="content-pipeline-result-block"><label>사실성 검토</label><ul className="content-pipeline-outline">{result.factCheckNotes.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
+          {result.qualityNotes?.length ? <div className="content-pipeline-result-block"><label>품질 검토</label><ul className="content-pipeline-outline">{result.qualityNotes.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
+          {result.riskNotes?.length ? <div className="content-pipeline-result-block"><label>리스크</label><ul className="content-pipeline-outline">{result.riskNotes.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
+          {result.typoAndStyleNotes?.length ? <div className="content-pipeline-result-block"><label>문장/스타일</label><ul className="content-pipeline-outline">{result.typoAndStyleNotes.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
+          {result.requiredRevisions?.length ? <div className="content-pipeline-result-block"><label>필수 수정</label><ul className="content-pipeline-outline">{result.requiredRevisions.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
+          {result.optionalSuggestions?.length ? <div className="content-pipeline-result-block"><label>선택 개선</label><ul className="content-pipeline-outline">{result.optionalSuggestions.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
+          {result.reason ? <div className="content-pipeline-result-block"><label>판단 이유</label><p>{result.reason}</p></div> : null}
         </div>
       ) : null}
 
       {rawText ? (
         <details className="content-pipeline-payload">
-          <summary>Hermes QA raw/fallback text ??</summary>
+          <summary>Hermes QA raw/fallback text 보기</summary>
           <pre>{rawText}</pre>
         </details>
       ) : null}
       {isHermesMode && payload ? (
         <details className="content-pipeline-payload">
-          <summary>Hermes QA request payload ??</summary>
+          <summary>Hermes QA request payload 보기</summary>
           <pre>{stringifyJson(payload)}</pre>
         </details>
       ) : null}
@@ -274,15 +343,25 @@ function QaResultCard({ pipeline, agentRuns }: { pipeline: ContentPipelineRun; a
 }
 
 function ApprovedResultCard({ pipeline, approval }: { pipeline: ContentPipelineRun; approval: ContentPipelineDetail["approval"] }) {
-  const result = pipeline.plannerResult;
+  const planner = pipeline.plannerResult;
+  const writer = pipeline.writerResult;
   const isApproved = pipeline.status === "approved" || pipeline.status === "published_ready" || pipeline.status === "completed";
   if (!isApproved) return null;
+  const approvedTitle = writer?.finalTitle ?? pipeline.outputTitle ?? planner?.title ?? pipeline.title;
+  const approvedSummary = writer?.metaDescription ?? pipeline.outputSummary ?? planner?.summary ?? "Director 승인이 완료된 콘텐츠 결과입니다.";
+  const approvedDraft = writer?.markdownDraft ?? writer?.fullDraft ?? planner?.content;
   return (
     <div className="feature-card content-pipeline-approved">
       <label>승인 완료 결과물</label>
-      <strong>{pipeline.outputTitle ?? result?.title ?? pipeline.title}</strong>
-      <p>{pipeline.outputSummary ?? result?.summary ?? "Director 승인이 완료된 콘텐츠 결과입니다."}</p>
-      {result?.content ? <p>{result.content}</p> : null}
+      <strong>{approvedTitle}</strong>
+      <p>{approvedSummary}</p>
+      {writer?.sections?.length ? (
+        <ul className="content-pipeline-outline">
+          {writer.sections.map((section, index) => <li key={`${section.heading}-${index}`}><strong>{section.heading}</strong><p>{section.body}</p></li>)}
+        </ul>
+      ) : null}
+      {approvedDraft ? <pre className="content-pipeline-draft">{approvedDraft}</pre> : null}
+      {writer?.usedSeoKeywords?.length ? <div className="content-pipeline-keywords">{writer.usedSeoKeywords.map((keyword) => <span key={keyword}>{keyword}</span>)}</div> : null}
       <small>승인 상태: {approval?.status ?? "승인 완료"} · 최종 갱신 {formatTime(pipeline.updatedAt)}</small>
     </div>
   );
@@ -391,7 +470,7 @@ export function ContentPipelineView() {
         ? `오늘 남은 Hermes 실행 가능 횟수: ${latestUsage.remaining} / ${latestUsage.limit}회`
         : "Hermes 사용량을 확인하지 못했습니다.";
       const confirmed = window.confirm(
-        `Hermes 실제 실행은 OpenAI API 비용이 발생할 수 있습니다.\n${remainingText}\n\n이번 실행은 content-planner 1회와 marketing-manager 1회, 최대 ${HERMES_PIPELINE_REQUIRED_RUNS}회를 Hermes Bridge로 실행합니다. QA/승인 단계는 mock 상태를 유지합니다. 계속 실행할까요?`,
+        `Hermes 실제 실행은 OpenAI API 비용이 발생할 수 있습니다.\n${remainingText}\n\n이번 실행은 content-planner, marketing-manager, content-writer, qa-auditor를 각 1회씩 최대 ${HERMES_PIPELINE_REQUIRED_RUNS}회 Hermes Bridge로 실행합니다. 계속 실행할까요?`,
       );
       if (!confirmed) {
         setNotice("Hermes 실제 실행을 취소했습니다. 비용 없는 검증은 mock 또는 hermes-dry-run을 사용하세요.");
@@ -431,7 +510,7 @@ export function ContentPipelineView() {
             <div>
               <span>Phase 1-C</span>
               <h1>콘텐츠 파이프라인</h1>
-              <p>기획 → 마케팅 검토 → QA 검토 → Director 승인 요청 흐름을 mock / Hermes dry-run / Hermes 모드로 실행합니다.</p>
+              <p>기획 → 마케팅 검토 → 본문 작성 → QA 검토 → Director 승인 요청 흐름을 mock / Hermes dry-run / Hermes 모드로 실행합니다.</p>
             </div>
             <div className="work-summary">
               <span><b>{counts.total}</b>전체</span>
@@ -464,7 +543,7 @@ export function ContentPipelineView() {
             <div>
               <strong>Hermes 오늘 실행: {hermesUsage ? `${hermesUsage.used} / ${hermesUsage.limit}회` : "확인 중"}</strong>
               <span>남은 실행 가능 횟수: {hermesUsage ? `${hermesUsage.remaining}회` : "-"} · 기준: {hermesUsage?.timezone ?? "Asia/Seoul"}</span>
-              <small>mock / hermes-dry-run / 실행 전 취소는 사용량에 포함되지 않습니다. Hermes 모드는 content-planner + marketing-manager 최대 2회를 사용합니다.</small>
+              <small>mock / hermes-dry-run / 실행 전 취소는 사용량에 포함되지 않습니다. Hermes 모드는 content-planner + marketing-manager + content-writer + qa-auditor 최대 4회를 사용합니다.</small>
               {hermesUsageError ? <small className="content-pipeline-error">{hermesUsageError}</small> : null}
             </div>
             <div className="content-pipeline-usage-runs">
@@ -530,6 +609,7 @@ export function ContentPipelineView() {
                   </div>
                   <PlannerResultCard pipeline={detail?.pipeline ?? selectedPipeline} agentRuns={detail?.agentRuns ?? []} />
                   <MarketingResultCard pipeline={detail?.pipeline ?? selectedPipeline} agentRuns={detail?.agentRuns ?? []} />
+                  <WriterResultCard pipeline={detail?.pipeline ?? selectedPipeline} agentRuns={detail?.agentRuns ?? []} />
                   <QaResultCard pipeline={detail?.pipeline ?? selectedPipeline} agentRuns={detail?.agentRuns ?? []} />
                   <ApprovedResultCard pipeline={detail?.pipeline ?? selectedPipeline} approval={detail?.approval ?? null} />
                   <div className="feature-card">
@@ -565,8 +645,9 @@ export function ContentPipelineView() {
                       <>
                         <article><i className="working" /><time>1</time><p>content-planner · 콘텐츠 기획</p></article>
                         <article><i className="working" /><time>2</time><p>marketing-manager · 제목/홍보 문구 검토</p></article>
-                        <article><i className="working" /><time>3</time><p>qa-auditor · 사실성/정책/품질 검토</p></article>
-                        <article><i className="waiting" /><time>4</time><p>director · 최종 승인 대기</p></article>
+                        <article><i className="working" /><time>3</time><p>content-writer · 게시용 본문 초안 작성</p></article>
+                        <article><i className="working" /><time>4</time><p>qa-auditor · 사실성/정책/품질 검토</p></article>
+                        <article><i className="waiting" /><time>5</time><p>director · 최종 승인 대기</p></article>
                       </>
                     )}
                   </div>
@@ -588,7 +669,7 @@ export function ContentPipelineView() {
           </div>
           <div className="feature-card muted">
             <label>주의</label>
-            <p>이번 단계에서는 content-planner와 marketing-manager를 Hermes Bridge로 실행할 수 있습니다. QA와 실제 게시 작업은 mock 상태를 유지합니다.</p>
+            <p>이번 단계에서는 content-planner, marketing-manager, content-writer, qa-auditor를 Hermes Bridge로 실행할 수 있습니다. 실제 게시 작업은 수행하지 않습니다.</p>
           </div>
         </div>
       </aside>
