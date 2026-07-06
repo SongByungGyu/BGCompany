@@ -715,8 +715,8 @@ function runFromEvent(event: {
     title: typeof payload.title === "string" ? payload.title : "콘텐츠 파이프라인",
     topic: typeof payload.topic === "string" ? payload.topic : "주제 미정",
     channel: channels.has(String(payload.channel)) ? payload.channel as ContentChannel : "blog",
-    status: plannerResult?.ok === false ? "planning" : marketingResult?.ok === false ? "marketing_review" : "director_approval",
-    currentStep: plannerResult?.ok === false ? "content-planner 확인 필요" : marketingResult?.ok === false ? "marketing-manager 확인 필요" : "Director 승인 대기",
+    status: plannerResult?.ok === false ? "planning" : marketingResult?.ok === false ? "marketing_review" : qaResult?.ok === false ? "qa_review" : "director_approval",
+    currentStep: plannerResult?.ok === false ? "content-planner 확인 필요" : marketingResult?.ok === false ? "marketing-manager 확인 필요" : qaResult?.ok === false ? "qa-auditor 확인 필요" : "Director 승인 대기",
     taskIds,
     approvalId: typeof payload.approvalId === "string" ? payload.approvalId : undefined,
     outputTitle: typeof payload.outputTitle === "string" ? payload.outputTitle : undefined,
@@ -813,6 +813,7 @@ export async function listContentPipelines(): Promise<ContentPipelineRun[]> {
     if (approval.status === "수정 요청") return { ...run, status: "revision_requested", currentStep: "수정 요청", updatedAt: approval.updatedAt.toISOString() };
     if (run.plannerResult?.ok === false) return { ...run, status: "planning", currentStep: "content-planner 확인 필요", updatedAt: approval.updatedAt.toISOString() };
     if (run.marketingResult?.ok === false) return { ...run, status: "marketing_review", currentStep: "marketing-manager 확인 필요", updatedAt: approval.updatedAt.toISOString() };
+    if (run.qaResult?.ok === false) return { ...run, status: "qa_review", currentStep: "qa-auditor 확인 필요", updatedAt: approval.updatedAt.toISOString() };
     return run;
   });
 }
@@ -881,7 +882,9 @@ export async function getContentPipelineDetail(pipelineId: string): Promise<Cont
     ? { status: "planning" as ContentPipelineStatus, currentStep: "content-planner 확인 필요" }
     : baseRun.marketingResult?.ok === false
       ? { status: "marketing_review" as ContentPipelineStatus, currentStep: "marketing-manager 확인 필요" }
-      : pipelineStatusFromApproval(approval?.status);
+      : baseRun.qaResult?.ok === false
+        ? { status: "qa_review" as ContentPipelineStatus, currentStep: "qa-auditor 확인 필요" }
+        : pipelineStatusFromApproval(approval?.status);
   const pipeline: ContentPipelineRun = {
     ...baseRun,
     status: status.status,
@@ -1021,14 +1024,16 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
         description: `${data.topic} 콘텐츠의 사실성, 정책, 품질 기준을 검토합니다.`,
         department: "지식·감사",
         assignedEmployeeId: "qa-auditor",
-        status: "승인 대기",
-        progress: 92,
+        status: qa.taskStatus,
+        progress: qa.progress,
         startedAt: now,
-        model: "Mock Agent",
+        completedAt: qa.agentRunStatus === "succeeded" ? now : null,
+        model: qa.agentRunMode === "mock" ? "Mock Agent" : qa.agentRunMode === "hermes-dry-run" ? "Hermes Dry Run" : "Hermes Agent",
         cost: "0.0000",
-        currentStep: "Director 승인 대기",
-        recentOutput: "QA 검토 통과 · 최종 승인 필요",
-        nextAction: "Director 승인",
+        currentStep: qa.currentStep,
+        recentOutput: qa.recentOutput,
+        nextAction: qa.agentRunStatus === "failed" ? "QA Hermes 설정/응답 확인" : "Director 승인",
+        error: qa.agentRunError ?? null,
       },
     ],
   });
@@ -1040,11 +1045,11 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
       requestedByEmployeeId: "director",
       taskId: qaTaskId,
       approvalType: "콘텐츠",
-      riskLevel: planner.agentRunStatus === "failed" || marketing.agentRunStatus === "failed" ? "높음" : "보통",
+      riskLevel: planner.agentRunStatus === "failed" || marketing.agentRunStatus === "failed" || qa.agentRunStatus === "failed" ? "높음" : "보통",
       estimatedCost: "0.0000",
       status: "승인 대기",
       reason: `${data.topic} 콘텐츠를 ${channelLabel(data.channel)} 채널에 게시하기 전 대표 최종 승인이 필요합니다.`,
-      plannedAction: planner.agentRunStatus === "failed" || marketing.agentRunStatus === "failed" ? "Hermes 실패 사유를 확인한 뒤 재실행 또는 mock 결과로 검토합니다." : "승인 후 게시 준비 상태로 전환합니다.",
+      plannedAction: planner.agentRunStatus === "failed" || marketing.agentRunStatus === "failed" || qa.agentRunStatus === "failed" ? "Hermes 실패 사유를 확인한 뒤 재실행 또는 mock 결과로 검토합니다." : "승인 후 게시 준비 상태로 전환합니다.",
       expectedResult: "콘텐츠 결과물이 게시 준비 상태가 됩니다.",
     },
   });
@@ -1082,7 +1087,24 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
       marketingResult: marketing.result,
     },
   });
-  await createPipelineAgentRun({ pipelineId, taskId: qaTaskId, employeeId: "qa-auditor", mode: "mock", status: "succeeded", summary: "사실성/정책/품질 검토 완료", metadata: { role: "qa-auditor", outputTitle: "QA 검토 결과 생성" } });
+  await createPipelineAgentRun({
+    pipelineId,
+    taskId: qaTaskId,
+    employeeId: "qa-auditor",
+    mode: qa.agentRunMode,
+    status: qa.agentRunStatus,
+    summary: qa.agentRunSummary,
+    errorMessage: qa.agentRunError,
+    hermesJobId: qa.hermesJobId,
+    metadata: {
+      role: "qa-auditor",
+      hermesPayload: qa.hermesPayload,
+      hermesResponse: qa.hermesResponse,
+      plannerResult: planner.result,
+      marketingResult: marketing.result,
+      qaResult: qa.result,
+    },
+  });
 
   await createEvent({ type: "ContentPipelineStarted", payload: metadata, summary: `${data.title} 콘텐츠 파이프라인 시작` });
   await createEvent({ type: "TaskStarted", employeeId: "content-planner", taskId: contentTaskId, payload: { ...metadata, title: data.title }, summary: "콘텐츠 기획 시작" });
@@ -1110,7 +1132,17 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     await createEvent({ type: "OutputGenerated", employeeId: "marketing-manager", taskId: marketingTaskId, payload: { ...metadata, outputTitle: marketing.outputTitle, output: marketing.outputSummary, status: "업무 완료" }, summary: "마케팅 검토 완료" });
   }
   await createEvent({ type: "TaskStarted", employeeId: "qa-auditor", taskId: qaTaskId, payload: { ...metadata, title: data.title }, summary: "QA 검토 시작" });
-  await createEvent({ type: "OutputGenerated", employeeId: "qa-auditor", taskId: qaTaskId, payload: { ...metadata, outputTitle: "QA 검토 결과 생성", output: "QA 검토 통과 · 최종 승인 필요", status: "검토 중" }, summary: "QA 검토 결과 생성" });
+  if (qa.agentRunStatus === "failed") {
+    await createEvent({
+      type: "ErrorOccurred",
+      employeeId: "qa-auditor",
+      taskId: qaTaskId,
+      payload: { ...metadata, error: qa.agentRunError, message: qa.agentRunError, status: "오류 대응 중" },
+      summary: `qa-auditor Hermes 실행 실패 · ${qa.agentRunError ?? "원인 미상"}`,
+    });
+  } else {
+    await createEvent({ type: "OutputGenerated", employeeId: "qa-auditor", taskId: qaTaskId, payload: { ...metadata, outputTitle: qa.outputTitle, output: qa.outputSummary, status: "검토 중" }, summary: "QA 검토 결과 생성" });
+  }
   await createEvent({ type: "ApprovalRequested", employeeId: "director", taskId: qaTaskId, approvalId, payload: { ...metadata, title: `[콘텐츠 최종 승인] ${data.title}`, status: "승인 대기" }, summary: "Director 콘텐츠 최종 승인 요청" });
 
   return {
@@ -1118,8 +1150,8 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     title: data.title,
     topic: data.topic,
     channel: data.channel,
-    status: planner.agentRunStatus === "failed" ? "planning" : marketing.agentRunStatus === "failed" ? "marketing_review" : "director_approval",
-    currentStep: planner.agentRunStatus === "failed" ? "content-planner 확인 필요" : marketing.agentRunStatus === "failed" ? "marketing-manager 확인 필요" : "Director 승인 대기",
+    status: planner.agentRunStatus === "failed" ? "planning" : marketing.agentRunStatus === "failed" ? "marketing_review" : qa.agentRunStatus === "failed" ? "qa_review" : "director_approval",
+    currentStep: planner.agentRunStatus === "failed" ? "content-planner 확인 필요" : marketing.agentRunStatus === "failed" ? "marketing-manager 확인 필요" : qa.agentRunStatus === "failed" ? "qa-auditor 확인 필요" : "Director 승인 대기",
     taskIds,
     approvalId,
     outputTitle: planner.outputTitle,
