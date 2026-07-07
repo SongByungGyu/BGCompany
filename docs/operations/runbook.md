@@ -505,3 +505,40 @@ Phase 1-C.15부터 승인 완료된 콘텐츠 파이프라인 상세 화면에�
 - 네이버 자동 로그인/자동 게시/쿠키 우회는 금지한다.
 - 실제 시장 데이터 API가 연결되기 전까지 임의의 지수 수치나 종목 수익률을 생성하지 않는다.
 - Hermes 실제 실행은 비용 가드레일과 사용자 승인 후 1회씩만 진행한다.
+
+## Stock briefing publish prep check
+
+Phase 1-C.16 adds stock-market briefing structure to the Naver Blog Publish Prep panel.
+
+Check in the browser:
+
+1. Log in as admin.
+2. Open `콘텐츠`.
+3. Select an approved pipeline or a pipeline with writer output.
+4. Confirm the `네이버 블로그 게시 준비` panel shows:
+   - title
+   - intro
+   - market summary
+   - major index/sector flow
+   - key points
+   - investor checklist
+   - closing comment
+   - paste-ready body
+   - Markdown
+   - HTML
+   - tags
+   - category
+   - thumbnail copy
+   - image prompts
+   - disclaimer
+   - manual checklist
+   - published URL input
+
+Operational rules:
+
+- Do not run `runnerMode=hermes` only to verify the UI.
+- Use existing approved data, mock, or hermes-dry-run for UI checks.
+- Do not call live stock APIs.
+- Do not automate Naver login or publishing.
+- Do not commit `.env` or print secrets.
+

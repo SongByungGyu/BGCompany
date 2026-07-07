@@ -11,6 +11,7 @@ import type {
   HermesUsageSummary,
   NaverBlogPublishPrep,
   StockBriefingTemplate,
+  StockBriefingTemplateConfig,
 } from "./content-pipeline-types";
 
 const channelLabels: Record<ContentChannel, string> = {
@@ -35,11 +36,50 @@ const DEFAULT_NAVER_TAGS = [
   "투자공부",
 ];
 
+const STOCK_BRIEFING_TEMPLATE_CONFIGS: Record<StockBriefingTemplate, StockBriefingTemplateConfig> = {
+  KOREA_DAILY_PREVIEW: {
+    type: "KOREA_DAILY_PREVIEW",
+    label: "매일 09:00 KST · 금일 한국 주식시장 현황/전망",
+    recommendedSchedule: "매일 08:30~08:50 KST 작성 · 09:00 KST 발행 권장",
+    recommendedCategory: "오늘의 한국장 전망",
+    requiredSections: ["오늘의 한국장 한 줄 요약", "전일 미국장 흐름", "환율/금리/유가 체크", "오늘의 주요 변수", "코스피·코스닥 예상 흐름", "주목 섹터", "리스크 요인", "투자자 체크리스트"],
+    defaultTags: ["BGMarketNote", "주식시장", "증시브리핑", "시장전망", "투자공부", "한국주식", "코스피", "코스닥", "국장전망", "환율", "반도체", "2차전지"],
+    thumbnailTextCandidates: ["오늘의 한국장 체크", "국장 프리뷰 핵심", "금리·환율 체크"],
+  },
+  KOREA_MARKET_CLOSE_US_PREVIEW: {
+    type: "KOREA_MARKET_CLOSE_US_PREVIEW",
+    label: "매일 17:00 KST · 한국장 리뷰 + 미국장 프리뷰",
+    recommendedSchedule: "매일 15:45~16:20 KST 작성 · 17:00 KST 발행 권장",
+    recommendedCategory: "오늘의 미국장 전망",
+    requiredSections: ["오늘의 한국장 마감 요약", "코스피·코스닥 흐름", "수급 체크", "강세/약세 섹터", "환율/금리/유가 체크", "미국 선물 흐름", "오늘 밤 미장 체크포인트", "리스크 요인", "투자자 체크리스트"],
+    defaultTags: ["BGMarketNote", "주식시장", "증시브리핑", "시장전망", "투자공부", "미국주식", "나스닥", "S&P500", "다우지수", "미장전망", "빅테크", "금리"],
+    thumbnailTextCandidates: ["미국장 프리뷰", "오늘 밤 체크포인트", "미장 흐름 정리"],
+  },
+  WEEKLY_MARKET_REVIEW: {
+    type: "WEEKLY_MARKET_REVIEW",
+    label: "금요일 16:00 KST · 금주 한국/미국 주식시장 정리",
+    recommendedSchedule: "금요일 16:00 KST 또는 토요일 오전 발행 권장",
+    recommendedCategory: "주간 시장 정리",
+    requiredSections: ["이번 주 시장 한 줄 요약", "코스피·코스닥 흐름", "S&P500·나스닥 흐름", "주요 상승/하락 섹터", "주요 뉴스/이벤트", "다음 주로 이어질 포인트", "리스크 요인", "투자자 체크리스트"],
+    defaultTags: ["BGMarketNote", "주식시장", "증시브리핑", "투자공부", "주간증시", "시장정리", "섹터흐름", "다음주증시", "경제지표", "한국주식", "미국주식"],
+    thumbnailTextCandidates: ["주간 시장 정리", "이번 주 증시 흐름", "섹터 흐름 한눈에"],
+  },
+  NEXT_WEEK_MARKET_PREVIEW: {
+    type: "NEXT_WEEK_MARKET_PREVIEW",
+    label: "주말/일요일 · 다음 주 시장 프리뷰",
+    recommendedSchedule: "일요일 저녁 또는 월요일 장전 발행 권장",
+    recommendedCategory: "주요 이슈/섹터",
+    requiredSections: ["다음 주 시장 한 줄 요약", "다음 주 경제지표", "기업 실적 일정", "FOMC/CPI/고용지표 등 주요 이벤트", "관심 섹터", "리스크 시나리오", "투자자 체크리스트"],
+    defaultTags: ["BGMarketNote", "주식시장", "증시브리핑", "시장전망", "투자공부", "다음주증시", "경제지표", "실적시즌", "금리", "섹터흐름"],
+    thumbnailTextCandidates: ["다음 주 증시 일정", "다음 주 체크포인트", "경제지표 미리보기"],
+  },
+};
+
 const STOCK_BRIEFING_TEMPLATE_LABELS: Record<StockBriefingTemplate, string> = {
-  KOREA_DAILY_PREVIEW: "매일 09:00 KST · 금일 한국 주식시장 현황/전망",
-  KOREA_MARKET_CLOSE_US_PREVIEW: "매일 17:00 KST · 한국장 리뷰 + 미국장 프리뷰",
-  WEEKLY_MARKET_REVIEW: "금요일 16:00 KST · 금주 한국 주식시장 정리",
-  NEXT_WEEK_MARKET_PREVIEW: "주말/일요일 · 다음 주 시장 프리뷰",
+  KOREA_DAILY_PREVIEW: STOCK_BRIEFING_TEMPLATE_CONFIGS.KOREA_DAILY_PREVIEW.label,
+  KOREA_MARKET_CLOSE_US_PREVIEW: STOCK_BRIEFING_TEMPLATE_CONFIGS.KOREA_MARKET_CLOSE_US_PREVIEW.label,
+  WEEKLY_MARKET_REVIEW: STOCK_BRIEFING_TEMPLATE_CONFIGS.WEEKLY_MARKET_REVIEW.label,
+  NEXT_WEEK_MARKET_PREVIEW: STOCK_BRIEFING_TEMPLATE_CONFIGS.NEXT_WEEK_MARKET_PREVIEW.label,
 };
 
 const NAVER_PUBLISH_CHECKLIST = [
@@ -66,13 +106,6 @@ function uniqueNonEmpty(values: Array<string | undefined | null>, limit = 12) {
   return result.slice(0, limit);
 }
 
-function stripMarkdown(value: string) {
-  return value
-    .replace(/```[\s\S]*?```/g, "")
-    .replace(/[#>*_`\[\]]/g, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
 
 function escapeHtml(value: string) {
   return value
@@ -83,9 +116,6 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
-function ensureDisclaimer(value: string) {
-  return value.includes(INVESTMENT_DISCLAIMER) ? value : `${value.trim()}\n\n---\n${INVESTMENT_DISCLAIMER}`;
-}
 
 function inferStockBriefingTemplate(pipeline: ContentPipelineRun): StockBriefingTemplate {
   const source = `${pipeline.title} ${pipeline.topic} ${pipeline.writerResult?.finalTitle ?? ""}`.toLowerCase();
@@ -96,10 +126,7 @@ function inferStockBriefingTemplate(pipeline: ContentPipelineRun): StockBriefing
 }
 
 function recommendNaverCategory(template: StockBriefingTemplate) {
-  if (template === "KOREA_DAILY_PREVIEW") return "오늘의 한국장 전망";
-  if (template === "KOREA_MARKET_CLOSE_US_PREVIEW") return "오늘의 미국장 전망";
-  if (template === "WEEKLY_MARKET_REVIEW") return "한국 주간 시장 정리";
-  return "주요 이슈/섹터";
+  return STOCK_BRIEFING_TEMPLATE_CONFIGS[template].recommendedCategory;
 }
 
 function getNaverTitle(pipeline: ContentPipelineRun) {
@@ -110,38 +137,131 @@ function getNaverTitle(pipeline: ContentPipelineRun) {
     ?? pipeline.title;
 }
 
-function buildMarkdownBody(pipeline: ContentPipelineRun, title: string) {
-  const writer = pipeline.writerResult;
-  const planner = pipeline.plannerResult;
-  if (writer?.markdownDraft) return ensureDisclaimer(writer.markdownDraft);
-  if (writer?.fullDraft) return ensureDisclaimer(writer.fullDraft);
-  if (writer?.sections?.length) {
-    const sections = writer.sections
-      .map((section) => `## ${section.heading ?? "본문"}\n\n${section.body ?? ""}`)
-      .join("\n\n");
-    return ensureDisclaimer(`# ${title}\n\n${writer.introduction ?? ""}\n\n${sections}\n\n${writer.conclusion ?? ""}\n\n${writer.cta ?? ""}`);
-  }
-  if (planner?.content) return ensureDisclaimer(`# ${title}\n\n${planner.content}`);
-  if (planner?.draftDirection) return ensureDisclaimer(`# ${title}\n\n${planner.draftDirection}`);
-  return ensureDisclaimer(`# ${title}\n\n${pipeline.outputSummary ?? pipeline.topic}`);
-}
 
 function markdownToHtml(markdown: string) {
   const blocks = markdown.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
   return blocks.map((block) => {
     if (block.startsWith("# ")) return `<h1>${escapeHtml(block.slice(2))}</h1>`;
     if (block.startsWith("## ")) return `<h2>${escapeHtml(block.slice(3))}</h2>`;
+    if (block.startsWith("### ")) return `<h3>${escapeHtml(block.slice(4))}</h3>`;
     if (block.startsWith("---")) return "<hr />";
+    const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
+    if (lines.length > 0 && lines.every((line) => line.startsWith("- "))) {
+      return `<ul>${lines.map((line) => `<li>${escapeHtml(line.slice(2))}</li>`).join("")}</ul>`;
+    }
     return `<p>${escapeHtml(block).replace(/\n/g, "<br />")}</p>`;
   }).join("\n");
 }
 
 function buildThumbnailText(template: StockBriefingTemplate, pipeline: ContentPipelineRun) {
   if (pipeline.marketingResult?.thumbnailCopy) return pipeline.marketingResult.thumbnailCopy;
-  if (template === "KOREA_DAILY_PREVIEW") return "오늘의 한국장 체크포인트";
-  if (template === "KOREA_MARKET_CLOSE_US_PREVIEW") return "미국장 프리뷰 핵심 정리";
-  if (template === "WEEKLY_MARKET_REVIEW") return "이번 주 시장 흐름 한눈에 보기";
-  return "다음 주 증시 일정 체크";
+  return STOCK_BRIEFING_TEMPLATE_CONFIGS[template].thumbnailTextCandidates[0];
+}
+
+function compactText(...values: Array<string | undefined | null>) {
+  return values.map((value) => value?.trim()).find(Boolean) ?? "";
+}
+
+function listFromSources(values: Array<string[] | undefined>, fallback: string[], limit = 6) {
+  return uniqueNonEmpty([...values.flatMap((items) => items ?? []), ...fallback], limit);
+}
+
+function buildStockBriefingSections(pipeline: ContentPipelineRun, title: string, template: StockBriefingTemplate) {
+  const config = STOCK_BRIEFING_TEMPLATE_CONFIGS[template];
+  const writer = pipeline.writerResult;
+  const planner = pipeline.plannerResult;
+  const marketing = pipeline.marketingResult;
+  const qa = pipeline.qaResult;
+  const sourceSummary = compactText(writer?.metaDescription, pipeline.outputSummary, planner?.summary, marketing?.reviewSummary, pipeline.topic);
+  const writerSectionText = writer?.sections?.map((section) => [section.heading, section.body].filter(Boolean).join(" - ")).join("\n") ?? "";
+  const sourceBody = compactText(writer?.fullDraft, writer?.markdownDraft, writerSectionText, planner?.content, planner?.draftDirection, sourceSummary);
+
+  const intro = compactText(
+    writer?.introduction,
+    marketing?.introHook,
+    `${title}을 중심으로 오늘 확인할 시장 변수와 투자자가 점검할 포인트를 정리합니다.`,
+  );
+  const marketSummary = compactText(
+    sourceSummary,
+    `${config.requiredSections[0]}을 기준으로 시장 분위기를 과장 없이 요약합니다. 현재 단계에서는 실시간 시세 API가 연결되어 있지 않아 구체 수치는 수동 확인이 필요합니다.`,
+  );
+  const indexAndSectorFlow = compactText(
+    planner?.outline?.slice(0, 3).join(" · "),
+    `${config.requiredSections.includes("코스피·코스닥 흐름") || config.requiredSections.includes("코스피·코스닥 예상 흐름") ? "코스피·코스닥" : "주요 지수"}와 섹터 흐름은 실제 지수/수급 데이터를 확인한 뒤 보강합니다. 반도체, 2차전지, 빅테크, 금리 민감 업종처럼 시장 영향도가 큰 축을 우선 점검합니다.`,
+  );
+  const keyPoints = listFromSources(
+    [marketing?.clickPoints, marketing?.improvementSuggestions, planner?.outline, qa?.qualityNotes],
+    config.requiredSections.slice(0, 5),
+    7,
+  );
+  const investorChecklist = listFromSources(
+    [qa?.riskNotes, marketing?.riskNotes],
+    ["실제 지수와 환율 기준 시점 확인", "금리·유가·달러 흐름 확인", "강세 섹터의 지속 가능성 점검", "단기 급등 종목 추격 매수 주의", "손절/분할 매수 기준 사전 점검"],
+    6,
+  );
+  const closingComment = compactText(
+    writer?.conclusion,
+    writer?.cta,
+    "오늘의 시장 흐름은 단일 변수보다 금리, 환율, 수급, 섹터 모멘텀을 함께 확인하는 방식으로 접근하는 편이 안전합니다.",
+  );
+
+  return { intro, marketSummary, indexAndSectorFlow: sourceBody.length > 80 ? indexAndSectorFlow : `${indexAndSectorFlow}
+
+참고 초안: ${sourceBody}`, keyPoints, investorChecklist, closingComment };
+}
+
+function buildPasteReadyBody(title: string, prep: Pick<NaverBlogPublishPrep, "intro" | "marketSummary" | "indexAndSectorFlow" | "keyPoints" | "investorChecklist" | "closingComment" | "disclaimer">) {
+  return [
+    title,
+    "",
+    "[도입부]",
+    prep.intro,
+    "",
+    "[시장 요약]",
+    prep.marketSummary,
+    "",
+    "[주요 지수/섹터 흐름]",
+    prep.indexAndSectorFlow,
+    "",
+    "[주목 포인트]",
+    ...prep.keyPoints.map((item) => `- ${item}`),
+    "",
+    "[투자자 체크리스트]",
+    ...prep.investorChecklist.map((item) => `- ${item}`),
+    "",
+    "[마무리]",
+    prep.closingComment,
+    "",
+    "[투자 유의문구]",
+    prep.disclaimer,
+  ].join("\n");
+}
+
+function buildStructuredMarkdown(title: string, prep: Pick<NaverBlogPublishPrep, "intro" | "marketSummary" | "indexAndSectorFlow" | "keyPoints" | "investorChecklist" | "closingComment" | "disclaimer">) {
+  return [
+    `# ${title}`,
+    "",
+    "## 도입부",
+    prep.intro,
+    "",
+    "## 시장 요약",
+    prep.marketSummary,
+    "",
+    "## 주요 지수/섹터 흐름",
+    prep.indexAndSectorFlow,
+    "",
+    "## 주목 포인트",
+    ...prep.keyPoints.map((item) => `- ${item}`),
+    "",
+    "## 투자자 체크리스트",
+    ...prep.investorChecklist.map((item) => `- ${item}`),
+    "",
+    "## 마무리",
+    prep.closingComment,
+    "",
+    "---",
+    prep.disclaimer,
+  ].join("\n");
 }
 
 function buildThumbnailPrompt(title: string, template: StockBriefingTemplate) {
@@ -177,15 +297,19 @@ function buildInlineImageIdeas(template: StockBriefingTemplate): NaverBlogPublis
 
 function buildNaverBlogPublishPrep(pipeline: ContentPipelineRun): NaverBlogPublishPrep {
   const template = inferStockBriefingTemplate(pipeline);
+  const config = STOCK_BRIEFING_TEMPLATE_CONFIGS[template];
   const naverTitle = getNaverTitle(pipeline);
-  const markdownBody = buildMarkdownBody(pipeline, naverTitle);
-  const pasteReadyBody = stripMarkdown(markdownBody);
+  const structuredSections = buildStockBriefingSections(pipeline, naverTitle, template);
+  const draftPrep = { ...structuredSections, disclaimer: INVESTMENT_DISCLAIMER };
+  const pasteReadyBody = buildPasteReadyBody(naverTitle, draftPrep);
+  const markdownBody = buildStructuredMarkdown(naverTitle, draftPrep);
   const tags = uniqueNonEmpty([
     ...(pipeline.writerResult?.usedSeoKeywords ?? []),
     ...(pipeline.marketingResult?.seoKeywords ?? []),
     ...(pipeline.plannerResult?.seoKeywords ?? []),
+    ...config.defaultTags,
     ...DEFAULT_NAVER_TAGS,
-  ]);
+  ], 12);
 
   return {
     naverTitle,
@@ -194,13 +318,16 @@ function buildNaverBlogPublishPrep(pipeline: ContentPipelineRun): NaverBlogPubli
     thumbnailText: buildThumbnailText(template, pipeline),
     thumbnailPrompt: buildThumbnailPrompt(naverTitle, template),
     inlineImageIdeas: buildInlineImageIdeas(template),
+    ...structuredSections,
     pasteReadyBody,
     markdownBody,
-    htmlBody: pipeline.writerResult?.htmlDraft ?? markdownToHtml(markdownBody),
+    htmlBody: markdownToHtml(markdownBody),
     disclaimer: INVESTMENT_DISCLAIMER,
     checklist: NAVER_PUBLISH_CHECKLIST.map((label) => ({ label, checked: false })),
     publishStatus: "ready_to_copy",
     briefingTemplate: template,
+    briefingTemplateLabel: config.label,
+    recommendedSchedule: config.recommendedSchedule,
   };
 }
 
@@ -601,7 +728,8 @@ function NaverBlogPublishPrepPanel({ pipeline }: { pipeline: ContentPipelineRun 
         <div className="naver-prep-block">
           <label>카테고리 추천</label>
           <strong>{prep.naverCategory}</strong>
-          {prep.briefingTemplate ? <small>{STOCK_BRIEFING_TEMPLATE_LABELS[prep.briefingTemplate]}</small> : null}
+          {prep.briefingTemplateLabel ? <small>{prep.briefingTemplateLabel}</small> : null}
+          {prep.recommendedSchedule ? <small>{prep.recommendedSchedule}</small> : null}
         </div>
         <div className="naver-prep-block">
           <label>태그</label>
@@ -617,6 +745,42 @@ function NaverBlogPublishPrepPanel({ pipeline }: { pipeline: ContentPipelineRun 
         ))}
       </div>
       {copyError ? <p className="content-pipeline-error">{copyError}</p> : null}
+
+      <div className="naver-prep-block">
+        <label>도입부</label>
+        <p>{prep.intro}</p>
+      </div>
+
+      <div className="naver-prep-grid">
+        <div className="naver-prep-block">
+          <label>시장 요약</label>
+          <p>{prep.marketSummary}</p>
+        </div>
+        <div className="naver-prep-block">
+          <label>주요 지수/섹터 흐름</label>
+          <p>{prep.indexAndSectorFlow}</p>
+        </div>
+      </div>
+
+      <div className="naver-prep-grid">
+        <div className="naver-prep-block">
+          <label>주목 포인트</label>
+          <ul className="content-pipeline-outline">
+            {prep.keyPoints.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+        </div>
+        <div className="naver-prep-block">
+          <label>투자자 체크리스트</label>
+          <ul className="content-pipeline-outline">
+            {prep.investorChecklist.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+        </div>
+      </div>
+
+      <div className="naver-prep-block">
+        <label>마무리</label>
+        <p>{prep.closingComment}</p>
+      </div>
 
       <div className="naver-prep-block">
         <label>네이버 블로그 붙여넣기용 최종본</label>

@@ -1,24 +1,73 @@
 # Naver Blog Publish Prep
 
-BG Company Phase 1-C.15에서는 콘텐츠 파이프라인 승인 결과를 네이버 블로그 수동 업로드용 결과물로 정리한다.
+BG Company Phase 1-C.16 prepares approved or writer-generated content for manual Naver Blog publishing.
 
-## 범위
+The panel is designed for BG Market Note style stock-market briefing posts. It separates the final result into copy-ready blocks so the operator can paste them into Naver Blog without browser automation.
 
-- 네이버 블로그 자동 로그인, 자동 업로드, 자동 발행은 하지 않는다.
-- 승인 완료된 콘텐츠를 복사 가능한 형태로 정리한다.
-- 제목, 본문, Markdown, HTML, 태그, 썸네일 문구, 이미지 프롬프트, 투자 유의문구를 제공한다.
-- 게시 URL 저장은 1차에서는 화면 상태로만 제공하며 DB 저장은 추후 단계에서 다룬다.
+## Scope
 
-## 생성 기준
+- Naver Blog auto login, auto upload, auto save, and auto publish are not implemented.
+- The output is prepared for manual copy/paste publishing.
+- No Playwright, Selenium, cookie reuse, or browser-login bypass is used.
+- No real stock-market API is called in this phase.
+- No DB schema change is required; publish prep data is derived from pipeline detail, writerResult, plannerResult, marketingResult, and qaResult.
 
-게시 준비 데이터는 DB schema 변경 없이 pipeline detail의 기존 결과에서 파생한다.
+## Output fields
 
-1. 제목: writerResult.finalTitle → marketingResult.recommendedTitle → plannerResult.title → pipeline title
-2. 본문: writerResult.fullDraft/markdownDraft → plannerResult.content → pipeline summary
-3. 태그: writerResult.usedSeoKeywords → marketingResult.seoKeywords → plannerResult.seoKeywords → 기본 태그
-4. 카테고리: 주제/제목을 기반으로 주식 브리핑 템플릿을 추론해 추천한다.
+The publish prep panel should clearly show:
 
-## 수동 게시 체크리스트
+- Naver Blog title
+- Intro
+- Market summary
+- Major index and sector flow
+- Key points
+- Investor checklist
+- Closing comment
+- Paste-ready final body
+- Markdown
+- HTML
+- Tags
+- Recommended category
+- Thumbnail copy
+- Thumbnail image prompt
+- Inline image ideas
+- Investment disclaimer
+- Manual publish checklist
+- Published URL input
+
+## Generation priority
+
+Publish prep data is derived from existing pipeline data:
+
+1. Title: writerResult.finalTitle -> marketingResult.recommendedTitle -> plannerResult.title -> outputTitle -> pipeline title
+2. Summary/body source: writerResult -> plannerResult -> marketingResult -> pipeline summary/topic
+3. Tags: writerResult.usedSeoKeywords -> marketingResult.seoKeywords -> plannerResult.seoKeywords -> template defaults
+4. Category: inferred stock briefing template
+5. Thumbnail text: marketingResult.thumbnailCopy -> template default
+
+## Body versions
+
+The panel provides three body versions.
+
+### pasteReadyBody
+
+- Plain text optimized for Naver Blog editor paste
+- No heavy HTML
+- Includes intro, market summary, index/sector flow, key points, investor checklist, closing comment, and disclaimer
+
+### markdownBody
+
+- Structured Markdown
+- Includes headings and bullet lists
+- Includes disclaimer at the bottom
+
+### htmlBody
+
+- Minimal safe HTML generated from Markdown
+- Uses only simple structural tags such as h1, h2, p, br, and hr
+- Does not include script, iframe, style, onclick, or tracking pixels
+
+## Manual publish checklist
 
 - 네이버 블로그 제목 붙여넣기
 - 본문 붙여넣기
@@ -30,10 +79,28 @@ BG Company Phase 1-C.15에서는 콘텐츠 파이프라인 승인 결과를 네�
 - 임시저장 또는 발행 직접 진행
 - 게시 URL 기록
 
-## 금지 사항
+## Copy buttons
 
-- 네이버 로그인 cookie 우회
-- Playwright/Selenium을 이용한 게시 자동화
-- 실제 주식 주문/매매 API 연동
-- 투자 수익 보장 표현
-- 실제 지수 수치 자동 생성
+The panel provides copy buttons for:
+
+- title
+- paste-ready body
+- Markdown
+- HTML
+- tags
+- thumbnail copy
+- image prompts
+- disclaimer
+
+Successful copy shows `복사 완료`. If browser clipboard access is blocked, the UI asks the operator to copy manually.
+
+## Prohibited actions
+
+- Naver login cookie bypass
+- Naver auto posting
+- Playwright/Selenium publishing
+- WordPress publishing
+- live stock API calls
+- buy/sell recommendation wording
+- guaranteed return wording
+- arbitrary real index numbers

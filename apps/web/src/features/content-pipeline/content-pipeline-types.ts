@@ -116,6 +116,16 @@ export type StockBriefingTemplate =
   | "WEEKLY_MARKET_REVIEW"
   | "NEXT_WEEK_MARKET_PREVIEW";
 
+export type StockBriefingTemplateConfig = {
+  type: StockBriefingTemplate;
+  label: string;
+  recommendedSchedule: string;
+  recommendedCategory: string;
+  requiredSections: string[];
+  defaultTags: string[];
+  thumbnailTextCandidates: string[];
+};
+
 export type NaverBlogPublishPrepImageIdea = {
   position: string;
   description: string;
@@ -129,6 +139,12 @@ export type NaverBlogPublishPrep = {
   thumbnailText: string;
   thumbnailPrompt: string;
   inlineImageIdeas: NaverBlogPublishPrepImageIdea[];
+  intro: string;
+  marketSummary: string;
+  indexAndSectorFlow: string;
+  keyPoints: string[];
+  investorChecklist: string[];
+  closingComment: string;
   pasteReadyBody: string;
   markdownBody: string;
   htmlBody: string;
@@ -137,6 +153,8 @@ export type NaverBlogPublishPrep = {
   publishStatus: "ready_to_copy" | "copied" | "manually_published";
   externalUrl?: string;
   briefingTemplate?: StockBriefingTemplate;
+  briefingTemplateLabel?: string;
+  recommendedSchedule?: string;
 };
 
 export type ContentPipelineRun = {

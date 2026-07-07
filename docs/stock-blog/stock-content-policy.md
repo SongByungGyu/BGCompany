@@ -1,24 +1,95 @@
 # Stock Content Policy
 
-BG Market Note 계열 콘텐츠는 투자 판단을 돕는 시장 정리 자료이며 투자 권유물이 아니다.
+BG Market Note content is a market briefing and study aid. It is not investment advice.
 
-## 필수 투자 유의 문구
+## Required disclaimer
 
 > 본 글은 투자 판단을 돕기 위한 시장 정리 자료이며, 특정 종목의 매수·매도 추천이 아닙니다. 투자 결정과 책임은 투자자 본인에게 있습니다.
 
-위 문구는 네이버 블로그 붙여넣기용 본문, Markdown, HTML 초안에 포함한다.
+The disclaimer must be present in:
 
-## 작성 원칙
+- pasteReadyBody
+- markdownBody
+- htmlBody
+- disclaimer field
 
-- 사실과 의견을 구분한다.
-- 특정 종목 매수/매도 지시형 표현을 피한다.
-- 수익률 보장, 급등 확정, 무조건 매수 같은 표현을 금지한다.
-- 수치가 필요한 경우 출처와 기준 시점을 명시한다.
-- 현재 Phase 1-C에서는 실시간 시세 API가 연결되어 있지 않으므로 실제 수치 자동 생성은 하지 않는다.
+## Writing principles
 
-## 썸네일/이미지 원칙
+- Separate facts, interpretation, and opinion.
+- Avoid direct buy/sell instructions.
+- Do not promise returns.
+- Do not imply certainty such as “무조건”, “확정”, or “보장”.
+- If numerical market data is used later, include source and timestamp.
+- In Phase 1-C, live market data is not connected, so the system must not invent exact index values.
 
-- 특정 기업 로고를 사용하지 않는다.
-- 저작권 있는 뉴스 이미지나 캡처를 사용하지 않는다.
-- 실제 지수 숫자, 수익률을 임의로 생성하지 않는다.
-- 추상 차트, 캘린더, 체크리스트, 메모 카드 중심의 일러스트를 권장한다.
+## Forbidden expressions
+
+- 매수 추천
+- 매도 추천
+- 수익 보장
+- 급등 확정
+- 무조건 오른다
+- 지금 사면 오른다
+- 몰빵 기회
+- 대박 공개
+
+## Tags
+
+Keep tags practical and limited to around 8-12 items.
+
+Common tags:
+
+- BGMarketNote
+- 주식시장
+- 증시브리핑
+- 시장전망
+- 투자공부
+
+Korea-market candidates:
+
+- 한국주식
+- 코스피
+- 코스닥
+- 국장전망
+- 국장마감
+- 환율
+- 반도체
+- 2차전지
+
+US-market candidates:
+
+- 미국주식
+- 나스닥
+- S&P500
+- 다우지수
+- 미장전망
+- 빅테크
+- 금리
+- 달러
+
+Weekly candidates:
+
+- 주간증시
+- 시장정리
+- 섹터흐름
+- 다음주증시
+- 경제지표
+
+## Thumbnail and image rules
+
+- Do not use company logos.
+- Do not use copyrighted news images or screenshots.
+- Do not invent real index values or returns.
+- Prefer abstract charts, calendars, memo cards, checklists, and market briefing cards.
+- Keep enough blank space for text overlays.
+
+## Automation boundaries
+
+The following are prohibited in the current phase:
+
+- real stock API calls
+- Naver auto login
+- Naver auto save or publish
+- Playwright/Selenium publishing
+- WordPress REST publishing
+- trading/order API integration
