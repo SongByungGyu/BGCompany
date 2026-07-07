@@ -110,6 +110,35 @@ export type QaAuditResult = {
   errorMessage?: string;
 };
 
+export type StockBriefingTemplate =
+  | "KOREA_DAILY_PREVIEW"
+  | "KOREA_MARKET_CLOSE_US_PREVIEW"
+  | "WEEKLY_MARKET_REVIEW"
+  | "NEXT_WEEK_MARKET_PREVIEW";
+
+export type NaverBlogPublishPrepImageIdea = {
+  position: string;
+  description: string;
+  prompt: string;
+};
+
+export type NaverBlogPublishPrep = {
+  naverTitle: string;
+  naverCategory: string;
+  naverTags: string[];
+  thumbnailText: string;
+  thumbnailPrompt: string;
+  inlineImageIdeas: NaverBlogPublishPrepImageIdea[];
+  pasteReadyBody: string;
+  markdownBody: string;
+  htmlBody: string;
+  disclaimer: string;
+  checklist: Array<{ label: string; checked: boolean }>;
+  publishStatus: "ready_to_copy" | "copied" | "manually_published";
+  externalUrl?: string;
+  briefingTemplate?: StockBriefingTemplate;
+};
+
 export type ContentPipelineRun = {
   id: string;
   title: string;
@@ -126,6 +155,7 @@ export type ContentPipelineRun = {
   marketingResult?: MarketingReviewResult;
   writerResult?: ContentWriterResult;
   qaResult?: QaAuditResult;
+  naverBlogPublishPrep?: NaverBlogPublishPrep;
   hermesRequestPayload?: Record<string, unknown>;
   hermesMarketingRequestPayload?: Record<string, unknown>;
   hermesWriterRequestPayload?: Record<string, unknown>;

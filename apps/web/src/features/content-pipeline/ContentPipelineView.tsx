@@ -4,7 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { DB_SYNC_INTERVAL_MS } from "@/lib/db-sync";
 import { fetchContentPipeline, fetchContentPipelines, fetchHermesUsage, startContentPipeline } from "./api";
 import { mockContentPipelines } from "./mock-content-pipeline";
-import type { ContentChannel, ContentPipelineDetail, ContentPipelineRun, HermesUsageSummary } from "./content-pipeline-types";
+import type {
+  ContentChannel,
+  ContentPipelineDetail,
+  ContentPipelineRun,
+  HermesUsageSummary,
+  NaverBlogPublishPrep,
+  StockBriefingTemplate,
+} from "./content-pipeline-types";
 
 const channelLabels: Record<ContentChannel, string> = {
   blog: "블로그",
@@ -14,6 +21,189 @@ const channelLabels: Record<ContentChannel, string> = {
 };
 
 const HERMES_PIPELINE_REQUIRED_RUNS = 4;
+
+const INVESTMENT_DISCLAIMER =
+  "본 글은 투자 판단을 돕기 위한 시장 정리 자료이며, 특정 종목의 매수·매도 추천이 아닙니다. 투자 결정과 책임은 투자자 본인에게 있습니다.";
+
+const DEFAULT_NAVER_TAGS = [
+  "BGMarketNote",
+  "주식시장",
+  "한국주식",
+  "미국주식",
+  "증시브리핑",
+  "시장전망",
+  "투자공부",
+];
+
+const STOCK_BRIEFING_TEMPLATE_LABELS: Record<StockBriefingTemplate, string> = {
+  KOREA_DAILY_PREVIEW: "매일 09:00 KST · 금일 한국 주식시장 현황/전망",
+  KOREA_MARKET_CLOSE_US_PREVIEW: "매일 17:00 KST · 한국장 리뷰 + 미국장 프리뷰",
+  WEEKLY_MARKET_REVIEW: "금요일 16:00 KST · 금주 한국 주식시장 정리",
+  NEXT_WEEK_MARKET_PREVIEW: "주말/일요일 · 다음 주 시장 프리뷰",
+};
+
+const NAVER_PUBLISH_CHECKLIST = [
+  "네이버 블로그 제목 붙여넣기",
+  "본문 붙여넣기",
+  "태그 입력",
+  "카테고리 선택",
+  "썸네일 이미지 업로드",
+  "투자 유의문구 확인",
+  "미리보기 확인",
+  "임시저장 또는 발행 직접 진행",
+  "게시 URL 기록",
+];
+
+function uniqueNonEmpty(values: Array<string | undefined | null>, limit = 12) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  values.forEach((value) => {
+    const trimmed = value?.trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    result.push(trimmed);
+  });
+  return result.slice(0, limit);
+}
+
+function stripMarkdown(value: string) {
+  return value
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/[#>*_`\[\]]/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function ensureDisclaimer(value: string) {
+  return value.includes(INVESTMENT_DISCLAIMER) ? value : `${value.trim()}\n\n---\n${INVESTMENT_DISCLAIMER}`;
+}
+
+function inferStockBriefingTemplate(pipeline: ContentPipelineRun): StockBriefingTemplate {
+  const source = `${pipeline.title} ${pipeline.topic} ${pipeline.writerResult?.finalTitle ?? ""}`.toLowerCase();
+  if (source.includes("다음 주") || source.includes("next week") || source.includes("프리뷰")) return "NEXT_WEEK_MARKET_PREVIEW";
+  if (source.includes("주간") || source.includes("금주") || source.includes("weekly")) return "WEEKLY_MARKET_REVIEW";
+  if (source.includes("미국") || source.includes("us") || source.includes("나스닥")) return "KOREA_MARKET_CLOSE_US_PREVIEW";
+  return "KOREA_DAILY_PREVIEW";
+}
+
+function recommendNaverCategory(template: StockBriefingTemplate) {
+  if (template === "KOREA_DAILY_PREVIEW") return "오늘의 한국장 전망";
+  if (template === "KOREA_MARKET_CLOSE_US_PREVIEW") return "오늘의 미국장 전망";
+  if (template === "WEEKLY_MARKET_REVIEW") return "한국 주간 시장 정리";
+  return "주요 이슈/섹터";
+}
+
+function getNaverTitle(pipeline: ContentPipelineRun) {
+  return pipeline.writerResult?.finalTitle
+    ?? pipeline.marketingResult?.recommendedTitle
+    ?? pipeline.plannerResult?.title
+    ?? pipeline.outputTitle
+    ?? pipeline.title;
+}
+
+function buildMarkdownBody(pipeline: ContentPipelineRun, title: string) {
+  const writer = pipeline.writerResult;
+  const planner = pipeline.plannerResult;
+  if (writer?.markdownDraft) return ensureDisclaimer(writer.markdownDraft);
+  if (writer?.fullDraft) return ensureDisclaimer(writer.fullDraft);
+  if (writer?.sections?.length) {
+    const sections = writer.sections
+      .map((section) => `## ${section.heading ?? "본문"}\n\n${section.body ?? ""}`)
+      .join("\n\n");
+    return ensureDisclaimer(`# ${title}\n\n${writer.introduction ?? ""}\n\n${sections}\n\n${writer.conclusion ?? ""}\n\n${writer.cta ?? ""}`);
+  }
+  if (planner?.content) return ensureDisclaimer(`# ${title}\n\n${planner.content}`);
+  if (planner?.draftDirection) return ensureDisclaimer(`# ${title}\n\n${planner.draftDirection}`);
+  return ensureDisclaimer(`# ${title}\n\n${pipeline.outputSummary ?? pipeline.topic}`);
+}
+
+function markdownToHtml(markdown: string) {
+  const blocks = markdown.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
+  return blocks.map((block) => {
+    if (block.startsWith("# ")) return `<h1>${escapeHtml(block.slice(2))}</h1>`;
+    if (block.startsWith("## ")) return `<h2>${escapeHtml(block.slice(3))}</h2>`;
+    if (block.startsWith("---")) return "<hr />";
+    return `<p>${escapeHtml(block).replace(/\n/g, "<br />")}</p>`;
+  }).join("\n");
+}
+
+function buildThumbnailText(template: StockBriefingTemplate, pipeline: ContentPipelineRun) {
+  if (pipeline.marketingResult?.thumbnailCopy) return pipeline.marketingResult.thumbnailCopy;
+  if (template === "KOREA_DAILY_PREVIEW") return "오늘의 한국장 체크포인트";
+  if (template === "KOREA_MARKET_CLOSE_US_PREVIEW") return "미국장 프리뷰 핵심 정리";
+  if (template === "WEEKLY_MARKET_REVIEW") return "이번 주 시장 흐름 한눈에 보기";
+  return "다음 주 증시 일정 체크";
+}
+
+function buildThumbnailPrompt(title: string, template: StockBriefingTemplate) {
+  return [
+    "네이버 블로그 썸네일용 미니멀 금융 일러스트.",
+    `주제: ${title}.`,
+    `템플릿: ${STOCK_BRIEFING_TEMPLATE_LABELS[template]}.`,
+    "차트 라인, 캘린더, 메모 카드, 따뜻한 크림/블루 톤을 사용.",
+    "특정 종목 로고, 실제 지수 수치, 수익 과장 표현, 저작권 있는 뉴스 이미지는 제외.",
+  ].join(" ");
+}
+
+function buildInlineImageIdeas(template: StockBriefingTemplate): NaverBlogPublishPrep["inlineImageIdeas"] {
+  const market = template === "KOREA_MARKET_CLOSE_US_PREVIEW" ? "미국장" : "한국장";
+  return [
+    {
+      position: "본문 상단",
+      description: `${market} 핵심 체크포인트 요약 카드`,
+      prompt: "cream background, clean Korean stock market briefing card, 3 bullet placeholders, no logos, no real index numbers",
+    },
+    {
+      position: "본문 중간",
+      description: "섹터별 흐름을 한눈에 보는 미니 차트",
+      prompt: "minimal sector flow infographic, soft blue and green, abstract bars and arrows, no company logos, no investment promise",
+    },
+    {
+      position: "본문 하단",
+      description: "투자 유의사항과 다음 체크리스트 이미지",
+      prompt: "calm checklist illustration for investment caution, notebook, magnifier, neutral tone, no financial advice wording",
+    },
+  ];
+}
+
+function buildNaverBlogPublishPrep(pipeline: ContentPipelineRun): NaverBlogPublishPrep {
+  const template = inferStockBriefingTemplate(pipeline);
+  const naverTitle = getNaverTitle(pipeline);
+  const markdownBody = buildMarkdownBody(pipeline, naverTitle);
+  const pasteReadyBody = stripMarkdown(markdownBody);
+  const tags = uniqueNonEmpty([
+    ...(pipeline.writerResult?.usedSeoKeywords ?? []),
+    ...(pipeline.marketingResult?.seoKeywords ?? []),
+    ...(pipeline.plannerResult?.seoKeywords ?? []),
+    ...DEFAULT_NAVER_TAGS,
+  ]);
+
+  return {
+    naverTitle,
+    naverCategory: recommendNaverCategory(template),
+    naverTags: tags,
+    thumbnailText: buildThumbnailText(template, pipeline),
+    thumbnailPrompt: buildThumbnailPrompt(naverTitle, template),
+    inlineImageIdeas: buildInlineImageIdeas(template),
+    pasteReadyBody,
+    markdownBody,
+    htmlBody: pipeline.writerResult?.htmlDraft ?? markdownToHtml(markdownBody),
+    disclaimer: INVESTMENT_DISCLAIMER,
+    checklist: NAVER_PUBLISH_CHECKLIST.map((label) => ({ label, checked: false })),
+    publishStatus: "ready_to_copy",
+    briefingTemplate: template,
+  };
+}
+
 
 const statusLabels: Record<string, string> = {
   draft_requested: "초안 요청",
@@ -342,6 +532,158 @@ function QaResultCard({ pipeline, agentRuns }: { pipeline: ContentPipelineRun; a
   );
 }
 
+function NaverBlogPublishPrepPanel({ pipeline }: { pipeline: ContentPipelineRun }) {
+  const isApproved = pipeline.status === "approved" || pipeline.status === "published_ready" || pipeline.status === "completed";
+  const hasWriterPreview = Boolean(pipeline.writerResult?.ok);
+  const prep = pipeline.naverBlogPublishPrep ?? buildNaverBlogPublishPrep(pipeline);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [copyError, setCopyError] = useState<string | null>(null);
+  const [checklistState, setChecklistState] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(prep.checklist.map((item) => [item.label, item.checked])),
+  );
+  const [externalUrl, setExternalUrl] = useState(prep.externalUrl ?? "");
+  const [publishStatus, setPublishStatus] = useState<NaverBlogPublishPrep["publishStatus"]>(prep.publishStatus);
+
+  if (!isApproved && !hasWriterPreview) return null;
+
+  const copyToClipboard = async (key: string, value: string) => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = value;
+        textArea.style.position = "fixed";
+        textArea.style.opacity = "0";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+      }
+      setCopiedKey(key);
+      setCopyError(null);
+      setPublishStatus("copied");
+      window.setTimeout(() => setCopiedKey(null), 1600);
+    } catch {
+      setCopyError("브라우저 클립보드 권한이 없어 복사하지 못했습니다. 내용을 직접 선택해서 복사해주세요.");
+    }
+  };
+
+  const copyButtons = [
+    ["title", "제목 복사", prep.naverTitle],
+    ["body", "본문 복사", prep.pasteReadyBody],
+    ["markdown", "Markdown 복사", prep.markdownBody],
+    ["html", "HTML 복사", prep.htmlBody],
+    ["tags", "태그 복사", prep.naverTags.map((tag) => `#${tag}`).join(" ")],
+    ["thumbnail", "썸네일 문구 복사", prep.thumbnailText],
+    ["imagePrompt", "이미지 프롬프트 복사", [prep.thumbnailPrompt, ...prep.inlineImageIdeas.map((idea) => `${idea.position}: ${idea.prompt}`)].join("\n\n")],
+    ["disclaimer", "투자 유의문구 복사", prep.disclaimer],
+  ] as const;
+
+  return (
+    <div className="feature-card naver-publish-prep">
+      <div className="naver-prep-head">
+        <div>
+          <label>네이버 블로그 게시 준비</label>
+          <strong>{prep.naverTitle}</strong>
+          <p>{isApproved ? "승인 완료된 결과물을 네이버 블로그 수동 업로드용으로 정리했습니다." : "작성 초안 기준 미리보기입니다. 최종 게시 전 Director 승인을 확인하세요."}</p>
+        </div>
+        <span>{publishStatus === "manually_published" ? "게시 URL 기록" : publishStatus === "copied" ? "복사 준비됨" : "복붙 준비"}</span>
+      </div>
+
+      <div className="naver-prep-warning">
+        <strong>자동 게시 없음</strong>
+        <p>네이버 로그인, 쿠키 우회, 자동 업로드는 하지 않습니다. 아래 내용을 복사해 네이버 블로그에 직접 붙여넣어 주세요.</p>
+      </div>
+
+      <div className="naver-prep-grid">
+        <div className="naver-prep-block">
+          <label>카테고리 추천</label>
+          <strong>{prep.naverCategory}</strong>
+          {prep.briefingTemplate ? <small>{STOCK_BRIEFING_TEMPLATE_LABELS[prep.briefingTemplate]}</small> : null}
+        </div>
+        <div className="naver-prep-block">
+          <label>태그</label>
+          <div className="content-pipeline-keywords">{prep.naverTags.map((tag) => <span key={tag}>#{tag}</span>)}</div>
+        </div>
+      </div>
+
+      <div className="naver-copy-actions">
+        {copyButtons.map(([key, label, value]) => (
+          <button key={key} type="button" onClick={() => copyToClipboard(key, value)}>
+            {copiedKey === key ? "복사 완료" : label}
+          </button>
+        ))}
+      </div>
+      {copyError ? <p className="content-pipeline-error">{copyError}</p> : null}
+
+      <div className="naver-prep-block">
+        <label>네이버 블로그 붙여넣기용 최종본</label>
+        <pre className="content-pipeline-draft">{prep.pasteReadyBody}</pre>
+      </div>
+
+      <details className="content-pipeline-payload" open>
+        <summary>Markdown / HTML 초안 보기</summary>
+        <div className="naver-prep-split">
+          <div>
+            <label>Markdown</label>
+            <pre>{prep.markdownBody}</pre>
+          </div>
+          <div>
+            <label>HTML</label>
+            <pre>{prep.htmlBody}</pre>
+          </div>
+        </div>
+      </details>
+
+      <div className="naver-prep-grid">
+        <div className="naver-prep-block">
+          <label>썸네일 문구</label>
+          <strong>{prep.thumbnailText}</strong>
+          <p>{prep.thumbnailPrompt}</p>
+        </div>
+        <div className="naver-prep-block">
+          <label>투자 유의 문구</label>
+          <p>{prep.disclaimer}</p>
+        </div>
+      </div>
+
+      <div className="naver-prep-block">
+        <label>본문 이미지 아이디어</label>
+        <ul className="content-pipeline-outline">
+          {prep.inlineImageIdeas.map((idea) => (
+            <li key={`${idea.position}-${idea.description}`}>
+              <strong>{idea.position}</strong> · {idea.description}
+              <p>{idea.prompt}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="naver-prep-checklist">
+        <label>수동 게시 체크리스트</label>
+        {prep.checklist.map((item) => (
+          <button
+            key={item.label}
+            type="button"
+            className={checklistState[item.label] ? "checked" : ""}
+            onClick={() => setChecklistState((current) => ({ ...current, [item.label]: !current[item.label] }))}
+          >
+            <i />{item.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="naver-url-row">
+        <input value={externalUrl} onChange={(event) => setExternalUrl(event.target.value)} placeholder="게시 후 네이버 블로그 URL을 기록하세요." />
+        <button type="button" onClick={() => setPublishStatus("manually_published")} disabled={!externalUrl.trim()}>게시 URL 저장</button>
+      </div>
+      <small>게시 URL은 이번 단계에서 화면 상태로만 기록됩니다. DB 저장은 다음 단계에서 추가할 수 있습니다.</small>
+    </div>
+  );
+}
+
 function ApprovedResultCard({ pipeline, approval }: { pipeline: ContentPipelineRun; approval: ContentPipelineDetail["approval"] }) {
   const planner = pipeline.plannerResult;
   const writer = pipeline.writerResult;
@@ -612,6 +954,7 @@ export function ContentPipelineView() {
                   <WriterResultCard pipeline={detail?.pipeline ?? selectedPipeline} agentRuns={detail?.agentRuns ?? []} />
                   <QaResultCard pipeline={detail?.pipeline ?? selectedPipeline} agentRuns={detail?.agentRuns ?? []} />
                   <ApprovedResultCard pipeline={detail?.pipeline ?? selectedPipeline} approval={detail?.approval ?? null} />
+                  <NaverBlogPublishPrepPanel key={(detail?.pipeline ?? selectedPipeline).id} pipeline={detail?.pipeline ?? selectedPipeline} />
                   <div className="feature-card">
                     <label>관련 업무</label>
                     <ul className="audit-list">

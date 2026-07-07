@@ -485,3 +485,23 @@ Operational checks:
 - Do not run Bridge smoke tests automatically during deploys.
 - Do not expose Bridge keys, OpenAI keys, or `.env` contents in logs or reports.
 
+
+
+## Naver Blog Publish Prep
+
+Phase 1-C.15부터 승인 완료된 콘텐츠 파이프라인 상세 화면에서 `네이버 블로그 게시 준비` 패널을 확인한다.
+
+운영 절차:
+
+1. 콘텐츠 파이프라인을 `mock`, `hermes-dry-run`, 또는 승인된 경우에만 `hermes`로 실행한다.
+2. Director 승인 요청을 승인한다.
+3. 콘텐츠 상세의 `네이버 블로그 게시 준비` 패널에서 제목, 본문, 태그, 썸네일 문구, 이미지 프롬프트를 복사한다.
+4. 네이버 블로그에 수동으로 붙여넣고 미리보기를 확인한다.
+5. 투자 유의문구가 포함되어 있는지 확인한다.
+6. 게시 후 URL을 화면에 임시 기록한다.
+
+주의:
+
+- 네이버 자동 로그인/자동 게시/쿠키 우회는 금지한다.
+- 실제 시장 데이터 API가 연결되기 전까지 임의의 지수 수치나 종목 수익률을 생성하지 않는다.
+- Hermes 실제 실행은 비용 가드레일과 사용자 승인 후 1회씩만 진행한다.
