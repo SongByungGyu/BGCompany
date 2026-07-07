@@ -217,6 +217,48 @@ export type ContentPipelineAgentRun = {
   updatedAt: string;
 };
 
+
+
+export type NaverDraftJobStatus =
+  | "created"
+  | "queued"
+  | "claimed"
+  | "in_progress"
+  | "draft_saved"
+  | "user_publish_required"
+  | "completed"
+  | "failed"
+  | "login_required"
+  | "captcha_required"
+  | "security_check_required"
+  | "cancelled";
+
+export type NaverDraftJob = {
+  id: string;
+  contentPipelineId: string | null;
+  stockBlogContentId: string | null;
+  approvalId: string | null;
+  status: NaverDraftJobStatus | string;
+  title: string;
+  body: string;
+  markdownBody: string | null;
+  htmlBody: string | null;
+  tags: string[];
+  category: string | null;
+  thumbnailText: string | null;
+  thumbnailPrompt: string | null;
+  disclaimer: string | null;
+  externalUrl: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  claimedBy: string | null;
+  claimedAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ContentPipelineDetail = {
   pipeline: ContentPipelineRun;
   tasks: ContentPipelineTask[];

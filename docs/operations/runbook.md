@@ -542,3 +542,11 @@ Operational rules:
 - Do not automate Naver login or publishing.
 - Do not commit `.env` or print secrets.
 
+## Naver Draft Agent 운영 메모
+
+- 서버는 승인 완료 콘텐츠에서 `NaverDraftJob`을 생성한다.
+- 로컬 PC의 `tools/naver-draft-agent`가 `x-naver-draft-agent-key`로 job을 polling/claim/status report 한다.
+- 기본값은 dry-run이며, 네이버 자동 발행은 구현하지 않는다.
+- 네이버 로그인, 2FA, captcha, 보안 확인은 반드시 사용자가 로컬 브라우저에서 직접 처리한다.
+- 운영 DB 반영 전 백업 후 `npm --prefix apps/web run db:push`를 수동 실행한다.
+- `docker compose down -v`, seed 재실행, `.env` 커밋은 금지한다.

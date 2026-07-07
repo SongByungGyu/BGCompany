@@ -172,3 +172,67 @@
 
 .naver-publish-prep{background:#fffdf7;border-color:#f1dfac}.naver-prep-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.naver-prep-head>div{min-width:0}.naver-prep-head span{flex:none;padding:6px 9px;color:#8a5e08;font-size:11px;font-weight:900;background:#fff7df;border:1px solid #efd89d;border-radius:999px}.naver-prep-warning{margin-top:10px;padding:10px 12px;color:#85540b;background:#fff7df;border:1px solid #efd89d;border-radius:12px}.naver-prep-warning strong{font-size:12px}.naver-prep-warning p{margin:4px 0 0;font-size:11px}.naver-prep-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}.naver-prep-block{min-width:0;margin-top:10px;padding:12px;background:#fff;border:1px solid #edf1f6;border-radius:13px}.naver-prep-block label,.naver-prep-checklist label,.naver-prep-split label{display:block;margin-bottom:7px;color:#9aa3b2;font-size:11px;font-weight:850;letter-spacing:.03em}.naver-prep-block strong{display:block;color:#1f2a3a;font-size:13px;font-weight:900}.naver-prep-block small{display:block;margin-top:6px;color:#718096;font-size:11px;font-weight:750}.naver-copy-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}.naver-copy-actions button,.naver-url-row button{height:32px;padding:0 10px;color:#2563eb;font-size:11px;font-weight:900;background:#eff6ff;border:1px solid #dbeafe;border-radius:10px;cursor:pointer}.naver-copy-actions button:hover,.naver-url-row button:hover{background:#dbeafe}.naver-copy-actions button:active,.naver-url-row button:active{transform:scale(.97)}.naver-prep-split{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}.naver-prep-split pre{max-height:220px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin:0;padding:10px;color:#334155;background:#fff;border:1px solid #edf1f6;border-radius:10px;font:inherit;font-size:11px;line-height:1.55}.naver-prep-checklist{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:12px}.naver-prep-checklist label{grid-column:1/-1}.naver-prep-checklist button{display:flex;align-items:center;gap:8px;min-height:34px;padding:8px 10px;text-align:left;color:#64748b;font-size:11px;font-weight:800;background:#fff;border:1px solid #edf1f6;border-radius:10px;cursor:pointer}.naver-prep-checklist button i{width:13px;height:13px;border:1px solid #cbd5e1;border-radius:4px;background:#fff}.naver-prep-checklist button.checked{color:#15803d;background:#f0fdf4;border-color:#bbf7d0}.naver-prep-checklist button.checked i{background:var(--done);border-color:var(--done);box-shadow:inset 0 0 0 3px #fff}.naver-url-row{display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:8px;margin-top:12px}.naver-url-row input{height:34px;min-width:0;padding:0 10px;color:#1f2a3a;background:#fff;border:1px solid #dce5ef;border-radius:10px;font:inherit;font-size:12px;font-weight:700}.naver-url-row button:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:1280px){.naver-prep-grid,.naver-prep-split,.naver-prep-checklist{grid-template-columns:1fr}}
+
+.naver-draft-job-panel {
+  border-color: rgba(37, 99, 235, 0.18);
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0.78), rgba(255, 255, 255, 0.96));
+}
+
+.naver-draft-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+
+.naver-draft-actions button {
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: #4f7edb;
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.naver-draft-actions button.secondary {
+  background: #e7edf8;
+  color: #36527f;
+}
+
+.naver-draft-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.naver-draft-job-card {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.naver-draft-job-card div {
+  min-width: 0;
+}
+
+.naver-draft-job-card label {
+  display: block;
+  margin-bottom: 4px;
+  color: #8b98ad;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.naver-draft-job-card code,
+.naver-draft-job-card p {
+  overflow-wrap: anywhere;
+}
+
+.naver-draft-job-card .content-pipeline-error {
+  grid-column: 1 / -1;
+}

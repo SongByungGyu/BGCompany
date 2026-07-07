@@ -24,3 +24,7 @@ backups/
 *.sql.gz
 logs/
 __pycache__/
+tools/naver-draft-agent/.env
+tools/naver-draft-agent/.naver-profile/
+tools/naver-draft-agent/logs/
+tools/naver-draft-agent/drafts/

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DB_SYNC_INTERVAL_MS } from "@/lib/db-sync";
-import { fetchContentPipeline, fetchContentPipelines, fetchHermesUsage, startContentPipeline } from "./api";
+import { cancelNaverDraftJob, createNaverDraftJob, fetchContentPipeline, fetchContentPipelines, fetchHermesUsage, fetchNaverDraftJobs, startContentPipeline } from "./api";
 import { mockContentPipelines } from "./mock-content-pipeline";
 import type {
   ContentChannel,
@@ -10,6 +10,7 @@ import type {
   ContentPipelineRun,
   HermesUsageSummary,
   NaverBlogPublishPrep,
+  NaverDraftJob,
   StockBriefingTemplate,
   StockBriefingTemplateConfig,
 } from "./content-pipeline-types";
@@ -848,6 +849,87 @@ function NaverBlogPublishPrepPanel({ pipeline }: { pipeline: ContentPipelineRun 
   );
 }
 
+
+function naverDraftStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    queued: "대기 중",
+    claimed: "에이전트 할당",
+    in_progress: "작성 중",
+    draft_saved: "임시저장 완료",
+    user_publish_required: "사용자 확인 필요",
+    completed: "완료",
+    failed: "실패",
+    cancelled: "취소됨",
+  };
+  return labels[status] ?? status;
+}
+
+function NaverDraftJobPanel({
+  pipeline,
+  jobs,
+  isLoading,
+  error,
+  isBusy,
+  onCreate,
+  onCancel,
+}: {
+  pipeline: ContentPipelineRun;
+  jobs: NaverDraftJob[];
+  isLoading: boolean;
+  error: string | null;
+  isBusy: boolean;
+  onCreate: () => void;
+  onCancel: (jobId: string) => void;
+}) {
+  const isApproved = pipeline.status === "approved" || pipeline.status === "published_ready" || pipeline.status === "completed";
+  const latestJob = jobs[0];
+  const canCancel = latestJob && ["queued", "claimed", "in_progress"].includes(latestJob.status);
+
+  return (
+    <div className="feature-card naver-draft-job-panel">
+      <div className="naver-prep-head">
+        <div>
+          <label>네이버 임시저장 작업</label>
+          <strong>{latestJob ? naverDraftStatusLabel(latestJob.status) : "작업 없음"}</strong>
+          <p>승인 완료 콘텐츠를 로컬 PC의 Naver Draft Agent가 가져가 네이버 블로그 작성 화면에 입력할 수 있도록 큐에 넣습니다.</p>
+        </div>
+        <span>{isLoading ? "조회 중" : `${jobs.length}개`}</span>
+      </div>
+
+      <div className="naver-prep-warning">
+        <strong>수동 게시 원칙</strong>
+        <p>이 작업은 네이버 로그인 정보나 쿠키를 서버에 저장하지 않습니다. 로컬 에이전트는 기본 dry-run이며, 발행 버튼은 누르지 않습니다.</p>
+      </div>
+
+      <div className="naver-draft-actions">
+        <button type="button" onClick={onCreate} disabled={isBusy || !isApproved}>
+          {isBusy ? "처리 중..." : latestJob ? "임시저장 작업 다시 확인/생성" : "임시저장 작업 생성"}
+        </button>
+        {canCancel ? <button type="button" className="secondary" onClick={() => onCancel(latestJob.id)} disabled={isBusy}>작업 취소</button> : null}
+      </div>
+      {!isApproved ? <small>Director 승인 완료 후 작업 생성이 가능합니다.</small> : null}
+      {error ? <p className="content-pipeline-error">{error}</p> : null}
+
+      {latestJob ? (
+        <div className="naver-draft-job-card">
+          <div><label>Job ID</label><code>{latestJob.id}</code></div>
+          <div><label>상태</label><strong>{naverDraftStatusLabel(latestJob.status)}</strong></div>
+          <div><label>제목</label><p>{latestJob.title}</p></div>
+          <div><label>카테고리</label><p>{latestJob.category ?? "-"}</p></div>
+          <div><label>태그</label><p>{latestJob.tags.map((tag) => `#${tag}`).join(" ") || "-"}</p></div>
+          <div><label>생성</label><p>{formatTime(latestJob.createdAt)}</p></div>
+          {latestJob.claimedAt ? <div><label>할당</label><p>{latestJob.claimedBy ?? "local-agent"} · {formatTime(latestJob.claimedAt)}</p></div> : null}
+          {latestJob.completedAt ? <div><label>완료</label><p>{formatTime(latestJob.completedAt)}</p></div> : null}
+          {latestJob.externalUrl ? <div><label>외부 URL</label><a href={latestJob.externalUrl} target="_blank" rel="noreferrer">{latestJob.externalUrl}</a></div> : null}
+          {latestJob.errorMessage ? <p className="content-pipeline-error">{latestJob.errorCode ?? "NAVER_DRAFT_ERROR"} · {latestJob.errorMessage}</p> : null}
+        </div>
+      ) : (
+        <p>아직 생성된 네이버 임시저장 작업이 없습니다.</p>
+      )}
+    </div>
+  );
+}
+
 function ApprovedResultCard({ pipeline, approval }: { pipeline: ContentPipelineRun; approval: ContentPipelineDetail["approval"] }) {
   const planner = pipeline.plannerResult;
   const writer = pipeline.writerResult;
@@ -887,6 +969,10 @@ export function ContentPipelineView() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [hermesUsage, setHermesUsage] = useState<HermesUsageSummary | null>(null);
   const [hermesUsageError, setHermesUsageError] = useState<string | null>(null);
+  const [naverDraftJobs, setNaverDraftJobs] = useState<NaverDraftJob[]>([]);
+  const [naverDraftJobsLoading, setNaverDraftJobsLoading] = useState(false);
+  const [naverDraftJobsError, setNaverDraftJobsError] = useState<string | null>(null);
+  const [naverDraftJobBusy, setNaverDraftJobBusy] = useState(false);
 
   const refreshHermesUsage = useCallback(async () => {
     try {
@@ -916,6 +1002,28 @@ export function ContentPipelineView() {
       return pipelines;
     }
   }, [pipelines]);
+
+
+
+  const refreshNaverDraftJobs = useCallback(async (pipelineId?: string) => {
+    if (!pipelineId) {
+      setNaverDraftJobs([]);
+      return [];
+    }
+    setNaverDraftJobsLoading(true);
+    try {
+      const jobs = await fetchNaverDraftJobs(pipelineId);
+      setNaverDraftJobs(jobs);
+      setNaverDraftJobsError(null);
+      return jobs;
+    } catch (draftError: unknown) {
+      const message = draftError instanceof Error ? draftError.message : "네이버 임시저장 작업을 불러오지 못했습니다.";
+      setNaverDraftJobsError(message);
+      return [];
+    } finally {
+      setNaverDraftJobsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -963,6 +1071,17 @@ export function ContentPipelineView() {
     };
   }, [selectedPipeline?.id]);
 
+  useEffect(() => {
+    if (!selectedPipeline?.id) return;
+    let cancelled = false;
+    Promise.resolve().then(() => {
+      if (!cancelled) void refreshNaverDraftJobs(selectedPipeline.id);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshNaverDraftJobs, selectedPipeline?.id]);
+
   const start = async () => {
     if (isBusy) return;
     if (runnerMode === "hermes") {
@@ -999,6 +1118,45 @@ export function ContentPipelineView() {
       setNotice(`콘텐츠 파이프라인 실행 실패 · ${message}`);
     } finally {
       setIsBusy(false);
+    }
+  };
+
+
+
+  const handleCreateNaverDraftJob = async () => {
+    const pipeline = detail?.pipeline ?? selectedPipeline;
+    if (!pipeline?.id || naverDraftJobBusy) return;
+    setNaverDraftJobBusy(true);
+    try {
+      const job = await createNaverDraftJob({ contentPipelineId: pipeline.id, approvalId: detail?.approval?.id ?? pipeline.approvalId ?? null });
+      setNaverDraftJobs((current) => [job, ...current.filter((item) => item.id !== job.id)]);
+      setNaverDraftJobsError(null);
+      setNotice(`${pipeline.title} · 네이버 임시저장 작업이 준비되었습니다.`);
+      await refreshNaverDraftJobs(pipeline.id);
+    } catch (draftError: unknown) {
+      const message = draftError instanceof Error ? draftError.message : "네이버 임시저장 작업 생성 실패";
+      setNaverDraftJobsError(message);
+      setNotice(`네이버 임시저장 작업 생성 실패 · ${message}`);
+    } finally {
+      setNaverDraftJobBusy(false);
+    }
+  };
+
+  const handleCancelNaverDraftJob = async (jobId: string) => {
+    const pipeline = detail?.pipeline ?? selectedPipeline;
+    if (!pipeline?.id || naverDraftJobBusy) return;
+    setNaverDraftJobBusy(true);
+    try {
+      const job = await cancelNaverDraftJob(jobId);
+      setNaverDraftJobs((current) => [job, ...current.filter((item) => item.id !== job.id)]);
+      setNaverDraftJobsError(null);
+      setNotice(`${pipeline.title} · 네이버 임시저장 작업을 취소했습니다.`);
+      await refreshNaverDraftJobs(pipeline.id);
+    } catch (draftError: unknown) {
+      const message = draftError instanceof Error ? draftError.message : "네이버 임시저장 작업 취소 실패";
+      setNaverDraftJobsError(message);
+    } finally {
+      setNaverDraftJobBusy(false);
     }
   };
 
@@ -1119,6 +1277,15 @@ export function ContentPipelineView() {
                   <QaResultCard pipeline={detail?.pipeline ?? selectedPipeline} agentRuns={detail?.agentRuns ?? []} />
                   <ApprovedResultCard pipeline={detail?.pipeline ?? selectedPipeline} approval={detail?.approval ?? null} />
                   <NaverBlogPublishPrepPanel key={(detail?.pipeline ?? selectedPipeline).id} pipeline={detail?.pipeline ?? selectedPipeline} />
+                  <NaverDraftJobPanel
+                    pipeline={detail?.pipeline ?? selectedPipeline}
+                    jobs={naverDraftJobs}
+                    isLoading={naverDraftJobsLoading}
+                    error={naverDraftJobsError}
+                    isBusy={naverDraftJobBusy}
+                    onCreate={handleCreateNaverDraftJob}
+                    onCancel={handleCancelNaverDraftJob}
+                  />
                   <div className="feature-card">
                     <label>관련 업무</label>
                     <ul className="audit-list">

@@ -147,3 +147,36 @@ model AgentRun {
   @@index([createdAt])
   @@index([hermesJobId])
 }
+
+
+model NaverDraftJob {
+  id                 String    @id @default(cuid())
+  contentPipelineId  String?
+  stockBlogContentId String?
+  approvalId         String?
+  status             String
+  title              String
+  body               String
+  markdownBody       String?
+  htmlBody           String?
+  tags               String[]
+  category           String?
+  thumbnailText      String?
+  thumbnailPrompt    String?
+  disclaimer         String?
+  externalUrl        String?
+  errorCode          String?
+  errorMessage       String?
+  claimedBy          String?
+  claimedAt          DateTime?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([status])
+  @@index([contentPipelineId])
+  @@index([approvalId])
+  @@index([claimedBy])
+  @@index([createdAt])
+}
