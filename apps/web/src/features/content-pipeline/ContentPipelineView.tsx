@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DB_SYNC_INTERVAL_MS } from "@/lib/db-sync";
@@ -956,8 +956,8 @@ function ApprovedResultCard({ pipeline, approval }: { pipeline: ContentPipelineR
 }
 
 export function ContentPipelineView() {
-  const [topic, setTopic] = useState("AI 개인회사 구축 과정 정리");
-  const [title, setTitle] = useState("BG Company 구축기 1편");
+  const [topic, setTopic] = useState("금일 한국 주식시장 흐름과 내일 체크포인트");
+  const [title, setTitle] = useState("26/07/09 오늘의 한국 증시 정리와 내일 전망");
   const [channel, setChannel] = useState<ContentChannel>("blog");
   const [runnerMode, setRunnerMode] = useState<"mock" | "hermes-dry-run" | "hermes">("mock");
   const [pipelines, setPipelines] = useState<ContentPipelineRun[]>(mockContentPipelines);

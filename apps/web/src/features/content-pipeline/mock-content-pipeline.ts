@@ -1,10 +1,10 @@
-import type { ContentPipelineRun } from "./content-pipeline-types";
+﻿import type { ContentPipelineRun } from "./content-pipeline-types";
 
 export const mockContentPipelines: ContentPipelineRun[] = [
   {
     id: "mock-content-pipeline-1",
-    title: "BG Company 구축기 1편",
-    topic: "AI 개인회사 구축 과정 정리",
+    title: "BG Market Note 운영 안내: 한국·미국 주식 흐름을 매일 정리하는 시장 브리핑",
+    topic: "한국·미국 주식시장 데일리 브리핑 운영 방향",
     channel: "blog",
     status: "draft_requested",
     currentStep: "파이프라인 실행 전",
