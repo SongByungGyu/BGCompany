@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit",
-    "start": "tsx src/index.ts"
+    "start": "tsx src/index.ts",
+    "browser:test": "tsx src/index.ts --browser-test"
   },
   "dependencies": {
     "playwright": "^1.49.1"

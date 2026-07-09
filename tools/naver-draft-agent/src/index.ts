@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { runNaverWriter, type NaverDraftJob } from "./naver-writer.js";
+import { runNaverWriter, testNaverBrowser, type NaverDraftJob } from "./naver-writer.js";
 
 type AgentConfig = {
   baseUrl: string;
@@ -93,8 +93,13 @@ async function processJob(cfg: AgentConfig, job: NaverDraftJob) {
 
 async function main() {
   const cfg = config();
+  if (process.argv.includes("--browser-test")) {
+    await testNaverBrowser();
+    return;
+  }
   console.log(`[naver-agent] polling ${cfg.baseUrl} every ${cfg.pollIntervalMs}ms`);
-  console.log(`[naver-agent] dry-run=${process.env.NAVER_AGENT_DRY_RUN !== "false"}, save=${process.env.NAVER_ALLOW_DRAFT_SAVE === "true"}`);
+  const dryRunSetting = process.env.NAVER_AGENT_DRY_RUN ?? process.env.NAVER_DRAFT_AGENT_DRY_RUN;
+  console.log(`[naver-agent] dry-run=${dryRunSetting !== "false"}, save=${process.env.NAVER_ALLOW_DRAFT_SAVE === "true"}`);
   for (;;) {
     try {
       const { job } = await nextJob(cfg);
