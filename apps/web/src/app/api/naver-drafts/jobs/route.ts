@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApiSession } from "@/lib/auth/admin-auth";
-import { createNaverDraftJobFromPipeline, listNaverDraftJobs } from "@/lib/naver-drafts/naver-draft-jobs";
+import { createNaverDraftJobFromPipeline, getNaverDraftPolicy, listNaverDraftJobs } from "@/lib/naver-drafts/naver-draft-jobs";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAdminApiSession(request);
@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
 
   const contentPipelineId = request.nextUrl.searchParams.get("contentPipelineId");
   const jobs = await listNaverDraftJobs({ contentPipelineId });
-  return NextResponse.json({ jobs });
+  return NextResponse.json({ jobs, policy: getNaverDraftPolicy() });
 }
 
 export async function POST(request: NextRequest) {

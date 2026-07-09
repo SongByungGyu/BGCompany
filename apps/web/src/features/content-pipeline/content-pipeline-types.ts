@@ -259,6 +259,11 @@ export type NaverDraftJob = {
   updatedAt: string;
 };
 
+export type NaverDraftPolicy = {
+  requireApproval: boolean;
+  autoAfterQa: boolean;
+};
+
 export type ContentPipelineDetail = {
   pipeline: ContentPipelineRun;
   tasks: ContentPipelineTask[];

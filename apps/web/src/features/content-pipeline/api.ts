@@ -1,4 +1,4 @@
-import type { ContentPipelineDetail, ContentPipelineRequest, ContentPipelineResponse, ContentPipelineRun, HermesUsageSummary, NaverDraftJob } from "./content-pipeline-types";
+import type { ContentPipelineDetail, ContentPipelineRequest, ContentPipelineResponse, ContentPipelineRun, HermesUsageSummary, NaverDraftJob, NaverDraftPolicy } from "./content-pipeline-types";
 
 export async function fetchContentPipelines(): Promise<ContentPipelineRun[]> {
   const response = await fetch("/api/content-pipelines", { cache: "no-store" });
@@ -33,12 +33,23 @@ export async function fetchHermesUsage(): Promise<HermesUsageSummary> {
   return response.json() as Promise<HermesUsageSummary>;
 }
 
-export async function fetchNaverDraftJobs(contentPipelineId?: string): Promise<NaverDraftJob[]> {
+export async function fetchNaverDraftJobState(contentPipelineId?: string): Promise<{ jobs: NaverDraftJob[]; policy: NaverDraftPolicy }> {
   const query = contentPipelineId ? `?contentPipelineId=${encodeURIComponent(contentPipelineId)}` : "";
   const response = await fetch(`/api/naver-drafts/jobs${query}`, { cache: "no-store" });
   if (!response.ok) throw new Error(`Failed to fetch Naver draft jobs: ${response.status}`);
-  const data = await response.json() as { jobs?: NaverDraftJob[] };
-  return data.jobs ?? [];
+  const data = await response.json() as { jobs?: NaverDraftJob[]; policy?: Partial<NaverDraftPolicy> };
+  return {
+    jobs: data.jobs ?? [],
+    policy: {
+      requireApproval: data.policy?.requireApproval ?? true,
+      autoAfterQa: data.policy?.autoAfterQa ?? false,
+    },
+  };
+}
+
+export async function fetchNaverDraftJobs(contentPipelineId?: string): Promise<NaverDraftJob[]> {
+  const state = await fetchNaverDraftJobState(contentPipelineId);
+  return state.jobs;
 }
 
 export async function createNaverDraftJob(input: { contentPipelineId: string; approvalId?: string | null }): Promise<NaverDraftJob> {

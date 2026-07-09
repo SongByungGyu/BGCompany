@@ -57,3 +57,14 @@ npm --prefix apps/web run db:push
 ```
 
 Do not run seed automatically.
+
+## Approval-free draft queue option
+
+운영자가 네이버 블로그 발행 버튼은 직접 누르되, BG Company가 승인 단계 없이 네이버 임시저장 작업까지 자동으로 준비하게 하려면 서버 `.env`에서 아래 값을 사용한다.
+
+```env
+NAVER_DRAFT_REQUIRE_APPROVAL=false
+NAVER_DRAFT_AUTO_AFTER_QA=true
+```
+
+이 설정은 네이버 로그인 정보나 쿠키를 서버에 저장하지 않는다. Local Naver Draft Agent는 로컬 PC에서 글쓰기 화면 입력과 임시저장까지만 수행해야 하며, 발행은 사용자가 네이버 화면에서 직접 확인 후 진행한다.

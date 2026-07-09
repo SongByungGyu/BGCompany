@@ -1,8 +1,8 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DB_SYNC_INTERVAL_MS } from "@/lib/db-sync";
-import { cancelNaverDraftJob, createNaverDraftJob, fetchContentPipeline, fetchContentPipelines, fetchHermesUsage, fetchNaverDraftJobs, startContentPipeline } from "./api";
+import { cancelNaverDraftJob, createNaverDraftJob, fetchContentPipeline, fetchContentPipelines, fetchHermesUsage, fetchNaverDraftJobState, startContentPipeline } from "./api";
 import { mockContentPipelines } from "./mock-content-pipeline";
 import type {
   ContentChannel,
@@ -11,6 +11,7 @@ import type {
   HermesUsageSummary,
   NaverBlogPublishPrep,
   NaverDraftJob,
+  NaverDraftPolicy,
   StockBriefingTemplate,
   StockBriefingTemplateConfig,
 } from "./content-pipeline-types";
@@ -872,9 +873,11 @@ function NaverDraftJobPanel({
   isBusy,
   onCreate,
   onCancel,
+  policy,
 }: {
   pipeline: ContentPipelineRun;
   jobs: NaverDraftJob[];
+  policy: NaverDraftPolicy;
   isLoading: boolean;
   error: string | null;
   isBusy: boolean;
@@ -882,6 +885,7 @@ function NaverDraftJobPanel({
   onCancel: (jobId: string) => void;
 }) {
   const isApproved = pipeline.status === "approved" || pipeline.status === "published_ready" || pipeline.status === "completed";
+  const canCreateDraftJob = !policy.requireApproval || isApproved;
   const latestJob = jobs[0];
   const canCancel = latestJob && ["queued", "claimed", "in_progress"].includes(latestJob.status);
 
@@ -891,23 +895,24 @@ function NaverDraftJobPanel({
         <div>
           <label>네이버 임시저장 작업</label>
           <strong>{latestJob ? naverDraftStatusLabel(latestJob.status) : "작업 없음"}</strong>
-          <p>승인 완료 콘텐츠를 로컬 PC의 Naver Draft Agent가 가져가 네이버 블로그 작성 화면에 입력할 수 있도록 큐에 넣습니다.</p>
+          <p>{policy.requireApproval ? "승인 완료 콘텐츠를" : "승인 여부와 무관하게 준비된 콘텐츠를"} 로컬 PC의 Naver Draft Agent가 가져가 네이버 블로그 작성 화면에 입력할 수 있도록 큐에 넣습니다.</p>
         </div>
         <span>{isLoading ? "조회 중" : `${jobs.length}개`}</span>
       </div>
 
       <div className="naver-prep-warning">
         <strong>수동 게시 원칙</strong>
-        <p>이 작업은 네이버 로그인 정보나 쿠키를 서버에 저장하지 않습니다. 로컬 에이전트는 기본 dry-run이며, 발행 버튼은 누르지 않습니다.</p>
+        <p>이 작업은 네이버 로그인 정보나 쿠키를 서버에 저장하지 않습니다. 로컬 에이전트가 임시저장까지만 처리하며, 발행 버튼은 누르지 않습니다.</p>
       </div>
 
       <div className="naver-draft-actions">
-        <button type="button" onClick={onCreate} disabled={isBusy || !isApproved}>
+        <button type="button" onClick={onCreate} disabled={isBusy || !canCreateDraftJob}>
           {isBusy ? "처리 중..." : latestJob ? "임시저장 작업 다시 확인/생성" : "임시저장 작업 생성"}
         </button>
         {canCancel ? <button type="button" className="secondary" onClick={() => onCancel(latestJob.id)} disabled={isBusy}>작업 취소</button> : null}
       </div>
-      {!isApproved ? <small>Director 승인 완료 후 작업 생성이 가능합니다.</small> : null}
+      {policy.requireApproval && !isApproved ? <small>Director 승인 완료 후 작업 생성이 가능합니다.</small> : null}
+      {!policy.requireApproval ? <small>승인 없이도 임시저장 작업을 생성할 수 있습니다. 발행은 사용자가 직접 진행합니다.{policy.autoAfterQa ? " 파이프라인 완료 후 자동 큐 생성이 켜져 있습니다." : ""}</small> : null}
       {error ? <p className="content-pipeline-error">{error}</p> : null}
 
       {latestJob ? (
@@ -970,6 +975,7 @@ export function ContentPipelineView() {
   const [hermesUsage, setHermesUsage] = useState<HermesUsageSummary | null>(null);
   const [hermesUsageError, setHermesUsageError] = useState<string | null>(null);
   const [naverDraftJobs, setNaverDraftJobs] = useState<NaverDraftJob[]>([]);
+  const [naverDraftPolicy, setNaverDraftPolicy] = useState<NaverDraftPolicy>({ requireApproval: true, autoAfterQa: false });
   const [naverDraftJobsLoading, setNaverDraftJobsLoading] = useState(false);
   const [naverDraftJobsError, setNaverDraftJobsError] = useState<string | null>(null);
   const [naverDraftJobBusy, setNaverDraftJobBusy] = useState(false);
@@ -1012,10 +1018,11 @@ export function ContentPipelineView() {
     }
     setNaverDraftJobsLoading(true);
     try {
-      const jobs = await fetchNaverDraftJobs(pipelineId);
-      setNaverDraftJobs(jobs);
+      const state = await fetchNaverDraftJobState(pipelineId);
+      setNaverDraftJobs(state.jobs);
+      setNaverDraftPolicy(state.policy);
       setNaverDraftJobsError(null);
-      return jobs;
+      return state.jobs;
     } catch (draftError: unknown) {
       const message = draftError instanceof Error ? draftError.message : "네이버 임시저장 작업을 불러오지 못했습니다.";
       setNaverDraftJobsError(message);
@@ -1108,7 +1115,23 @@ export function ContentPipelineView() {
       const result = await startContentPipeline({ topic, title, channel, runnerMode });
       setPipelines((current) => [result.pipeline, ...current.filter((pipeline) => pipeline.id !== result.pipeline.id)]);
       setSelectedPipelineId(result.pipeline.id);
-      setNotice(`${result.pipeline.title} · task ${result.pipeline.taskIds.length}개와 승인 요청이 생성되었습니다.`);
+      let nextNotice = `${result.pipeline.title} · task ${result.pipeline.taskIds.length}개와 승인 요청이 생성되었습니다.`;
+      try {
+        const draftState = await fetchNaverDraftJobState(result.pipeline.id);
+        setNaverDraftPolicy(draftState.policy);
+        setNaverDraftJobs(draftState.jobs);
+        if (draftState.policy.autoAfterQa && result.pipeline.channel === "blog") {
+          const job = await createNaverDraftJob({ contentPipelineId: result.pipeline.id, approvalId: result.pipeline.approvalId ?? null });
+          setNaverDraftJobs((current) => [job, ...current.filter((item) => item.id !== job.id)]);
+          nextNotice = `${nextNotice} 네이버 임시저장 작업도 자동 준비되었습니다.`;
+          await refreshNaverDraftJobs(result.pipeline.id);
+        }
+      } catch (draftError: unknown) {
+        const draftMessage = draftError instanceof Error ? draftError.message : "네이버 임시저장 자동 생성 실패";
+        setNaverDraftJobsError(draftMessage);
+        nextNotice = `${nextNotice} 네이버 임시저장 자동 생성은 실패했습니다 · ${draftMessage}`;
+      }
+      setNotice(nextNotice);
       setError(null);
       await refresh();
       await refreshHermesUsage();
@@ -1280,6 +1303,7 @@ export function ContentPipelineView() {
                   <NaverDraftJobPanel
                     pipeline={detail?.pipeline ?? selectedPipeline}
                     jobs={naverDraftJobs}
+                    policy={naverDraftPolicy}
                     isLoading={naverDraftJobsLoading}
                     error={naverDraftJobsError}
                     isBusy={naverDraftJobBusy}

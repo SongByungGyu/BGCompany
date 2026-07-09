@@ -157,6 +157,13 @@ export function serializeNaverDraftJob(job: NaverDraftJob): SerializedNaverDraft
   };
 }
 
+export function getNaverDraftPolicy() {
+  return {
+    requireApproval: process.env.NAVER_DRAFT_REQUIRE_APPROVAL !== "false",
+    autoAfterQa: process.env.NAVER_DRAFT_AUTO_AFTER_QA === "true",
+  };
+}
+
 export async function listNaverDraftJobs(input: { contentPipelineId?: string | null } = {}) {
   const jobs = await prisma.naverDraftJob.findMany({
     where: input.contentPipelineId ? { contentPipelineId: input.contentPipelineId } : undefined,
@@ -176,7 +183,7 @@ export async function createNaverDraftJobFromPipeline(input: { contentPipelineId
   if (!detail) throw new Error("CONTENT_PIPELINE_NOT_FOUND");
 
   const approvalId = input.approvalId ?? detail.pipeline.approvalId ?? detail.approval?.id ?? null;
-  const requiresApproval = process.env.NAVER_DRAFT_REQUIRE_APPROVAL !== "false";
+  const { requireApproval: requiresApproval } = getNaverDraftPolicy();
   if (requiresApproval && detail.approval?.status !== "승인 완료" && detail.pipeline.status !== "approved") {
     throw new Error("NAVER_DRAFT_REQUIRES_APPROVED_CONTENT");
   }
