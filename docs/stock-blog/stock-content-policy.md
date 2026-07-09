@@ -93,3 +93,14 @@ The following are prohibited in the current phase:
 - Playwright/Selenium publishing
 - WordPress REST publishing
 - trading/order API integration
+
+## Phase 1-S.5 참고자료 사용 원칙
+
+주식시장 브리핑은 참고자료를 기사 원문 대체물이 아니라 방향성 점검용으로만 사용합니다.
+
+- 기사 전문 복사 금지
+- 출처 링크 유지
+- 서로 다른 관점의 키워드 확인
+- 투자 권유 표현 금지
+- 미확인 지수/수치 단정 금지
+- 자동 게시 전 사람 검토 유지

@@ -15,6 +15,7 @@ import type {
   StockBriefingTemplate,
   StockBriefingTemplateConfig,
 } from "./content-pipeline-types";
+import type { BlogImagePrompt, ReferenceBundle, ReferenceItem } from "@/lib/stock-blog/references/reference-types";
 
 const channelLabels: Record<ContentChannel, string> = {
   blog: "블로그",
@@ -305,10 +306,22 @@ function buildNaverBlogPublishPrep(pipeline: ContentPipelineRun): NaverBlogPubli
   const draftPrep = { ...structuredSections, disclaimer: INVESTMENT_DISCLAIMER };
   const pasteReadyBody = buildPasteReadyBody(naverTitle, draftPrep);
   const markdownBody = buildStructuredMarkdown(naverTitle, draftPrep);
+  const referenceBundle = pipeline.naverBlogPublishPrep?.referenceBundle
+    ?? pipeline.referenceBundle
+    ?? pipeline.writerResult?.referenceBundle
+    ?? pipeline.qaResult?.referenceBundle
+    ?? pipeline.marketingResult?.referenceBundle;
+  const blogImagePrompts = pipeline.naverBlogPublishPrep?.blogImagePrompts
+    ?? pipeline.blogImagePrompts
+    ?? pipeline.writerResult?.blogImagePrompts
+    ?? pipeline.qaResult?.blogImagePrompts
+    ?? pipeline.marketingResult?.blogImagePrompts
+    ?? [];
   const tags = uniqueNonEmpty([
     ...(pipeline.writerResult?.usedSeoKeywords ?? []),
     ...(pipeline.marketingResult?.seoKeywords ?? []),
     ...(pipeline.plannerResult?.seoKeywords ?? []),
+    ...(referenceBundle?.repeatedKeywords ?? []),
     ...config.defaultTags,
     ...DEFAULT_NAVER_TAGS,
   ], 12);
@@ -330,6 +343,8 @@ function buildNaverBlogPublishPrep(pipeline: ContentPipelineRun): NaverBlogPubli
     briefingTemplate: template,
     briefingTemplateLabel: config.label,
     recommendedSchedule: config.recommendedSchedule,
+    referenceBundle,
+    blogImagePrompts,
   };
 }
 
@@ -661,6 +676,59 @@ function QaResultCard({ pipeline, agentRuns }: { pipeline: ContentPipelineRun; a
   );
 }
 
+function sourceTypeLabel(type: ReferenceItem["sourceType"]) {
+  const labels: Record<ReferenceItem["sourceType"], string> = {
+    news: "뉴스",
+    blog: "블로그",
+    disclosure: "공시",
+    market_data: "시장 데이터",
+    manual: "수동 참고",
+  };
+  return labels[type] ?? type;
+}
+
+function formatReferenceBundleForCopy(bundle?: ReferenceBundle) {
+  if (!bundle) return "";
+  const lines = [
+    `[참고자료 정책] ${bundle.sourcePolicy}`,
+    bundle.queries.length ? `검색 쿼리: ${bundle.queries.join(" / ")}` : "",
+    bundle.keyThemes.length ? `핵심 테마: ${bundle.keyThemes.join(", ")}` : "",
+    bundle.repeatedKeywords.length ? `반복 키워드: ${bundle.repeatedKeywords.join(", ")}` : "",
+    bundle.differentiationPoints.length ? `차별화 포인트: ${bundle.differentiationPoints.join(" / ")}` : "",
+    bundle.cautionNotes.length ? `주의사항: ${bundle.cautionNotes.join(" / ")}` : "",
+    "",
+    ...bundle.items.map((item, index) => [
+      `${index + 1}. ${item.title}`,
+      `- 출처: ${item.publisher ?? item.provider} · ${sourceTypeLabel(item.sourceType)}`,
+      item.publishedAt ? `- 발행일: ${item.publishedAt}` : "",
+      item.summary ? `- 요약: ${item.summary}` : "",
+      item.url ? `- URL: ${item.url}` : "",
+      item.usageNote ? `- 활용: ${item.usageNote}` : "",
+    ].filter(Boolean).join("\n")),
+  ].filter(Boolean);
+  return lines.join("\n");
+}
+
+function formatReferenceLinksForCopy(bundle?: ReferenceBundle) {
+  if (!bundle) return "";
+  return bundle.items
+    .map((item, index) => `${index + 1}. ${item.title}${item.url ? `\n${item.url}` : ""}`)
+    .join("\n\n");
+}
+
+function formatBlogImagePromptsForCopy(prompts?: BlogImagePrompt[]) {
+  if (!prompts?.length) return "";
+  return prompts.map((prompt, index) => [
+    `${index + 1}. ${prompt.title}`,
+    `- 용도: ${prompt.purpose} / ${prompt.placement}`,
+    prompt.textOverlay ? `- 문구: ${prompt.textOverlay}` : "",
+    `- 프롬프트: ${prompt.prompt}`,
+    `- 제외: ${prompt.negativePrompt}`,
+    `- 비율: ${prompt.aspectRatio ?? "권장 없음"}`,
+    `- 메모: ${prompt.notes}`,
+  ].filter(Boolean).join("\n")).join("\n\n");
+}
+
 function NaverBlogPublishPrepPanel({ pipeline }: { pipeline: ContentPipelineRun }) {
   const isApproved = pipeline.status === "approved" || pipeline.status === "published_ready" || pipeline.status === "completed";
   const hasWriterPreview = Boolean(pipeline.writerResult?.ok);
@@ -707,8 +775,11 @@ function NaverBlogPublishPrepPanel({ pipeline }: { pipeline: ContentPipelineRun 
     ["tags", "태그 복사", prep.naverTags.map((tag) => `#${tag}`).join(" ")],
     ["thumbnail", "썸네일 문구 복사", prep.thumbnailText],
     ["imagePrompt", "이미지 프롬프트 복사", [prep.thumbnailPrompt, ...prep.inlineImageIdeas.map((idea) => `${idea.position}: ${idea.prompt}`)].join("\n\n")],
+    ["referenceBundle", "참고자료 요약 복사", formatReferenceBundleForCopy(prep.referenceBundle)],
+    ["referenceLinks", "출처 링크 복사", formatReferenceLinksForCopy(prep.referenceBundle)],
+    ["blogImagePrompts", "이미지 프롬프트 전체 복사", formatBlogImagePromptsForCopy(prep.blogImagePrompts)],
     ["disclaimer", "투자 유의문구 복사", prep.disclaimer],
-  ] as const;
+  ].filter(([, , value]) => value.trim().length > 0);
 
   return (
     <div className="feature-card naver-publish-prep">
@@ -826,6 +897,70 @@ function NaverBlogPublishPrepPanel({ pipeline }: { pipeline: ContentPipelineRun 
           ))}
         </ul>
       </div>
+
+      {prep.referenceBundle ? (
+        <div className="naver-prep-block stock-reference-panel">
+          <label>관련 기사 / 참고자료</label>
+          <div className="stock-reference-meta">
+            <span>{prep.referenceBundle.provider}</span>
+            <span>{prep.referenceBundle.mode}</span>
+            <span>{prep.referenceBundle.market}</span>
+          </div>
+          <p>{prep.referenceBundle.sourcePolicy}</p>
+          {prep.referenceBundle.queries.length ? (
+            <div className="content-pipeline-keywords">
+              {prep.referenceBundle.queries.map((query) => <span key={query}>{query}</span>)}
+            </div>
+          ) : null}
+          <div className="naver-prep-grid">
+            <div className="naver-prep-block compact">
+              <label>핵심 테마</label>
+              <ul className="content-pipeline-outline">{prep.referenceBundle.keyThemes.map((item) => <li key={item}>{item}</li>)}</ul>
+            </div>
+            <div className="naver-prep-block compact">
+              <label>차별화 포인트</label>
+              <ul className="content-pipeline-outline">{prep.referenceBundle.differentiationPoints.map((item) => <li key={item}>{item}</li>)}</ul>
+            </div>
+          </div>
+          {prep.referenceBundle.cautionNotes.length ? (
+            <div className="naver-prep-warning subtle">
+              <strong>참고자료 사용 주의</strong>
+              <p>{prep.referenceBundle.cautionNotes.join(" · ")}</p>
+            </div>
+          ) : null}
+          <div className="stock-reference-list">
+            {prep.referenceBundle.items.map((item) => (
+              <article key={item.id} className="stock-reference-item">
+                <div>
+                  <span>{sourceTypeLabel(item.sourceType)} · {item.publisher ?? item.provider}</span>
+                  <strong>{item.title}</strong>
+                  {item.summary ? <p>{item.summary}</p> : null}
+                  {item.usageNote ? <small>{item.usageNote}</small> : null}
+                </div>
+                {item.url ? <a href={item.url} target="_blank" rel="noreferrer">원문</a> : null}
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {prep.blogImagePrompts?.length ? (
+        <div className="naver-prep-block stock-image-prompt-panel">
+          <label>이미지 프롬프트 준비</label>
+          <div className="stock-image-prompt-list">
+            {prep.blogImagePrompts.map((prompt) => (
+              <article key={prompt.id} className="stock-image-prompt-item">
+                <span>{prompt.purpose} · {prompt.placement} · {prompt.aspectRatio ?? "비율 자유"}</span>
+                <strong>{prompt.title}</strong>
+                {prompt.textOverlay ? <small>문구: {prompt.textOverlay}</small> : null}
+                <p>{prompt.prompt}</p>
+                <em>제외: {prompt.negativePrompt}</em>
+                <small>{prompt.notes}</small>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="naver-prep-checklist">
         <label>수동 게시 체크리스트</label>

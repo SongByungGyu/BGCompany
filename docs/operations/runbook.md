@@ -550,3 +550,20 @@ Operational rules:
 - 네이버 로그인, 2FA, captcha, 보안 확인은 반드시 사용자가 로컬 브라우저에서 직접 처리한다.
 - 운영 DB 반영 전 백업 후 `npm --prefix apps/web run db:push`를 수동 실행한다.
 - `docker compose down -v`, seed 재실행, `.env` 커밋은 금지한다.
+
+## Phase 1-S.5 Reference Module Checks
+
+Use these checks when validating stock briefing reference preparation.
+
+```bash
+npm --prefix apps/web run lint
+npm --prefix apps/web run build
+python3 -B -m py_compile services/hermes-bridge/server.py
+python3 -B -m unittest services/hermes-bridge/test_server.py
+docker compose config
+docker compose ps
+bash scripts/check-production-health.sh
+bash scripts/check-hermes-bridge.sh
+```
+
+Do not run Hermes, OpenAI, Naver Search, stock APIs, Playwright/Selenium, or Naver automation for this verification unless the operator explicitly approves the specific paid/external action.

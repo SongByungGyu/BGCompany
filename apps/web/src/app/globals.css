@@ -241,3 +241,6 @@
 .naver-draft-job-card .content-pipeline-error {
   grid-column: 1 / -1;
 }
+
+
+.stock-reference-meta{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.stock-reference-meta span{padding:4px 7px;color:#475569;font-size:10px;font-weight:900;background:#f8fafc;border:1px solid #e2e8f0;border-radius:999px}.naver-prep-block.compact{margin-top:0}.naver-prep-warning.subtle{background:#f8fafc;border-color:#e2e8f0;color:#475569}.stock-reference-list,.stock-image-prompt-list{display:grid;gap:8px;margin-top:10px}.stock-reference-item,.stock-image-prompt-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px}.stock-reference-item span,.stock-image-prompt-item span{display:block;margin-bottom:5px;color:#64748b;font-size:10px;font-weight:850}.stock-reference-item strong,.stock-image-prompt-item strong{font-size:12px}.stock-reference-item p,.stock-image-prompt-item p{margin:5px 0 0;color:#475569;font-size:11px;line-height:1.55}.stock-reference-item a{align-self:start;padding:5px 8px;color:#2563eb;font-size:10px;font-weight:900;text-decoration:none;background:#eff6ff;border:1px solid #dbeafe;border-radius:999px}.stock-image-prompt-item{grid-template-columns:1fr}.stock-image-prompt-item em{display:block;margin-top:6px;color:#b45309;font-size:10px;font-style:normal;line-height:1.5}

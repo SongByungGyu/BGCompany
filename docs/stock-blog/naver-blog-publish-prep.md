@@ -104,3 +104,18 @@ Successful copy shows `복사 완료`. If browser clipboard access is blocked, t
 - buy/sell recommendation wording
 - guaranteed return wording
 - arbitrary real index numbers
+
+## Phase 1-S.5 참고자료/이미지 프롬프트
+
+네이버 블로그 게시 준비 패널은 승인 완료 또는 writer 결과가 있는 콘텐츠에서 다음 정보를 함께 표시합니다.
+
+- 관련 기사/참고자료 요약
+- 검색 쿼리
+- 핵심 테마
+- 반복 키워드
+- 차별화 포인트
+- 참고자료 사용 주의사항
+- 썸네일/본문 이미지 프롬프트
+- 출처 링크 복사 버튼
+
+현재 단계에서는 실제 네이버 검색 API, 네이버 자동 게시, 이미지 생성 API를 실행하지 않습니다.

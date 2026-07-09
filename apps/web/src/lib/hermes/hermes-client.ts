@@ -211,6 +211,8 @@ export function buildContentWriterHermesPayload(input: ContentWriterHermesInput)
       language: input.language ?? "ko",
       plannerResult: input.plannerResult,
       marketingResult: input.marketingResult,
+      referenceBundle: input.referenceBundle,
+      blogImagePrompts: input.blogImagePrompts,
     },
     context: {
       company: "BG Company",
@@ -234,6 +236,8 @@ export function buildQaAuditHermesPayload(input: QaAuditHermesInput): HermesQaAu
       plannerResult: input.plannerResult,
       marketingResult: input.marketingResult,
       writerResult: input.writerResult,
+      referenceBundle: input.referenceBundle,
+      blogImagePrompts: input.blogImagePrompts,
     },
     context: {
       company: "BG Company",

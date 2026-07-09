@@ -1,4 +1,5 @@
 import type { TimelineRecord } from "@/features/timelines/api";
+import type { BlogImagePrompt, ReferenceBundle } from "@/lib/stock-blog/references/reference-types";
 
 export type ContentChannel = "blog" | "instagram" | "youtube" | "newsletter";
 export type ContentPipelineStatus =
@@ -54,6 +55,8 @@ export type MarketingReviewResult = {
   marketingScore?: number;
   finalRecommendation?: "approve" | "revise";
   reason?: string;
+  referenceBundle?: ReferenceBundle;
+  blogImagePrompts?: BlogImagePrompt[];
   parseStatus?: ContentPlannerParseStatus;
   rawText?: string;
   durationMs?: number;
@@ -81,6 +84,8 @@ export type ContentWriterResult = {
   htmlDraft?: string;
   usedSeoKeywords?: string[];
   writingNotes?: string[];
+  referenceBundle?: ReferenceBundle;
+  blogImagePrompts?: BlogImagePrompt[];
   parseStatus?: ContentPlannerParseStatus;
   rawText?: string;
   durationMs?: number;
@@ -103,6 +108,8 @@ export type QaAuditResult = {
   qaScore?: number;
   finalRecommendation?: "approve" | "revise" | "block";
   reason?: string;
+  referenceBundle?: ReferenceBundle;
+  blogImagePrompts?: BlogImagePrompt[];
   parseStatus?: ContentPlannerParseStatus;
   rawText?: string;
   durationMs?: number;
@@ -155,6 +162,8 @@ export type NaverBlogPublishPrep = {
   briefingTemplate?: StockBriefingTemplate;
   briefingTemplateLabel?: string;
   recommendedSchedule?: string;
+  referenceBundle?: ReferenceBundle;
+  blogImagePrompts?: BlogImagePrompt[];
 };
 
 export type ContentPipelineRun = {
@@ -174,6 +183,8 @@ export type ContentPipelineRun = {
   writerResult?: ContentWriterResult;
   qaResult?: QaAuditResult;
   naverBlogPublishPrep?: NaverBlogPublishPrep;
+  referenceBundle?: ReferenceBundle;
+  blogImagePrompts?: BlogImagePrompt[];
   hermesRequestPayload?: Record<string, unknown>;
   hermesMarketingRequestPayload?: Record<string, unknown>;
   hermesWriterRequestPayload?: Record<string, unknown>;

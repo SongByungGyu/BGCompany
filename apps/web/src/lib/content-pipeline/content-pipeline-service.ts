@@ -1,4 +1,4 @@
-﻿import { randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { createAgentRun, updateAgentRunStatus, type AgentRunStatus } from "@/lib/repositories/agent-runs";
@@ -6,7 +6,10 @@ import { createEvent } from "@/lib/repositories/events";
 import { serializeApproval, serializeTask, serializeTimeline } from "@/lib/repositories/serializers";
 import { buildContentPlannerHermesPayload, buildContentWriterHermesPayload, buildMarketingReviewHermesPayload, buildQaAuditHermesPayload, runContentPlannerHermes, runContentWriterHermes, runMarketingReviewHermes, runQaAuditHermes } from "@/lib/hermes/hermes-client";
 import { assertHermesDailyRunAvailable } from "@/lib/hermes/hermes-usage";
+import { collectStockBlogReferences } from "@/lib/stock-blog/references/reference-adapter";
+import { buildBlogImagePrompts } from "@/lib/stock-blog/references/reference-normalizer";
 import type { NormalizedHermesRunResult } from "@/lib/hermes/hermes-types";
+import type { BlogImagePrompt, ReferenceBundle, StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 import type { ContentChannel, ContentPipelineDetail, ContentPipelineRun, ContentPipelineStatus } from "@/features/content-pipeline/content-pipeline-types";
 
 type ContentPipelineInput = {
@@ -14,6 +17,8 @@ type ContentPipelineInput = {
   channel: ContentChannel;
   title: string;
   runnerMode?: "mock" | "hermes-dry-run" | "hermes";
+  referenceBundle?: ReferenceBundle;
+  blogImagePrompts?: BlogImagePrompt[];
 };
 
 type PlannerExecution = {
@@ -91,6 +96,47 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }
 
+function asReferenceBundle(value: unknown): ReferenceBundle | undefined {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as ReferenceBundle : undefined;
+}
+
+function asBlogImagePrompts(value: unknown): BlogImagePrompt[] | undefined {
+  return Array.isArray(value) ? value as BlogImagePrompt[] : undefined;
+}
+
+function inferReferenceTemplate(input: { topic: string; title: string }): StockReferenceBriefingTemplate {
+  const text = `${input.topic} ${input.title}`;
+  if (/다음\s*주|next\s*week/i.test(text)) return "NEXT_WEEK_MARKET_PREVIEW";
+  if (/주간|이번\s*주|weekly/i.test(text)) return "WEEKLY_MARKET_REVIEW";
+  if (/미국|나스닥|S&P|미장|밤/i.test(text)) return "KOREA_MARKET_CLOSE_US_PREVIEW";
+  return "KOREA_DAILY_PREVIEW";
+}
+
+function inferReferenceMarket(template: StockReferenceBriefingTemplate): "KR" | "US" | "GLOBAL" {
+  if (template === "NEXT_WEEK_MARKET_PREVIEW") return "GLOBAL";
+  if (template === "KOREA_MARKET_CLOSE_US_PREVIEW") return "GLOBAL";
+  return "KR";
+}
+
+function buildReferenceKeywords(input: { topic: string; title: string }) {
+  return Array.from(new Set(`${input.topic} ${input.title}`.split(/[\s,·/]+/).map((item) => item.trim()).filter((item) => item.length >= 2))).slice(0, 8);
+}
+
+async function enrichContentPipelineInput(input: ContentPipelineInput): Promise<ContentPipelineInput> {
+  if (input.referenceBundle && input.blogImagePrompts) return input;
+  const contentType = inferReferenceTemplate(input);
+  const referenceBundle = input.referenceBundle ?? await collectStockBlogReferences({
+    topic: input.topic,
+    title: input.title,
+    channel: input.channel,
+    contentType,
+    market: inferReferenceMarket(contentType),
+    keywords: buildReferenceKeywords(input),
+  });
+  const blogImagePrompts = input.blogImagePrompts ?? buildBlogImagePrompts(referenceBundle);
+  return { ...input, referenceBundle, blogImagePrompts };
+}
+
 function asStringArray(value: unknown) {
   if (!Array.isArray(value)) return undefined;
   const items = value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
@@ -144,6 +190,8 @@ function normalizeResultForMetadata(result: NormalizedPipelineResult): Record<st
     htmlDraft: result.htmlDraft,
     usedSeoKeywords: result.usedSeoKeywords,
     writingNotes: result.writingNotes,
+    referenceBundle: result.referenceBundle,
+    blogImagePrompts: result.blogImagePrompts,
     reviewSummary: result.reviewSummary,
     titleSuggestions: result.titleSuggestions,
     recommendedTitle: result.recommendedTitle,
@@ -192,6 +240,8 @@ function pipelineMetadata(input: {
   hermesMarketingRequestPayload?: Record<string, unknown>;
   hermesWriterRequestPayload?: Record<string, unknown>;
   hermesQaRequestPayload?: Record<string, unknown>;
+  referenceBundle?: ReferenceBundle;
+  blogImagePrompts?: BlogImagePrompt[];
 }): Prisma.InputJsonObject {
   return toJsonObject({
     contentPipelineId: input.pipelineId,
@@ -207,6 +257,8 @@ function pipelineMetadata(input: {
     marketingResult: input.marketingResult,
     writerResult: input.writerResult,
     qaResult: input.qaResult,
+    referenceBundle: input.referenceBundle,
+    blogImagePrompts: input.blogImagePrompts,
     hermesRequestPayload: input.hermesRequestPayload,
     hermesMarketingRequestPayload: input.hermesMarketingRequestPayload,
     hermesWriterRequestPayload: input.hermesWriterRequestPayload,
@@ -494,7 +546,7 @@ async function hermesMarketingExecution(data: ContentPipelineInput, planner: Pla
     plannerResult: planner.result,
   });
   const hermesPayload = toJsonObject(payload);
-  const normalizedResult = normalizeResultForMetadata(result as NormalizedPipelineResult);
+  const normalizedResult = normalizeResultForMetadata({ ...(result as NormalizedPipelineResult), referenceBundle: data.referenceBundle, blogImagePrompts: data.blogImagePrompts });
 
   if (!result.ok) {
     const outputTitle = `${data.title} · Marketing Hermes 실행 실패`;
@@ -590,7 +642,9 @@ function mockWriterExecution(data: ContentPipelineInput, planner: PlannerExecuti
       fullDraft,
       markdownDraft: fullDraft,
       usedSeoKeywords: ["한국증시", "미국증시", "주식시장", "시장브리핑"],
-      writingNotes: ["마케팅 추천 제목과 시장 브리핑 outline을 반영했습니다."],
+      writingNotes: ["마케팅 추천 제목과 시장 브리핑 outline을 반영했습니다.", "참고자료 묶음과 이미지 프롬프트 정책을 함께 반영했습니다."],
+      referenceBundle: data.referenceBundle,
+      blogImagePrompts: data.blogImagePrompts,
       parseStatus: "json",
       durationMs: 0,
       plannerResult: planner.result,
@@ -607,6 +661,8 @@ function dryRunWriterExecution(data: ContentPipelineInput, planner: PlannerExecu
     language: "ko",
     plannerResult: planner.result,
     marketingResult: marketing.result,
+    referenceBundle: data.referenceBundle,
+    blogImagePrompts: data.blogImagePrompts,
   });
   const outputSummary = "Hermes를 실제 호출하지 않고 content-writer 요청 payload를 생성했습니다.";
   return {
@@ -634,7 +690,9 @@ function dryRunWriterExecution(data: ContentPipelineInput, planner: PlannerExecu
       fullDraft: "dry-run writer payload only",
       markdownDraft: "dry-run writer payload only",
       usedSeoKeywords: ["Hermes", "content-writer", "dry-run"],
-      writingNotes: ["실제 호출 없음"],
+      writingNotes: ["실제 호출 없음", "참고자료/이미지 프롬프트 payload 포함"],
+      referenceBundle: data.referenceBundle,
+      blogImagePrompts: data.blogImagePrompts,
       parseStatus: "json",
       durationMs: 0,
     },
@@ -694,6 +752,8 @@ async function hermesWriterExecution(data: ContentPipelineInput, planner: Planne
     language: "ko",
     plannerResult: planner.result,
     marketingResult: marketing.result,
+    referenceBundle: data.referenceBundle,
+    blogImagePrompts: data.blogImagePrompts,
   });
   const hermesPayload = toJsonObject(payload);
   const normalizedResult = normalizeResultForMetadata(result as NormalizedPipelineResult);
@@ -765,7 +825,9 @@ function mockQaExecution(data: ContentPipelineInput, planner: PlannerExecution, 
       qaSummary,
       factCheckNotes: ["Core claims are consistent with the given topic and previous outputs."],
       qualityNotes: ["The structure is clear enough to move to Director approval."],
-      riskNotes: ["Check exaggeration and sensitive details once before publishing."],
+      riskNotes: ["Check exaggeration and sensitive details once before publishing.", "이미지 프롬프트에 로고/실제 지수/매수·매도 추천 표현이 없는지 확인합니다."],
+      referenceBundle: data.referenceBundle,
+      blogImagePrompts: data.blogImagePrompts,
       typoAndStyleNotes: ["No critical typo or style issue was found in mock review."],
       requiredRevisions: [],
       optionalSuggestions: ["Add one concrete operating context sentence to strengthen the opening."],
@@ -791,6 +853,8 @@ function dryRunQaExecution(data: ContentPipelineInput, planner: PlannerExecution
     plannerResult: planner.result,
     marketingResult: marketing.result,
     writerResult: writer.result,
+    referenceBundle: data.referenceBundle,
+    blogImagePrompts: data.blogImagePrompts,
   });
   const outputSummary = "qa-auditor Hermes payload was generated without calling Hermes.";
   return {
@@ -820,6 +884,8 @@ function dryRunQaExecution(data: ContentPipelineInput, planner: PlannerExecution
       qaScore: 0,
       finalRecommendation: "revise",
       reason: "dry-run result only.",
+      referenceBundle: data.referenceBundle,
+      blogImagePrompts: data.blogImagePrompts,
       parseStatus: "json",
       durationMs: 0,
     },
@@ -904,6 +970,8 @@ async function hermesQaExecution(data: ContentPipelineInput, planner: PlannerExe
     plannerResult: planner.result,
     marketingResult: marketing.result,
     writerResult: writer.result,
+    referenceBundle: data.referenceBundle,
+    blogImagePrompts: data.blogImagePrompts,
   });
   const hermesPayload = toJsonObject(payload);
   const normalizedResult = normalizeResultForMetadata(result as NormalizedPipelineResult);
@@ -968,6 +1036,8 @@ function runFromEvent(event: {
   const marketingResult = asRecord(payload.marketingResult);
   const writerResult = asRecord(payload.writerResult);
   const qaResult = asRecord(payload.qaResult);
+  const referenceBundle = asReferenceBundle(payload.referenceBundle);
+  const blogImagePrompts = asBlogImagePrompts(payload.blogImagePrompts);
   return {
     id: pipelineId,
     title: typeof payload.title === "string" ? payload.title : "콘텐츠 파이프라인",
@@ -1017,6 +1087,8 @@ function runFromEvent(event: {
       marketingScore: asNumber(marketingResult.marketingScore),
       finalRecommendation: marketingResult.finalRecommendation === "approve" || marketingResult.finalRecommendation === "revise" ? marketingResult.finalRecommendation : undefined,
       reason: typeof marketingResult.reason === "string" ? marketingResult.reason : undefined,
+      referenceBundle: asReferenceBundle(marketingResult.referenceBundle) ?? referenceBundle,
+      blogImagePrompts: asBlogImagePrompts(marketingResult.blogImagePrompts) ?? blogImagePrompts,
       parseStatus: asParseStatus(marketingResult.parseStatus),
       rawText: typeof marketingResult.rawText === "string" ? marketingResult.rawText : undefined,
       durationMs: asNumber(marketingResult.durationMs),
@@ -1038,6 +1110,8 @@ function runFromEvent(event: {
       htmlDraft: typeof writerResult.htmlDraft === "string" ? writerResult.htmlDraft : undefined,
       usedSeoKeywords: asStringArray(writerResult.usedSeoKeywords),
       writingNotes: asStringArray(writerResult.writingNotes),
+      referenceBundle: asReferenceBundle(writerResult.referenceBundle) ?? referenceBundle,
+      blogImagePrompts: asBlogImagePrompts(writerResult.blogImagePrompts) ?? blogImagePrompts,
       parseStatus: asParseStatus(writerResult.parseStatus),
       rawText: typeof writerResult.rawText === "string" ? writerResult.rawText : undefined,
       durationMs: asNumber(writerResult.durationMs),
@@ -1059,12 +1133,16 @@ function runFromEvent(event: {
       qaScore: asNumber(qaResult.qaScore),
       finalRecommendation: qaResult.finalRecommendation === "approve" || qaResult.finalRecommendation === "revise" || qaResult.finalRecommendation === "block" ? qaResult.finalRecommendation : undefined,
       reason: typeof qaResult.reason === "string" ? qaResult.reason : undefined,
+      referenceBundle: asReferenceBundle(qaResult.referenceBundle) ?? referenceBundle,
+      blogImagePrompts: asBlogImagePrompts(qaResult.blogImagePrompts) ?? blogImagePrompts,
       parseStatus: asParseStatus(qaResult.parseStatus),
       rawText: typeof qaResult.rawText === "string" ? qaResult.rawText : undefined,
       durationMs: asNumber(qaResult.durationMs),
       errorCode: typeof qaResult.errorCode === "string" ? qaResult.errorCode : undefined,
       errorMessage: typeof qaResult.errorMessage === "string" ? qaResult.errorMessage : undefined,
     } : undefined,
+    referenceBundle,
+    blogImagePrompts,
     hermesRequestPayload: asRecord(payload.hermesRequestPayload),
     hermesMarketingRequestPayload: asRecord(payload.hermesMarketingRequestPayload),
     hermesWriterRequestPayload: asRecord(payload.hermesWriterRequestPayload),
@@ -1231,9 +1309,10 @@ export async function getContentPipelineDetail(pipelineId: string): Promise<Cont
 }
 
 export async function startContentPipeline(input: unknown): Promise<ContentPipelineRun> {
-  const data = assertValidInput(input);
-  const runnerMode = data.runnerMode ?? "mock";
+  const baseData = assertValidInput(input);
+  const runnerMode = baseData.runnerMode ?? "mock";
   if (runnerMode === "hermes") await assertHermesDailyRunAvailable(HERMES_PIPELINE_REQUIRED_RUNS);
+  const data = await enrichContentPipelineInput(baseData);
 
   const pipelineId = `content-pipeline-${randomUUID()}`;
   const suffix = pipelineId.replace("content-pipeline-", "").slice(0, 8);
@@ -1274,6 +1353,8 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     hermesMarketingRequestPayload: marketing.hermesPayload,
     hermesWriterRequestPayload: writer.hermesPayload,
     hermesQaRequestPayload: qa.hermesPayload,
+    referenceBundle: data.referenceBundle,
+    blogImagePrompts: data.blogImagePrompts,
   });
 
   await prisma.task.createMany({
@@ -1462,6 +1543,8 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     hermesMarketingRequestPayload: marketing.hermesPayload,
     hermesWriterRequestPayload: writer.hermesPayload,
     hermesQaRequestPayload: qa.hermesPayload,
+    referenceBundle: data.referenceBundle,
+    blogImagePrompts: data.blogImagePrompts,
     createdAt: now.toISOString(),
     updatedAt: new Date().toISOString(),
   };

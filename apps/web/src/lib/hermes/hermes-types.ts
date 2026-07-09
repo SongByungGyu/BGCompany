@@ -1,3 +1,5 @@
+import type { BlogImagePrompt, ReferenceBundle } from "@/lib/stock-blog/references/reference-types";
+
 export type ContentPlannerHermesInput = {
   topic: string;
   title: string;
@@ -12,12 +14,16 @@ export type MarketingReviewHermesInput = ContentPlannerHermesInput & {
 export type ContentWriterHermesInput = ContentPlannerHermesInput & {
   plannerResult?: Record<string, unknown>;
   marketingResult?: Record<string, unknown>;
+  referenceBundle?: ReferenceBundle;
+  blogImagePrompts?: BlogImagePrompt[];
 };
 
 export type QaAuditHermesInput = ContentPlannerHermesInput & {
   plannerResult?: Record<string, unknown>;
   marketingResult?: Record<string, unknown>;
   writerResult?: Record<string, unknown>;
+  referenceBundle?: ReferenceBundle;
+  blogImagePrompts?: BlogImagePrompt[];
 };
 
 export type HermesContentPlannerPayload = {
@@ -67,6 +73,8 @@ export type HermesContentWriterPayload = {
     language: "ko" | "en";
     plannerResult?: Record<string, unknown>;
     marketingResult?: Record<string, unknown>;
+    referenceBundle?: ReferenceBundle;
+    blogImagePrompts?: BlogImagePrompt[];
   };
   context: {
     company: "BG Company";
@@ -88,6 +96,8 @@ export type HermesQaAuditPayload = {
     plannerResult?: Record<string, unknown>;
     marketingResult?: Record<string, unknown>;
     writerResult?: Record<string, unknown>;
+    referenceBundle?: ReferenceBundle;
+    blogImagePrompts?: BlogImagePrompt[];
   };
   context: {
     company: "BG Company";
@@ -139,6 +149,8 @@ export type MarketingReviewResult = {
   marketingScore?: number;
   finalRecommendation?: "approve" | "revise";
   reason?: string;
+  referenceBundle?: ReferenceBundle;
+  blogImagePrompts?: BlogImagePrompt[];
   parseStatus?: HermesParseStatus;
   rawText?: string;
   raw?: unknown;
@@ -169,6 +181,8 @@ export type ContentWriterResult = {
   htmlDraft?: string;
   usedSeoKeywords?: string[];
   writingNotes?: string[];
+  referenceBundle?: ReferenceBundle;
+  blogImagePrompts?: BlogImagePrompt[];
   parseStatus?: HermesParseStatus;
   rawText?: string;
   raw?: unknown;
@@ -193,6 +207,8 @@ export type QaAuditResult = {
   qaScore?: number;
   finalRecommendation?: "approve" | "revise" | "block";
   reason?: string;
+  referenceBundle?: ReferenceBundle;
+  blogImagePrompts?: BlogImagePrompt[];
   parseStatus?: HermesParseStatus;
   rawText?: string;
   raw?: unknown;
