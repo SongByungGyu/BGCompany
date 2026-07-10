@@ -567,3 +567,52 @@ bash scripts/check-hermes-bridge.sh
 ```
 
 Do not run Hermes, OpenAI, Naver Search, stock APIs, Playwright/Selenium, or Naver automation for this verification unless the operator explicitly approves the specific paid/external action.
+
+
+## Dashboard Summary / Stock Blog Team Operations
+
+- 대표실의 오늘의 운영 브리핑은 `/api/dashboard-summary`에서 제공한다.
+- 이 API는 관리자 세션이 필요하며, LLM/Hermes/OpenAI를 호출하지 않는다.
+- 주식 블로그 운영은 주식 분석팀, 블로그 운영팀, QA/감사팀, 게시 운영팀 역할로 나뉜다.
+- Hermes 일일 실행 기본 제안값은 20회이며, 4-Agent 파이프라인 1회는 최대 4회 실행을 사용한다.
+- 네이버 블로그는 자동 발행하지 않고, Local Draft Agent로 임시저장 준비 후 사용자가 직접 발행한다.
+
+
+## Stock Blog Scheduler 운영 메모
+
+- `/api/stock-blog/scheduler`는 주식 블로그 자동 생성 tick endpoint다.
+- `GET`은 관리자 세션이 필요하고, `POST`는 `x-bg-agent-key` 또는 관리자 세션이 필요하다.
+- 기본값은 `STOCK_BLOG_SCHEDULER_ENABLED=false`이며, 자동 실행 전 반드시 운영자가 `.env`에서 명시적으로 켠다.
+- `runnerMode=hermes`는 4-Agent 기준 콘텐츠 1건당 최대 4회 Hermes/OpenAI 호출을 사용할 수 있다.
+- 스케줄러는 같은 스케줄 슬롯을 `EventLog` ID로 중복 방지한다.
+- 자동 승인 후 `NaverDraftJob`만 생성하며, 네이버 자동 발행은 하지 않는다.
+- Local Naver Draft Agent는 운영 PC에서 별도로 실행되어야 한다.
+- 권장 cron은 10분마다 tick을 호출하는 방식이며, 실제 due 여부는 서버가 판단한다.
+- cron 로그 예: `/opt/bg-company/logs/stock-blog-scheduler.log`
+
+주의:
+
+- `docker compose down -v`, DB 초기화, seed 재실행 금지.
+- `.env`, `AGENT_API_KEY`, OpenAI key, Naver login 정보 출력 금지.
+- Hermes/OpenAI 비용 확인 없이 `runnerMode=hermes` 자동화 금지.
+
+
+### Stock Blog Scheduler cron 시작/확인
+
+운영 서버에서 자동 tick cron을 설치한다.
+
+```bash
+cd /opt/bg-company
+bash scripts/install-stock-blog-scheduler-cron.sh
+crontab -l
+```
+
+상태 확인:
+
+```bash
+bash scripts/check-stock-blog-scheduler.sh
+tail -n 80 logs/stock-blog-scheduler.log
+```
+
+실제 자동 실행은 `.env`에서 `STOCK_BLOG_SCHEDULER_ENABLED=true`일 때만 수행된다.
+비용을 막아야 하면 `STOCK_BLOG_SCHEDULER_RUNNER_MODE=mock` 또는 `hermes-dry-run`을 사용한다.

@@ -13,6 +13,7 @@ import { DB_SYNC_INTERVAL_MS } from "@/lib/db-sync";
 import { WorkBoardView } from "@/features/work-board/WorkBoardView";
 import { ApprovalInboxView } from "@/features/approvals/ApprovalInboxView";
 import { ContentPipelineView } from "@/features/content-pipeline/ContentPipelineView";
+import type { DashboardSummary, DashboardSummaryCard } from "@/lib/dashboard-summary/summary-types";
 
 const OfficeCanvas = dynamic(
   () => import("@/components/office/3d/OfficeCanvas"),
@@ -104,6 +105,9 @@ export default function Home() {
   const [selected,setSelected] = useState(0);
   const [tab,setTab] = useState<Tab>("summary");
   const [activeNav,setActiveNav] = useState("가상 오피스");
+  const [dashboardSummary,setDashboardSummary] = useState<DashboardSummary | null>(null);
+  const [dashboardSummaryLoading,setDashboardSummaryLoading] = useState(false);
+  const [dashboardSummaryError,setDashboardSummaryError] = useState<string | null>(null);
   const [clock,setClock] = useState("");
   const [employees,setEmployees] = useState(initialEmployees);
   const [eventLog,setEventLog] = useState<BGCompanyEvent[]>([]);
@@ -112,6 +116,37 @@ export default function Home() {
   const scenarioTimerIdsRef = useRef<number[]>([]);
   const [devEmployeeId,setDevEmployeeId] = useState(initialEmployees[0].id);
   const [devStatus,setDevStatus] = useState<EmployeeStatus>("회의 중");
+  const refreshDashboardSummary = useCallback(async () => {
+    setDashboardSummaryLoading(true);
+    setDashboardSummaryError(null);
+    try {
+      const response = await fetch("/api/dashboard-summary", { cache: "no-store" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const summary = await response.json() as DashboardSummary;
+      setDashboardSummary(summary);
+      return summary;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "요약 정보를 불러오지 못했습니다.";
+      setDashboardSummaryError(message);
+      return null;
+    } finally {
+      setDashboardSummaryLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    if (activeNav !== "대표실") return undefined;
+    let cancelled = false;
+    Promise.resolve().then(async () => {
+      if (!cancelled) await refreshDashboardSummary();
+    });
+    const intervalId = window.setInterval(() => {
+      void refreshDashboardSummary();
+    }, DB_SYNC_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activeNav, refreshDashboardSummary]);
   const selectIndexById = useCallback((employeeId: string) => {
     const index = employees.findIndex((employee) => employee.id === employeeId);
     if (index >= 0) setSelected(index);
@@ -230,7 +265,9 @@ export default function Home() {
     <header className="top-bar"><div className="brand"><b>✦</b><strong>BG Company</strong><span>가상 회사 관제</span></div><div className="clock"><i/>{clock}</div><div className="kpis">{kpis.map(([label,value,kind])=><button key={label} className={kind} disabled={!kind||value==="0"} onClick={()=>kind==="error"?(setActiveNav("가상 오피스"),setDemoView("error")):kind==="waiting"?setActiveNav("승인함"):null}><span>{label}</span><strong>{value}</strong></button>)}<button className="gear">⚙</button><button className="logout-button" onClick={logout}>로그아웃</button>{view==="loading"&&<i className="kpi-loading"/>}</div></header>
     <div className="workspace">
       <nav className="left-nav">{nav.map(([icon,label])=><button key={label} className={activeNav===label?"active":""} onClick={()=>setActiveNav(label)}><b>{icon}</b><span>{label}</span>{label==="승인함"&&approvals>0&&<i>{approvals}</i>}</button>)}</nav>
-      {activeNav==="가상 오피스" ? (
+      {activeNav==="대표실" ? (
+        <DashboardWorkspace summary={dashboardSummary} isLoading={dashboardSummaryLoading} error={dashboardSummaryError} onRefresh={refreshDashboardSummary}/>
+      ) : activeNav==="가상 오피스" ? (
         <>
           <section className="stage">
             <div className="viewport">
@@ -283,6 +320,11 @@ export default function Home() {
 }
 
 function OfficeViewportStatusBar(){ return <div className="office-viewport-status-bar"><strong>상태 범례</strong><div>{legend.map(([group,label])=><span key={group}><i className={`dot ${group}`}/>{label}</span>)}</div></div> }
+function DashboardWorkspace({summary,isLoading,error,onRefresh}:{summary:DashboardSummary | null;isLoading:boolean;error:string | null;onRefresh:()=>Promise<DashboardSummary | null>}){
+  const cards = summary?.cards ?? [];
+  return <><section className="stage"><div className="feature-shell dashboard-summary-shell"><header className="dashboard-summary-hero"><div><span>PHASE 1-S</span><h1>오늘의 운영 브리핑</h1><p>{summary?.briefing ?? "업무·승인·Hermes·네이버 임시저장 상태를 rule-based 요약으로 불러오는 중입니다."}</p></div><button onClick={()=>void onRefresh()} disabled={isLoading}>{isLoading?"새로고침 중":"요약 새로고침"}</button></header>{error?<div className="dashboard-summary-error">요약 조회 실패 · {error}</div>:null}<section className="dashboard-briefing-card"><label>대표실 한 줄 판단</label><strong>{summary?.headline ?? "운영 상태를 확인하고 있습니다."}</strong><p>{summary?`생성 시각 ${new Intl.DateTimeFormat("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(new Date(summary.generatedAt))}`:"DB 상태를 읽는 중입니다."}</p></section><div className="dashboard-summary-grid">{cards.map((card)=><DashboardSummaryCardView key={card.id} card={card}/>)}</div><section className="dashboard-schedule"><h2>주식 블로그 운영 일정</h2><div>{summary?.stockBlogSchedule.map((item)=><article key={item.contentType}><strong>{item.scheduledTimeKst}</strong><div><b>{item.label}</b><span>{item.cadence} · {item.objective}</span></div></article>) ?? <p>일정을 불러오는 중입니다.</p>}</div></section></div></section><aside className="panel feature-detail-panel"><div className="feature-panel-tabs"><strong>대표실 요약</strong><span>Rule-based</span></div><div className="panel-body"><div className="feature-card"><label>다음 행동</label>{summary?.nextActions.map((action)=><p key={action}>• {action}</p>) ?? <p>요약 데이터를 불러오면 다음 행동이 표시됩니다.</p>}</div><div className="feature-card muted"><label>정책</label><p>이 요약은 LLM을 호출하지 않고 DB 상태와 운영 규칙만으로 생성됩니다. 비용은 발생하지 않습니다.</p></div></div></aside></>
+}
+function DashboardSummaryCardView({card}:{card:DashboardSummaryCard}){ return <article className={`dashboard-summary-card ${card.severity}`}><label>{card.title}</label><strong>{card.value}</strong><p>{card.description}</p>{card.actionLabel?<span>{card.actionLabel}</span>:null}</article> }
 function PlaceholderWorkspace({label}:{label:string}){ return <><section className="stage"><div className="feature-shell placeholder-feature"><strong>{label}</strong><p>이 메뉴는 Phase 1-B 이후 단계에서 연결됩니다. 현재는 가상 오피스, 업무 보드, 승인함을 우선 검증합니다.</p></div></section><aside className="panel no-selection"><div><b>□</b><strong>{label}</strong><p>아직 상세 패널이 준비되지 않았습니다.</p></div></aside></> }
 function MockEventScenarioPanel({eventCount,onReset,onRunScenario}:{eventCount:number;onReset:()=>void;onRunScenario:(scenarioId:MockScenarioDefinition["id"])=>void}){ return <div className="mock-event-scenario-panel"><strong>Mock 이벤트</strong>{mockScenarioDefinitions.map((scenario)=><button key={scenario.id} onClick={()=>onRunScenario(scenario.id)}>{scenario.label}</button>)}<button onClick={onReset}>전체 리셋</button><span>{eventCount} events</span></div> }
 function EmployeeMovementDevPanel({

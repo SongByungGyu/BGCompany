@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 
-const DEFAULT_DAILY_LIMIT = 5;
+const DEFAULT_DAILY_LIMIT = 20;
 const DEFAULT_TIMEZONE = "Asia/Seoul";
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 

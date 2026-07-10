@@ -16,6 +16,7 @@ import type {
   StockBriefingTemplateConfig,
 } from "./content-pipeline-types";
 import type { BlogImagePrompt, ReferenceBundle, ReferenceItem } from "@/lib/stock-blog/references/reference-types";
+import { summarizeContentPipelineStatus } from "@/lib/dashboard-summary/summary-rules";
 
 const channelLabels: Record<ContentChannel, string> = {
   blog: "블로그",
@@ -1495,6 +1496,13 @@ export function ContentPipelineView() {
       <aside className="panel feature-detail-panel">
         <div className="feature-panel-tabs"><strong>콘텐츠 상세</strong><span>Phase 1-C</span></div>
         <div className="panel-body">
+          {selectedPipeline ? (
+            <div className="feature-card dashboard-side-summary">
+              <label>운영 요약</label>
+              <strong>{summarizeContentPipelineStatus(selectedPipeline)}</strong>
+              <p>현재 선택된 콘텐츠 파이프라인의 단계, 승인 상태, 네이버 임시저장 준비 흐름을 운영자가 바로 읽을 수 있게 요약합니다.</p>
+            </div>
+          ) : null}
           <div className="feature-card">
             <label>연동 결과</label>
             <strong>업무 보드 · 승인함 · 3D 직원 상태 · DB timeline에 반영</strong>
