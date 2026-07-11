@@ -3,8 +3,9 @@ import type { NaverDraftJob, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getContentPipelineDetail } from "@/lib/content-pipeline/content-pipeline-service";
 import type { ContentPipelineRun, StockBriefingTemplate } from "@/features/content-pipeline/content-pipeline-types";
-import type { BlogImagePrompt, ReferenceBundle, ReferenceItem } from "@/lib/stock-blog/references/reference-types";
+import type { ReferenceBundle, ReferenceItem } from "@/lib/stock-blog/references/reference-types";
 import { buildStockBlogThumbnail, inferStockBriefingTemplateFromPipeline } from "@/lib/stock-blog/thumbnail-automation";
+import { evaluateStockBlogPublishQuality, getRealStockReferences } from "@/lib/stock-blog/quality-gate";
 
 export type NaverDraftJobStatus =
   | "created"
@@ -233,17 +234,12 @@ function collectReferenceBundle(pipeline: ContentPipelineRun): ReferenceBundle |
     ?? pipeline.marketingResult?.referenceBundle;
 }
 
-function collectImagePrompts(pipeline: ContentPipelineRun): BlogImagePrompt[] {
-  return pipeline.blogImagePrompts
-    ?? pipeline.writerResult?.blogImagePrompts
-    ?? pipeline.qaResult?.blogImagePrompts
-    ?? pipeline.marketingResult?.blogImagePrompts
-    ?? [];
-}
 
 function collectReferences(pipeline: ContentPipelineRun) {
   const bundle = collectReferenceBundle(pipeline);
-  return [...(bundle?.items ?? [])].slice(0, 5);
+  const realReferences = getRealStockReferences(bundle);
+  if (pipeline.runnerMode === "hermes") return realReferences.slice(0, 5);
+  return (realReferences.length > 0 ? realReferences : [...(bundle?.items ?? [])]).slice(0, 5);
 }
 
 function referenceLine(item: ReferenceItem, index: number) {
@@ -315,7 +311,7 @@ function buildChecklist(template: StockBriefingTemplate) {
   ];
 }
 
-function buildPlainBody(pipeline: ContentPipelineRun, template: StockBriefingTemplate, title: string, refs: ReferenceItem[], thumbnailText: string) {
+function buildPlainBody(pipeline: ContentPipelineRun, template: StockBriefingTemplate, title: string, refs: ReferenceItem[]) {
   const copy = STOCK_BRIEFING_COPY[template];
   const bodyParts: string[] = [
     title,
@@ -331,12 +327,6 @@ function buildPlainBody(pipeline: ContentPipelineRun, template: StockBriefingTem
     "투자자 체크리스트",
     "",
     ...buildChecklist(template).map((item) => `- ${item}`),
-    "",
-    "이미지 사용 계획",
-    "",
-    `- 썸네일 문구: ${thumbnailText}`,
-    `- 대표 이미지 위치: ${copy.preferredImagePlacement}`,
-    ...collectImagePrompts(pipeline).slice(0, 3).map((prompt) => `- ${prompt.placement}: ${prompt.title} · ${prompt.prompt}`),
     "",
     copy.headings.at(-1) ?? "참고자료와 해석",
     "",
@@ -355,24 +345,26 @@ function buildMarkdownBody(title: string, body: string) {
   return `# ${title}\n\n${body}`;
 }
 
-function buildDraftQualityCheck(template: StockBriefingTemplate, body: string, refs: ReferenceItem[]): DraftQualityCheck {
-  const reasons: string[] = [];
-  const headingCount = (body.match(/[①②③④⑤⑥⑦⑧⑨]/g) ?? []).length;
-  const paragraphCount = body.split(/\n{2,}/).filter((part) => part.trim().length >= 20).length;
-  const bulletCount = body.split("\n").filter((line) => line.trim().startsWith("- ")).length;
-
-  if (headingCount < 5) reasons.push(`섹션 제목 부족(${headingCount}/5)`);
-  if (paragraphCount < 8) reasons.push(`문단 부족(${paragraphCount}/8)`);
-  if (bulletCount < 2) reasons.push(`리스트 부족(${bulletCount}/2)`);
-  if (refs.length < 3) reasons.push(`참고자료 부족(${refs.length}/3)`);
-  if (!body.includes(INVESTMENT_DISCLAIMER)) reasons.push("투자 유의문구 누락");
+function buildDraftQualityCheck(template: StockBriefingTemplate, body: string, refs: ReferenceItem[], pipeline: ContentPipelineRun): DraftQualityCheck {
+  const gate = evaluateStockBlogPublishQuality({
+    pipeline,
+    referenceBundle: collectReferenceBundle(pipeline),
+    pasteReadyBody: body,
+    writerText: sectionsToText(pipeline),
+    requireRealReferences: pipeline.runnerMode === "hermes",
+  });
+  const reasons = [...gate.reasons];
   if ((template === "WEEKLY_MARKET_REVIEW" || template === "NEXT_WEEK_MARKET_PREVIEW") && WEEKEND_FORBIDDEN_PHRASES.some((phrase) => body.includes(phrase))) {
     reasons.push("주말/주간 글에 장전·장마감 등 일일 브리핑 표현 포함");
   }
-
   if (reasons.length === 0) return { ok: true, reasons: [] };
-  return { ok: false, code: refs.length < 3 ? "NAVER_DRAFT_NEEDS_REFERENCE" : "NAVER_DRAFT_QUALITY_FAILED", reasons };
+  return {
+    ok: false,
+    code: gate.status === "needs_reference" || refs.length < 3 ? "NAVER_DRAFT_NEEDS_REFERENCE" : "NAVER_DRAFT_QUALITY_FAILED",
+    reasons,
+  };
 }
+
 
 function buildDraftFromPipeline(pipeline: ContentPipelineRun): DraftBuildResult {
   const template = pipeline.naverBlogPublishPrep?.briefingTemplate ?? inferStockBriefingTemplateFromPipeline(pipeline);
@@ -390,8 +382,8 @@ function buildDraftFromPipeline(pipeline: ContentPipelineRun): DraftBuildResult 
   const thumbnailText = clean(thumbnail.thumbnailTitle) || clean(thumbnail.thumbnailPrimaryText) || `${title} 핵심 정리`;
   const thumbnailPrompt = clean(thumbnail.thumbnailPrompt) || `네이버 블로그 썸네일, 깔끔한 금융 리포트 스타일, 제목: ${title}, 핵심 문구: ${thumbnailText}`;
   const refs = collectReferences(pipeline);
-  const body = buildPlainBody(pipeline, template, title, refs, thumbnailText);
-  const quality = buildDraftQualityCheck(template, body, refs);
+  const body = buildPlainBody(pipeline, template, title, refs);
+  const quality = buildDraftQualityCheck(template, body, refs, pipeline);
   if (!quality.ok) {
     throw new Error(`${quality.code ?? "NAVER_DRAFT_QUALITY_FAILED"}: ${quality.reasons.join(" · ")}`);
   }

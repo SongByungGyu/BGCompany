@@ -206,6 +206,23 @@ export type NaverBlogPublishPrep = {
   blogImagePrompts?: BlogImagePrompt[];
 };
 
+
+export type StockBlogQualityStatus =
+  | "passed"
+  | "needs_reference"
+  | "needs_data"
+  | "readability_failed"
+  | "duplicate_content_failed"
+  | "image_pending"
+  | "quality_failed";
+
+export type StockBlogQualityGateResult = {
+  ok: boolean;
+  status: StockBlogQualityStatus;
+  reasons: string[];
+  diagnostics: Record<string, unknown>;
+};
+
 export type ContentPipelineRun = {
   id: string;
   title: string;
@@ -224,6 +241,7 @@ export type ContentPipelineRun = {
   qaResult?: QaAuditResult;
   naverBlogPublishPrep?: NaverBlogPublishPrep;
   thumbnailResult?: ThumbnailAutomationResult;
+  qualityGate?: StockBlogQualityGateResult;
   referenceBundle?: ReferenceBundle;
   blogImagePrompts?: BlogImagePrompt[];
   hermesRequestPayload?: Record<string, unknown>;

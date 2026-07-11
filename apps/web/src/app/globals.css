@@ -509,3 +509,30 @@
   font-weight: 800;
   padding: 8px 12px;
 }
+
+
+.stock-reference-quality {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.stock-reference-quality.passed {
+  border-color: rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.stock-reference-quality.blocked {
+  border-color: rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.stock-reference-quality strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.stock-reference-quality p {
+  margin: 0 0 6px;
+}

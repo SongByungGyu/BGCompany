@@ -663,7 +663,12 @@ function sourceTypeLabel(type: ReferenceItem["sourceType"]) {
     blog: "블로그",
     disclosure: "공시",
     market_data: "시장 데이터",
+    calendar: "일정",
+    sector: "섹터",
+    company: "기업",
+    macro: "매크로",
     manual: "수동 참고",
+    mock: "mock",
   };
   return labels[type] ?? type;
 }
@@ -925,6 +930,21 @@ function NaverBlogPublishPrepPanel({ pipeline }: { pipeline: ContentPipelineRun 
       {prep.referenceBundle ? (
         <div className="naver-prep-block stock-reference-panel">
           <label>관련 기사 / 참고자료</label>
+          {pipeline.qualityGate ? (
+            <div className={pipeline.qualityGate.ok ? "stock-reference-quality passed" : "stock-reference-quality blocked"}>
+              <strong>{pipeline.qualityGate.ok ? "품질 게이트 통과" : "품질 게이트 차단"}</strong>
+              <p>{pipeline.qualityGate.reasons.length ? pipeline.qualityGate.reasons.join(" · ") : "참고자료와 최종 본문 기준을 충족했습니다."}</p>
+              <small>
+                실제 참고자료 {String(pipeline.qualityGate.diagnostics.realReferenceCount ?? 0)}개 · URL {String(pipeline.qualityGate.diagnostics.distinctUrlCount ?? 0)}개 · 발행처 {String(pipeline.qualityGate.diagnostics.publisherCount ?? 0)}곳
+              </small>
+            </div>
+          ) : null}
+          {prep.referenceBundle.missingItems?.length ? (
+            <div className="naver-prep-warning subtle">
+              <strong>부족한 참고자료</strong>
+              <p>{prep.referenceBundle.missingItems.join(" · ")}</p>
+            </div>
+          ) : null}
           <div className="stock-reference-meta">
             <span>{prep.referenceBundle.provider}</span>
             <span>{prep.referenceBundle.mode}</span>
@@ -956,7 +976,7 @@ function NaverBlogPublishPrepPanel({ pipeline }: { pipeline: ContentPipelineRun 
             {prep.referenceBundle.items.map((item) => (
               <article key={item.id} className="stock-reference-item">
                 <div>
-                  <span>{sourceTypeLabel(item.sourceType)} · {item.publisher ?? item.provider}</span>
+                  <span>{sourceTypeLabel(item.sourceType)} · {item.publisher ?? item.provider}{item.reliability ? ` · ${item.reliability}` : ""}</span>
                   <strong>{item.title}</strong>
                   {item.summary ? <p>{item.summary}</p> : null}
                   {item.usageNote ? <small>{item.usageNote}</small> : null}

@@ -625,3 +625,31 @@ tail -n 80 logs/stock-blog-scheduler.log
 - 썸네일 상태가 `copy_ready`이면 문구와 프롬프트가 수동 작업 가능한 상태다.
 - `thumbnailImageUrl`은 실제 이미지 생성/저장 기능이 별도 승인되어 붙기 전까지 비어 있을 수 있다.
 - 운영 중 문제가 있으면 콘텐츠 상세 화면의 썸네일 프롬프트를 복사해 수동 이미지 생성 도구에서 사용한다.
+
+## Stock Blog Quality Gate
+
+주식 블로그 자동 스케줄러는 `runnerMode=hermes`에서도 실참조/본문 품질 게이트를 통과해야 자동 승인과 네이버 임시저장 작업을 생성한다.
+
+- mock 또는 real-disabled 참고자료는 운영 참고자료로 인정하지 않는다.
+- 실제 URL 3개 이상, 발행처 2곳 이상, publishedAt/summary가 필요하다.
+- 최종 본문에는 이미지 프롬프트를 섞지 않는다.
+- 실패 시 `needs_reference`, `needs_data`, `readability_failed`, `duplicate_content_failed`, `image_pending`, `quality_failed` 중 하나로 차단한다.
+- 운영 기본값은 `STOCK_BLOG_SCHEDULER_AUTO_APPROVE=false`, `STOCK_BLOG_SCHEDULER_AUTO_CREATE_DRAFT=false`를 권장한다.
+
+
+## Stock Reference Provider
+
+Hermes 주식 블로그 운영은 `STOCK_REFERENCE_PROVIDER=manual`을 권장한다. `mock` 또는 `real-disabled` 참고자료는 실제 Hermes 운영 결과로 인정하지 않으며, 품질 게이트가 `needs_reference`로 차단한다.
+
+확인 항목:
+
+- `.env`에 `STOCK_REFERENCE_PROVIDER=manual` 설정
+- `STOCK_REFERENCE_MANUAL_PATH` 또는 `STOCK_REFERENCE_MANUAL_JSON` 설정
+- 참고자료 3개 이상, URL 3개 이상, 발행처 2곳 이상
+- `market_data` 또는 `reliability=official` 참고자료 1개 이상
+
+문제 발생 시:
+
+- 콘텐츠 상세의 `관련 기사 / 참고자료` 패널에서 품질 게이트 사유 확인
+- 부족한 참고자료 항목(`missingItems`) 확인
+- mock/dry-run으로 UI만 확인하고 실제 Hermes 반복 실행은 금지

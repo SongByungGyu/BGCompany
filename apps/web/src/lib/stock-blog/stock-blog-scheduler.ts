@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import { startContentPipeline } from "@/lib/content-pipeline/content-pipeline-service";
 import { HermesDailyLimitExceededError, getHermesUsageSummary } from "@/lib/hermes/hermes-usage";
 import { createNaverDraftJobFromPipeline } from "@/lib/naver-drafts/naver-draft-jobs";
+import type { StockBlogQualityGateResult } from "@/features/content-pipeline/content-pipeline-types";
+import { evaluateStockBlogPublishQuality } from "@/lib/stock-blog/quality-gate";
 import { resolveApproval } from "@/lib/repositories/approval-actions";
 import {
   getExpectedHermesRunsForStockBlog,
@@ -58,6 +60,7 @@ export type StockBlogSchedulerRunResult = {
   naverDraftJobId?: string;
   hermesUsageBefore?: { used: number; remaining: number; limit: number };
   hermesUsageAfter?: { used: number; remaining: number; limit: number };
+  qualityGate?: StockBlogQualityGateResult;
 };
 
 export type StockBlogSchedulerStatus = {
@@ -195,8 +198,8 @@ export function getStockBlogSchedulerConfig(): StockBlogSchedulerConfig {
     enabled: parseBoolean(process.env.STOCK_BLOG_SCHEDULER_ENABLED, false),
     timezone: getConfiguredTimezone(),
     runnerMode: getConfiguredRunnerMode(),
-    autoApprove: parseBoolean(process.env.STOCK_BLOG_SCHEDULER_AUTO_APPROVE, true),
-    autoCreateDraftJob: parseBoolean(process.env.STOCK_BLOG_SCHEDULER_AUTO_CREATE_DRAFT, true),
+    autoApprove: parseBoolean(process.env.STOCK_BLOG_SCHEDULER_AUTO_APPROVE, false),
+    autoCreateDraftJob: parseBoolean(process.env.STOCK_BLOG_SCHEDULER_AUTO_CREATE_DRAFT, false),
     lookbackMinutes: parsePositiveInt(process.env.STOCK_BLOG_SCHEDULER_LOOKBACK_MINUTES, DEFAULT_LOOKBACK_MINUTES),
   };
 }
@@ -427,18 +430,27 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
     let naverDraftJobId: string | undefined;
     let status: StockBlogSchedulerRunStatus = "succeeded";
     const notes: string[] = [];
+    const qualityGate = pipeline.qualityGate ?? evaluateStockBlogPublishQuality({
+      pipeline,
+      requireRealReferences: config.runnerMode === "hermes",
+    });
+    const qualityBlocked = config.runnerMode === "hermes" && !qualityGate.ok;
+    if (qualityBlocked) {
+      status = "partial_failed";
+      notes.push(`품질 게이트 차단: ${qualityGate.status} · ${qualityGate.reasons.join(" / ")}`);
+    }
 
-    if (config.autoApprove && approvalId && pipeline.status === "director_approval") {
+    if (!qualityBlocked && config.autoApprove && approvalId && pipeline.status === "director_approval") {
       await resolveApproval({
         approvalId,
         status: "승인 완료",
         decisionReason: "Stock Blog Scheduler 자동 승인 · 네이버 임시저장 준비",
       });
     } else if (config.autoApprove) {
-      notes.push("자동 승인 조건 미충족");
+      notes.push(qualityBlocked ? "품질 게이트 실패로 자동 승인 차단" : "자동 승인 조건 미충족");
     }
 
-    if (config.autoCreateDraftJob) {
+    if (!qualityBlocked && config.autoCreateDraftJob) {
       try {
         const job = await createNaverDraftJobFromPipeline({ contentPipelineId: pipeline.id, approvalId });
         naverDraftJobId = job.id;
@@ -461,6 +473,7 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
       naverDraftJobId,
       hermesUsageBefore,
       hermesUsageAfter,
+      qualityGate,
     };
     await writeSchedulerEvent({
       key,

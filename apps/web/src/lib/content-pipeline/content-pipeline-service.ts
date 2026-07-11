@@ -8,6 +8,7 @@ import { buildContentPlannerHermesPayload, buildContentWriterHermesPayload, buil
 import { assertHermesDailyRunAvailable } from "@/lib/hermes/hermes-usage";
 import { collectStockBlogReferences } from "@/lib/stock-blog/references/reference-adapter";
 import { buildBlogImagePrompts } from "@/lib/stock-blog/references/reference-normalizer";
+import { evaluateStockBlogReferences } from "@/lib/stock-blog/quality-gate";
 import type { NormalizedHermesRunResult } from "@/lib/hermes/hermes-types";
 import type { BlogImagePrompt, ReferenceBundle, StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 import type { ContentChannel, ContentPipelineDetail, ContentPipelineRun, ContentPipelineStatus } from "@/features/content-pipeline/content-pipeline-types";
@@ -242,6 +243,7 @@ function pipelineMetadata(input: {
   hermesQaRequestPayload?: Record<string, unknown>;
   referenceBundle?: ReferenceBundle;
   blogImagePrompts?: BlogImagePrompt[];
+  qualityGate?: Record<string, unknown>;
 }): Prisma.InputJsonObject {
   return toJsonObject({
     contentPipelineId: input.pipelineId,
@@ -259,6 +261,7 @@ function pipelineMetadata(input: {
     qaResult: input.qaResult,
     referenceBundle: input.referenceBundle,
     blogImagePrompts: input.blogImagePrompts,
+    qualityGate: input.qualityGate,
     hermesRequestPayload: input.hermesRequestPayload,
     hermesMarketingRequestPayload: input.hermesMarketingRequestPayload,
     hermesWriterRequestPayload: input.hermesWriterRequestPayload,
@@ -1038,13 +1041,15 @@ function runFromEvent(event: {
   const qaResult = asRecord(payload.qaResult);
   const referenceBundle = asReferenceBundle(payload.referenceBundle);
   const blogImagePrompts = asBlogImagePrompts(payload.blogImagePrompts);
+  const qualityGate = asRecord(payload.qualityGate) as ContentPipelineRun["qualityGate"] | undefined;
+  const qualityBlocked = qualityGate?.ok === false;
   return {
     id: pipelineId,
     title: typeof payload.title === "string" ? payload.title : "콘텐츠 파이프라인",
     topic: typeof payload.topic === "string" ? payload.topic : "주제 미정",
     channel: channels.has(String(payload.channel)) ? payload.channel as ContentChannel : "blog",
-    status: plannerResult?.ok === false ? "planning" : marketingResult?.ok === false ? "marketing_review" : writerResult?.ok === false ? "content_writing" : qaResult?.ok === false ? "qa_review" : "director_approval",
-    currentStep: plannerResult?.ok === false ? "content-planner 확인 필요" : marketingResult?.ok === false ? "marketing-manager 확인 필요" : writerResult?.ok === false ? "content-writer 확인 필요" : qaResult?.ok === false ? "qa-auditor 확인 필요" : "Director 승인 대기",
+    status: plannerResult?.ok === false ? "planning" : marketingResult?.ok === false ? "marketing_review" : writerResult?.ok === false ? "content_writing" : qaResult?.ok === false || qualityBlocked ? "qa_review" : "director_approval",
+    currentStep: plannerResult?.ok === false ? "content-planner 확인 필요" : marketingResult?.ok === false ? "marketing-manager 확인 필요" : writerResult?.ok === false ? "content-writer 확인 필요" : qaResult?.ok === false ? "qa-auditor 확인 필요" : qualityBlocked ? "실참조/품질 게이트 확인 필요" : "Director 승인 대기",
     taskIds,
     approvalId: typeof payload.approvalId === "string" ? payload.approvalId : undefined,
     outputTitle: typeof payload.outputTitle === "string" ? payload.outputTitle : undefined,
@@ -1143,6 +1148,7 @@ function runFromEvent(event: {
     } : undefined,
     referenceBundle,
     blogImagePrompts,
+    qualityGate,
     hermesRequestPayload: asRecord(payload.hermesRequestPayload),
     hermesMarketingRequestPayload: asRecord(payload.hermesMarketingRequestPayload),
     hermesWriterRequestPayload: asRecord(payload.hermesWriterRequestPayload),
@@ -1172,6 +1178,7 @@ export async function listContentPipelines(): Promise<ContentPipelineRun[]> {
     if (run.marketingResult?.ok === false) return { ...run, status: "marketing_review", currentStep: "marketing-manager 확인 필요", updatedAt: approval.updatedAt.toISOString() };
     if (run.writerResult?.ok === false) return { ...run, status: "content_writing", currentStep: "content-writer 확인 필요", updatedAt: approval.updatedAt.toISOString() };
     if (run.qaResult?.ok === false) return { ...run, status: "qa_review", currentStep: "qa-auditor 확인 필요", updatedAt: approval.updatedAt.toISOString() };
+    if (run.qualityGate?.ok === false) return { ...run, status: "qa_review", currentStep: "실참조/품질 게이트 확인 필요", updatedAt: approval.updatedAt.toISOString() };
     return run;
   });
 }
@@ -1327,6 +1334,8 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
   const marketing = await executeMarketing(data, planner);
   const writer = await executeWriter(data, planner, marketing);
   const qa = await executeQa(data, planner, marketing, writer);
+  const qualityGate = evaluateStockBlogReferences(data.referenceBundle, runnerMode === "hermes");
+  const qualityBlocked = runnerMode === "hermes" && !qualityGate.ok;
   const outputTitle = writer.agentRunStatus === "succeeded" && typeof writer.result.finalTitle === "string" ? writer.result.finalTitle : planner.outputTitle;
   const outputSummary = qa.agentRunStatus === "succeeded"
     ? qa.outputSummary
@@ -1430,7 +1439,7 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     ],
   });
 
-  const hasFailedAgent = planner.agentRunStatus === "failed" || marketing.agentRunStatus === "failed" || writer.agentRunStatus === "failed" || qa.agentRunStatus === "failed";
+  const hasFailedAgent = planner.agentRunStatus === "failed" || marketing.agentRunStatus === "failed" || writer.agentRunStatus === "failed" || qa.agentRunStatus === "failed" || qualityBlocked;
 
   await prisma.approvalRequest.create({
     data: {
@@ -1443,7 +1452,7 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
       estimatedCost: "0.0000",
       status: "승인 대기",
       reason: `${data.topic} 콘텐츠를 ${channelLabel(data.channel)} 채널에 게시하기 전 대표 최종 승인이 필요합니다.`,
-      plannedAction: hasFailedAgent ? "Hermes 실패 사유를 확인한 뒤 재실행 또는 mock 결과로 검토합니다." : "승인 후 게시 준비 상태로 전환합니다.",
+      plannedAction: qualityBlocked ? `실참조/품질 게이트 실패를 해결합니다: ${qualityGate.reasons.join(" / ")}` : hasFailedAgent ? "Hermes 실패 사유를 확인한 뒤 재실행 또는 mock 결과로 검토합니다." : "승인 후 게시 준비 상태로 전환합니다.",
       expectedResult: "콘텐츠 결과물이 게시 준비 상태가 됩니다.",
     },
   });
@@ -1520,8 +1529,8 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
   }
   await createEvent({ type: "ApprovalRequested", employeeId: "director", taskId: qaTaskId, approvalId, payload: { ...metadata, title: `[콘텐츠 최종 승인] ${data.title}`, status: "승인 대기" }, summary: "Director 콘텐츠 최종 승인 요청" });
 
-  const status = planner.agentRunStatus === "failed" ? "planning" : marketing.agentRunStatus === "failed" ? "marketing_review" : writer.agentRunStatus === "failed" ? "content_writing" : qa.agentRunStatus === "failed" ? "qa_review" : "director_approval";
-  const currentStep = planner.agentRunStatus === "failed" ? "content-planner 확인 필요" : marketing.agentRunStatus === "failed" ? "marketing-manager 확인 필요" : writer.agentRunStatus === "failed" ? "content-writer 확인 필요" : qa.agentRunStatus === "failed" ? "qa-auditor 확인 필요" : "Director 승인 대기";
+  const status = planner.agentRunStatus === "failed" ? "planning" : marketing.agentRunStatus === "failed" ? "marketing_review" : writer.agentRunStatus === "failed" ? "content_writing" : qa.agentRunStatus === "failed" || qualityBlocked ? "qa_review" : "director_approval";
+  const currentStep = planner.agentRunStatus === "failed" ? "content-planner 확인 필요" : marketing.agentRunStatus === "failed" ? "marketing-manager 확인 필요" : writer.agentRunStatus === "failed" ? "content-writer 확인 필요" : qa.agentRunStatus === "failed" ? "qa-auditor 확인 필요" : qualityBlocked ? "실참조/품질 게이트 확인 필요" : "Director 승인 대기";
 
   return {
     id: pipelineId,
@@ -1545,6 +1554,7 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     hermesQaRequestPayload: qa.hermesPayload,
     referenceBundle: data.referenceBundle,
     blogImagePrompts: data.blogImagePrompts,
+    qualityGate,
     createdAt: now.toISOString(),
     updatedAt: new Date().toISOString(),
   };

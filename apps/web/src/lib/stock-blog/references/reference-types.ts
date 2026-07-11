@@ -4,7 +4,7 @@ export type StockReferenceBriefingTemplate =
   | "WEEKLY_MARKET_REVIEW"
   | "NEXT_WEEK_MARKET_PREVIEW";
 
-export type ReferenceSourceType = "news" | "blog" | "disclosure" | "market_data" | "manual";
+export type ReferenceSourceType = "news" | "blog" | "disclosure" | "market_data" | "calendar" | "sector" | "company" | "macro" | "manual" | "mock";
 
 export type ReferenceItem = {
   id: string;
@@ -20,6 +20,10 @@ export type ReferenceItem = {
   relevanceScore?: number;
   usageNote?: string;
   copyrightPolicy?: string;
+  contentType?: StockReferenceBriefingTemplate;
+  market?: "KR" | "US" | "GLOBAL";
+  symbols?: string[];
+  reliability?: "official" | "major_media" | "aggregator" | "manual" | "mock";
 };
 
 export type CompetitorBlogReference = {
@@ -33,10 +37,11 @@ export type CompetitorBlogReference = {
 };
 
 export type ReferenceBundle = {
-  provider: "mock" | "naver-search" | "manual";
+  provider: "mock" | "naver-search" | "manual" | "web";
   mode: "mock" | "real-disabled" | "real";
   contentType: StockReferenceBriefingTemplate;
   generatedAt: string;
+  marketDate?: string;
   market: "KR" | "US" | "GLOBAL";
   queries: string[];
   items: ReferenceItem[];
@@ -46,6 +51,9 @@ export type ReferenceBundle = {
   differentiationPoints: string[];
   cautionNotes: string[];
   sourcePolicy: string;
+  summary?: string;
+  risks?: string[];
+  missingItems?: string[];
 };
 
 export type ReferenceSearchInput = {

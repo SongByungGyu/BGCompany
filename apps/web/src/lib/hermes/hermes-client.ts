@@ -132,6 +132,14 @@ function pickParseStatus(record: Record<string, unknown>) {
   return value === "json" || value === "json_extracted" || value === "fallback_text" ? value : undefined;
 }
 
+const STOCK_REFERENCE_POLICY = [
+  "Use only the provided referenceBundle as factual grounding for market/index/sector claims.",
+  "Do not invent index levels, percentages, dates, company events, or source names that are not present in referenceBundle.",
+  "Rewrite in original wording; never copy article sentences or full paragraphs verbatim.",
+  "If referenceBundle is missing, insufficient, mock, or real-disabled, explicitly return a blocked/needs_reference result instead of guessing.",
+  "Avoid buy/sell recommendations, guaranteed returns, sensational claims, or unsupported forecasts.",
+];
+
 function extractHermesJobId(raw: unknown) {
   const record = asRecord(raw);
   if (!record) return undefined;
@@ -213,6 +221,7 @@ export function buildContentWriterHermesPayload(input: ContentWriterHermesInput)
       marketingResult: input.marketingResult,
       referenceBundle: input.referenceBundle,
       blogImagePrompts: input.blogImagePrompts,
+      referencePolicy: STOCK_REFERENCE_POLICY,
     },
     context: {
       company: "BG Company",
@@ -238,6 +247,7 @@ export function buildQaAuditHermesPayload(input: QaAuditHermesInput): HermesQaAu
       writerResult: input.writerResult,
       referenceBundle: input.referenceBundle,
       blogImagePrompts: input.blogImagePrompts,
+      referencePolicy: STOCK_REFERENCE_POLICY,
     },
     context: {
       company: "BG Company",

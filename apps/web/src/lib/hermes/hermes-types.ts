@@ -75,6 +75,7 @@ export type HermesContentWriterPayload = {
     marketingResult?: Record<string, unknown>;
     referenceBundle?: ReferenceBundle;
     blogImagePrompts?: BlogImagePrompt[];
+    referencePolicy?: string[];
   };
   context: {
     company: "BG Company";
@@ -98,6 +99,7 @@ export type HermesQaAuditPayload = {
     writerResult?: Record<string, unknown>;
     referenceBundle?: ReferenceBundle;
     blogImagePrompts?: BlogImagePrompt[];
+    referencePolicy?: string[];
   };
   context: {
     company: "BG Company";
