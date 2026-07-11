@@ -58,9 +58,14 @@ async function fredGet(path: string, params: Record<string, string>, apiKey: str
 
 function safeDiagnostic(item: string, error: unknown): FredDiagnostic {
   const raw = error instanceof Error ? error.message : "FRED_UNKNOWN_ERROR";
+  const errorName = error instanceof Error ? error.name : "";
   const code = /^FRED_(?:AUTH_FAILED|RATE_LIMITED|PARSE_FAILED|QUERY_NOT_ALLOWLISTED|HTTP_\d{3})$/.test(raw)
     ? raw
-    : "FRED_UNKNOWN_ERROR";
+    : errorName === "TimeoutError" || errorName === "AbortError"
+      ? "FRED_TIMEOUT"
+      : error instanceof TypeError
+        ? "FRED_NETWORK_FAILED"
+        : "FRED_UNKNOWN_ERROR";
   const match = code.match(/HTTP_(\d{3})$/);
   return { item, code, ...(match ? { httpStatus: Number(match[1]) } : {}) };
 }
