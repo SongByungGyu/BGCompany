@@ -29,6 +29,20 @@ export const mockReferenceAdapter: ReferenceAdapter = {
       market: input.market,
       queries,
       items,
+      competitorBlogReferences: items
+        .filter((item) => item.sourceType === "blog")
+        .slice(0, 3)
+        .map((item, index) => ({
+          title: item.title,
+          description: item.summary,
+          url: item.url,
+          blogName: item.publisher ?? "Mock Blog Desk",
+          keywords: item.keywords ?? [],
+          observedStructure: ["시장 한 줄 요약", "핵심 변수", "투자자 체크리스트", "주의사항"],
+          differentiationPoint: index === 0
+            ? "단순 뉴스 요약보다 수급·섹터·이벤트를 함께 묶어 차별화합니다."
+            : "원문 표현을 복사하지 않고 BG Market Note 관점으로 재구성합니다.",
+        })),
       keyThemes: summary.keyThemes,
       repeatedKeywords: summary.repeatedKeywords,
       differentiationPoints: summary.differentiationPoints,

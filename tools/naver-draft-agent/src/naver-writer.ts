@@ -110,6 +110,27 @@ async function detectBlockedStatus(page: { url: () => string; locator: (selector
   return classifySecurityPage(page.url(), bodyText);
 }
 
+function normalizeEditorText(value: string) {
+  return value
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+async function pasteTextWithClipboard(page: import("playwright").Page, value: string) {
+  const text = normalizeEditorText(value);
+  const copied = await page.evaluate(async (clipboardText) => {
+    await navigator.clipboard.writeText(clipboardText);
+    return true;
+  }, text).then(
+    () => true,
+    () => false,
+  );
+  if (!copied) return false;
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+V" : "Control+V");
+  return true;
+}
+
 
 async function fillFirstEditorTarget(
   page: import("playwright").Page,
@@ -126,16 +147,21 @@ async function fillFirstEditorTarget(
 
       await target.click({ timeout: 10000 }).catch(() => undefined);
 
-      const filled = await target.fill(value, { timeout: 10000 }).then(
+      const normalizedValue = normalizeEditorText(value);
+      const pasted = await pasteTextWithClipboard(page, normalizedValue).then(
+        () => true,
+        () => false,
+      );
+      const filled = pasted || await target.fill(normalizedValue, { timeout: 10000 }).then(
         () => true,
         () => false,
       );
 
       if (!filled) {
-        await page.keyboard.insertText(value).catch(() => undefined);
+        await page.keyboard.insertText(normalizedValue).catch(() => undefined);
       }
 
-      console.log(`[naver-agent] filled ${label} via ${selector}`);
+      console.log(`[naver-agent] filled ${label} via ${selector}${pasted ? " (clipboard paste)" : ""}`);
       return true;
     }
   }

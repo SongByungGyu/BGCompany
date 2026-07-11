@@ -22,6 +22,16 @@ export type ReferenceItem = {
   copyrightPolicy?: string;
 };
 
+export type CompetitorBlogReference = {
+  title: string;
+  description?: string;
+  url?: string;
+  blogName?: string;
+  keywords: string[];
+  observedStructure?: string[];
+  differentiationPoint?: string;
+};
+
 export type ReferenceBundle = {
   provider: "mock" | "naver-search" | "manual";
   mode: "mock" | "real-disabled" | "real";
@@ -30,6 +40,7 @@ export type ReferenceBundle = {
   market: "KR" | "US" | "GLOBAL";
   queries: string[];
   items: ReferenceItem[];
+  competitorBlogReferences?: CompetitorBlogReference[];
   keyThemes: string[];
   repeatedKeywords: string[];
   differentiationPoints: string[];

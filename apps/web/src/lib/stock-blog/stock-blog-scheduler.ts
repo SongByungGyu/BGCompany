@@ -7,8 +7,8 @@ import { createNaverDraftJobFromPipeline } from "@/lib/naver-drafts/naver-draft-
 import { resolveApproval } from "@/lib/repositories/approval-actions";
 import {
   getExpectedHermesRunsForStockBlog,
-  getStockBlogScheduleItems,
   type StockBlogContentType,
+  type StockBlogScheduleItem,
 } from "@/lib/stock-blog/stock-blog-workflow";
 
 export type StockBlogSchedulerRunnerMode = "mock" | "hermes-dry-run" | "hermes";
@@ -30,7 +30,8 @@ export type StockBlogSchedulerConfig = {
   lookbackMinutes: number;
 };
 
-export type StockBlogSchedulerPlanItem = {
+export type StockBlogSchedulerPlanItem = StockBlogScheduleItem & {
+  scheduleId: string;
   contentType: StockBlogContentType;
   label: string;
   cadence: string;
@@ -46,6 +47,7 @@ export type StockBlogSchedulerPlanItem = {
 };
 
 export type StockBlogSchedulerRunResult = {
+  scheduleId?: string;
   contentType: StockBlogContentType;
   scheduleKey: string;
   scheduledFor: string;
@@ -81,17 +83,86 @@ const DEFAULT_TIMEZONE = "Asia/Seoul";
 const DEFAULT_LOOKBACK_MINUTES = 180;
 const EVENT_TYPE = "StockBlogScheduledRun";
 
-const weekdayByContentType: Partial<Record<StockBlogContentType, number>> = {
-  WEEKLY_MARKET_REVIEW: 5,
-  NEXT_WEEK_MARKET_PREVIEW: 6,
+type StockBlogSchedulerDefinition = StockBlogScheduleItem & {
+  scheduleId: string;
+  weekdays: number[];
+  scheduledTime: string;
+  title: (date: string) => string;
+  topic: string;
 };
 
-const scheduleTimeByContentType: Record<StockBlogContentType, string> = {
-  KOREA_DAILY_PREVIEW: "09:00",
-  KOREA_MARKET_CLOSE_US_PREVIEW: "17:00",
-  WEEKLY_MARKET_REVIEW: "16:00",
-  NEXT_WEEK_MARKET_PREVIEW: "09:00",
-};
+const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
+  {
+    scheduleId: "weekday-korea-daily-preview",
+    contentType: "KOREA_DAILY_PREVIEW",
+    label: "한국 증시 장전 브리핑",
+    cadence: "평일",
+    scheduledTimeKst: "09:00 KST",
+    scheduledTime: "09:00",
+    weekdays: [1, 2, 3, 4, 5],
+    objective: "장 시작 전 전일 해외 변수와 당일 한국장 체크포인트를 정리합니다.",
+    primaryAudience: "한국 주식 투자자",
+    recommendedRunnerMode: "hermes",
+    topic: "오늘 한국 주식시장 장전 현황과 체크포인트",
+    title: (date) => `${date} 오늘의 한국 증시 장전 브리핑`,
+  },
+  {
+    scheduleId: "weekday-korea-close-us-preview",
+    contentType: "KOREA_MARKET_CLOSE_US_PREVIEW",
+    label: "한국 마감·미국 장전 브리핑",
+    cadence: "평일",
+    scheduledTimeKst: "17:00 KST",
+    scheduledTime: "17:00",
+    weekdays: [1, 2, 3, 4, 5],
+    objective: "한국 장 마감 흐름과 오늘 밤 미국장 관전 포인트를 연결합니다.",
+    primaryAudience: "한국·미국 주식 병행 투자자",
+    recommendedRunnerMode: "hermes",
+    topic: "한국 증시 마감 흐름과 오늘 밤 미국장 전망",
+    title: (date) => `${date} 한국장 마감 정리와 미국장 전망`,
+  },
+  {
+    scheduleId: "friday-weekly-market-review",
+    contentType: "WEEKLY_MARKET_REVIEW",
+    label: "금요일 주간 시장 리뷰",
+    cadence: "매주 금요일",
+    scheduledTimeKst: "16:00 KST",
+    scheduledTime: "16:00",
+    weekdays: [5],
+    objective: "이번 주 한국 증시 흐름과 다음 주로 이어질 체크포인트를 정리합니다.",
+    primaryAudience: "주간 복기와 다음 주 전략을 준비하는 투자자",
+    recommendedRunnerMode: "hermes",
+    topic: "이번 주 한국 주식시장 흐름과 섹터별 체크포인트",
+    title: (date) => `${date} 이번 주 한국 증시 리뷰`,
+  },
+  {
+    scheduleId: "saturday-weekly-market-review",
+    contentType: "WEEKLY_MARKET_REVIEW",
+    label: "토요일 한국·미국 주간 정리",
+    cadence: "매주 토요일",
+    scheduledTimeKst: "09:00 KST",
+    scheduledTime: "09:00",
+    weekdays: [6],
+    objective: "이번 주 한국·미국 증시 흐름, 수급, 섹터, 주요 이벤트를 주말용으로 정리합니다.",
+    primaryAudience: "주말에 한 주를 복기하고 다음 주를 준비하는 투자자",
+    recommendedRunnerMode: "hermes",
+    topic: "이번 주 한국·미국 주식시장 흐름과 다음 주 체크포인트",
+    title: (date) => `${date} 이번 주 한국·미국 증시 주간 정리`,
+  },
+  {
+    scheduleId: "sunday-next-week-market-preview",
+    contentType: "NEXT_WEEK_MARKET_PREVIEW",
+    label: "다음 주 시장 프리뷰",
+    cadence: "매주 일요일",
+    scheduledTimeKst: "19:00 KST",
+    scheduledTime: "19:00",
+    weekdays: [0],
+    objective: "다음 주 주요 경제 일정, 실적, 리스크와 투자자 체크리스트를 준비합니다.",
+    primaryAudience: "일요일 저녁 다음 주 투자 계획을 세우는 투자자",
+    recommendedRunnerMode: "hermes",
+    topic: "다음 주 한국·미국 주식시장 주요 일정과 투자자 체크리스트",
+    title: (date) => `${date} 다음 주 증시 일정과 체크포인트`,
+  },
+];
 
 function parseBoolean(value: string | undefined, fallback: boolean) {
   if (value === undefined || value === "") return fallback;
@@ -179,37 +250,36 @@ function addDays(parts: ReturnType<typeof getZonedParts>, days: number, timezone
   return getZonedParts(zonedDateTimeToUtc(parts.year, parts.month, parts.day + days, 12, 0, timezone), timezone);
 }
 
-function appliesOnWeekday(contentType: StockBlogContentType, weekday: number) {
-  const expected = weekdayByContentType[contentType];
-  return expected === undefined || expected === weekday;
+function appliesOnWeekday(definition: StockBlogSchedulerDefinition, weekday: number) {
+  return definition.weekdays.includes(weekday);
 }
 
-function getScheduledAtForParts(contentType: StockBlogContentType, parts: ReturnType<typeof getZonedParts>, timezone: string) {
-  const { hour, minute } = parseTime(scheduleTimeByContentType[contentType]);
+function getScheduledAtForParts(definition: StockBlogSchedulerDefinition, parts: ReturnType<typeof getZonedParts>, timezone: string) {
+  const { hour, minute } = parseTime(definition.scheduledTime);
   return zonedDateTimeToUtc(parts.year, parts.month, parts.day, hour, minute, timezone);
 }
 
-function getNextRunAt(contentType: StockBlogContentType, now: Date, timezone: string) {
+function getNextRunAt(definition: StockBlogSchedulerDefinition, now: Date, timezone: string) {
   const nowParts = getZonedParts(now, timezone);
   for (let offset = 0; offset < 10; offset += 1) {
     const candidateParts = addDays(nowParts, offset, timezone);
-    if (!appliesOnWeekday(contentType, candidateParts.weekday)) continue;
-    const scheduledAt = getScheduledAtForParts(contentType, candidateParts, timezone);
+    if (!appliesOnWeekday(definition, candidateParts.weekday)) continue;
+    const scheduledAt = getScheduledAtForParts(definition, candidateParts, timezone);
     if (scheduledAt > now) return scheduledAt;
   }
-  return getScheduledAtForParts(contentType, addDays(nowParts, 10, timezone), timezone);
+  return getScheduledAtForParts(definition, addDays(nowParts, 10, timezone), timezone);
 }
 
-function isDueToday(contentType: StockBlogContentType, now: Date, timezone: string, lookbackMinutes: number) {
+function isDueToday(definition: StockBlogSchedulerDefinition, now: Date, timezone: string, lookbackMinutes: number) {
   const parts = getZonedParts(now, timezone);
-  if (!appliesOnWeekday(contentType, parts.weekday)) return false;
-  const scheduledAt = getScheduledAtForParts(contentType, parts, timezone);
+  if (!appliesOnWeekday(definition, parts.weekday)) return false;
+  const scheduledAt = getScheduledAtForParts(definition, parts, timezone);
   const elapsedMs = now.getTime() - scheduledAt.getTime();
   return elapsedMs >= 0 && elapsedMs <= lookbackMinutes * 60 * 1000;
 }
 
-function scheduleKey(contentType: StockBlogContentType, scheduledAt: Date) {
-  return `${contentType}-${scheduledAt.toISOString().slice(0, 16).replace(/[-:T]/g, "")}`;
+function scheduleKey(definition: StockBlogSchedulerDefinition, scheduledAt: Date) {
+  return `${definition.scheduleId}-${scheduledAt.toISOString().slice(0, 16).replace(/[-:T]/g, "")}`;
 }
 
 function schedulerEventId(key: string) {
@@ -221,18 +291,9 @@ function briefDateLabel(now: Date, timezone: string) {
   return `${String(parts.year).slice(2)}/${pad(parts.month)}/${pad(parts.day)}`;
 }
 
-function buildPipelineInput(contentType: StockBlogContentType, runnerMode: StockBlogSchedulerRunnerMode, now: Date, timezone: string) {
+function buildPipelineInput(definition: StockBlogSchedulerDefinition, runnerMode: StockBlogSchedulerRunnerMode, now: Date, timezone: string) {
   const date = briefDateLabel(now, timezone);
-  switch (contentType) {
-    case "KOREA_DAILY_PREVIEW":
-      return { topic: "오늘 한국 주식시장 장전 현황과 체크포인트", title: `${date} 오늘의 한국 증시 장전 브리핑`, channel: "blog", runnerMode };
-    case "KOREA_MARKET_CLOSE_US_PREVIEW":
-      return { topic: "한국 증시 마감 흐름과 오늘 밤 미국장 전망", title: `${date} 한국장 마감 정리와 미국장 전망`, channel: "blog", runnerMode };
-    case "WEEKLY_MARKET_REVIEW":
-      return { topic: "이번 주 한국·미국 주식시장 흐름과 섹터별 체크포인트", title: `${date} 금주 한국·미국 증시 흐름 정리`, channel: "blog", runnerMode };
-    case "NEXT_WEEK_MARKET_PREVIEW":
-      return { topic: "다음 주 한국·미국 주식시장 주요 일정과 투자자 체크리스트", title: `${date} 다음 주 증시 일정과 체크포인트`, channel: "blog", runnerMode };
-  }
+  return { topic: definition.topic, title: definition.title(date), channel: "blog", runnerMode };
 }
 
 function usageSnapshot(usage: Awaited<ReturnType<typeof getHermesUsageSummary>>) {
@@ -278,16 +339,16 @@ async function writeSchedulerEvent(input: {
 }
 
 export function buildStockBlogSchedulerPlan(now = new Date(), config = getStockBlogSchedulerConfig()): StockBlogSchedulerPlanItem[] {
-  return getStockBlogScheduleItems().map((item) => {
-    const time = parseTime(scheduleTimeByContentType[item.contentType]);
-    const nextRunAt = getNextRunAt(item.contentType, now, config.timezone);
+  return STOCK_BLOG_SCHEDULE_DEFINITIONS.map((definition) => {
+    const time = parseTime(definition.scheduledTime);
+    const nextRunAt = getNextRunAt(definition, now, config.timezone);
     return {
-      ...item,
+      ...definition,
       scheduleHour: time.hour,
       scheduleMinute: time.minute,
-      isDueToday: isDueToday(item.contentType, now, config.timezone, config.lookbackMinutes),
+      isDueToday: isDueToday(definition, now, config.timezone, config.lookbackMinutes),
       nextRunAt: nextRunAt.toISOString(),
-      expectedHermesRuns: getExpectedHermesRunsForStockBlog(item.contentType),
+      expectedHermesRuns: getExpectedHermesRunsForStockBlog(definition.contentType),
     };
   });
 }
@@ -316,14 +377,15 @@ export async function getStockBlogSchedulerStatus(now = new Date()): Promise<Sto
   };
 }
 
-async function runOneSchedule(contentType: StockBlogContentType, now: Date, config: StockBlogSchedulerConfig): Promise<StockBlogSchedulerRunResult> {
-  const scheduledAt = getScheduledAtForParts(contentType, getZonedParts(now, config.timezone), config.timezone);
-  const key = scheduleKey(contentType, scheduledAt);
+async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Date, config: StockBlogSchedulerConfig): Promise<StockBlogSchedulerRunResult> {
+  const contentType = definition.contentType;
+  const scheduledAt = getScheduledAtForParts(definition, getZonedParts(now, config.timezone), config.timezone);
+  const key = scheduleKey(definition, scheduledAt);
   const id = schedulerEventId(key);
   const scheduledFor = scheduledAt.toISOString();
 
   const existing = await prisma.eventLog.findUnique({ where: { id } });
-  if (existing) return { contentType, scheduleKey: key, scheduledFor, status: "already_ran", reason: "이미 처리된 스케줄입니다." };
+  if (existing) return { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "already_ran", reason: "이미 처리된 스케줄입니다." };
 
   await writeSchedulerEvent({
     key,
@@ -340,6 +402,7 @@ async function runOneSchedule(contentType: StockBlogContentType, now: Date, conf
       const requiredRuns = getExpectedHermesRunsForStockBlog(contentType);
       if (hermesUsageBefore.remaining < requiredRuns) {
         const result: StockBlogSchedulerRunResult = {
+          scheduleId: definition.scheduleId,
           contentType,
           scheduleKey: key,
           scheduledFor,
@@ -359,7 +422,7 @@ async function runOneSchedule(contentType: StockBlogContentType, now: Date, conf
       }
     }
 
-    const pipeline = await startContentPipeline(buildPipelineInput(contentType, config.runnerMode, now, config.timezone));
+    const pipeline = await startContentPipeline(buildPipelineInput(definition, config.runnerMode, now, config.timezone));
     const approvalId = pipeline.approvalId ?? null;
     let naverDraftJobId: string | undefined;
     let status: StockBlogSchedulerRunStatus = "succeeded";
@@ -387,6 +450,7 @@ async function runOneSchedule(contentType: StockBlogContentType, now: Date, conf
 
     const hermesUsageAfter = usageSnapshot(await getHermesUsageSummary({ recentLimit: 4 }));
     const result: StockBlogSchedulerRunResult = {
+      scheduleId: definition.scheduleId,
       contentType,
       scheduleKey: key,
       scheduledFor,
@@ -409,7 +473,7 @@ async function runOneSchedule(contentType: StockBlogContentType, now: Date, conf
     return result;
   } catch (error) {
     const reason = error instanceof HermesDailyLimitExceededError ? error.message : error instanceof Error ? error.message : "알 수 없는 스케줄러 오류";
-    const result: StockBlogSchedulerRunResult = { contentType, scheduleKey: key, scheduledFor, status: "failed", reason };
+    const result: StockBlogSchedulerRunResult = { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "failed", reason };
     await writeSchedulerEvent({
       key,
       contentType,
@@ -430,7 +494,8 @@ export async function runStockBlogSchedulerTick(now = new Date()) {
   if (due.length === 0) return { ok: true, status: "not_due" as const, config, results: [] as StockBlogSchedulerRunResult[] };
   const results: StockBlogSchedulerRunResult[] = [];
   for (const item of due) {
-    results.push(await runOneSchedule(item.contentType, now, config));
+    const definition = STOCK_BLOG_SCHEDULE_DEFINITIONS.find((candidate) => candidate.scheduleId === item.scheduleId);
+    if (definition) results.push(await runOneSchedule(definition, now, config));
   }
   return { ok: true, status: "processed" as const, config, results };
 }
