@@ -1,0 +1,23 @@
+{
+  "provider": "manual",
+  "status": "ready",
+  "marketDate": "YYYY-MM-DD",
+  "collectedAt": "YYYY-MM-DDTHH:mm:ss.sssZ",
+  "dataQuality": "partial",
+  "korea": {
+    "kospi": { "label": "KOSPI", "value": null, "changePct": null, "asOf": "YYYY-MM-DD", "sourceName": "REPLACE_WITH_SOURCE", "url": "https://example.com/source" },
+    "kosdaq": { "label": "KOSDAQ", "value": null, "changePct": null, "asOf": "YYYY-MM-DD", "sourceName": "REPLACE_WITH_SOURCE", "url": "https://example.com/source" },
+    "investorFlows": [],
+    "strongSectors": [],
+    "weakSectors": []
+  },
+  "us": {
+    "sp500": { "label": "S&P 500", "value": null, "changePct": null, "asOf": "YYYY-MM-DD", "sourceName": "REPLACE_WITH_SOURCE", "url": "https://example.com/source" },
+    "nasdaq": { "label": "NASDAQ", "value": null, "changePct": null, "asOf": "YYYY-MM-DD", "sourceName": "REPLACE_WITH_SOURCE", "url": "https://example.com/source" },
+    "leadingSectors": []
+  },
+  "upcoming": [],
+  "missingItems": [
+    "Replace every placeholder with reviewed market data before setting dataQuality to verified."
+  ]
+}

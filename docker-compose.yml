@@ -15,6 +15,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - bg_company_generated_stock_blog:/app/apps/web/public/generated/stock-blog
+      - ./config:/app/apps/web/config:ro
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.bg-company-web.rule=Host(`bgcompanyoffice.cloud`) || Host(`www.bgcompanyoffice.cloud`)"
@@ -77,3 +80,4 @@ services:
 
 volumes:
   bg_company_postgres_data:
+  bg_company_generated_stock_blog:

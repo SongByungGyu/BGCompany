@@ -20,11 +20,16 @@ export type NaverDraftJob = {
   thumbnailPrimaryText?: string | null;
   thumbnailSecondaryText?: string | null;
   thumbnailKeywords?: string[];
+  inlineImageUrls?: string[];
+  imageStatus?: string | null;
+  references?: Array<{ title?: string; sourceName?: string; originalUrl?: string; url?: string }>;
+  competitorBlogReferences?: Array<{ title?: string; blogName?: string; url?: string }>;
+  allowImageUpload?: boolean;
   disclaimer: string | null;
 };
 
 type WriterResult = {
-  status: "draft_saved" | "user_publish_required" | "failed" | "login_required" | "captcha_required" | "security_check_required";
+  status: "draft_saved" | "user_publish_required" | "failed" | "login_required" | "captcha_required" | "security_check_required" | "readability_failed";
   externalUrl?: string;
   errorCode?: string;
   errorMessage?: string;
@@ -66,6 +71,7 @@ async function launchPersistentBrowserContext(
   const launchOptions = {
     headless: false,
     viewport: null,
+    chromiumSandbox: true,
     timeout: 20000,
     ...(browserChannel ? { channel: browserChannel } : {}),
     ...(browserExecutablePath ? { executablePath: browserExecutablePath } : {}),
@@ -81,6 +87,7 @@ async function launchPersistentBrowserContext(
     return chromium.launchPersistentContext(profileDir, {
       headless: false,
       viewport: null,
+      chromiumSandbox: true,
       timeout: 20000,
       args: launchArgs,
     });
@@ -115,6 +122,45 @@ function normalizeEditorText(value: string) {
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function readabilityMetrics(value: string) {
+  const normalized = value.replace(/\r\n/g, "\n").trim();
+  return {
+    characterCount: normalized.replace(/\s/g, "").length,
+    lineCount: normalized.split("\n").map((line) => line.trim()).filter(Boolean).length,
+    paragraphCount: normalized.split(/\n{2,}/).map((item) => item.trim()).filter(Boolean).length,
+  };
+}
+
+async function readNaverEditorText(page: import("playwright").Page) {
+  const selectors = [
+    ".se-main-container",
+    ".se-component-content",
+    '[contenteditable="true"][aria-label*="본문"]',
+    '[contenteditable="true"][data-placeholder*="내용"]',
+  ];
+  for (const scope of [page, ...page.frames()]) {
+    for (const selector of selectors) {
+      const target = scope.locator(selector).first();
+      if (!(await target.count().catch(() => 0))) continue;
+      const text = await target.innerText({ timeout: 5000 }).catch(() => "");
+      if (text.trim()) return text;
+    }
+  }
+  return "";
+}
+
+async function verifyNaverEditorReadability(page: import("playwright").Page, expectedBody: string) {
+  await page.waitForTimeout(1200);
+  const expected = readabilityMetrics(expectedBody);
+  const actualText = await readNaverEditorText(page);
+  const actual = readabilityMetrics(actualText);
+  const minimumCharacters = Math.min(500, Math.max(120, Math.floor(expected.characterCount * 0.35)));
+  const minimumLines = Math.min(8, Math.max(3, Math.floor(expected.lineCount * 0.4)));
+  const ok = actual.characterCount >= minimumCharacters && actual.lineCount >= minimumLines;
+  console.log(`[naver-agent] readability check: chars=${actual.characterCount}/${expected.characterCount}, lines=${actual.lineCount}/${expected.lineCount}, paragraphs=${actual.paragraphCount}/${expected.paragraphCount}`);
+  return { ok, expected, actual };
 }
 
 async function pasteTextWithClipboard(page: import("playwright").Page, value: string) {
@@ -361,6 +407,20 @@ export async function runNaverWriter(job: NaverDraftJob, context: { draftFile: s
       };
     }
 
+    const readability = await verifyNaverEditorReadability(page, job.body);
+    if (!readability.ok) {
+      return {
+        status: "readability_failed",
+        externalUrl: page.url(),
+        errorCode: "NAVER_EDITOR_READABILITY_FAILED",
+        errorMessage: `Naver editor body verification failed. characters=${readability.actual.characterCount}/${readability.expected.characterCount}, lines=${readability.actual.lineCount}/${readability.expected.lineCount}. Draft save was stopped.`,
+      };
+    }
+
+    if (job.allowImageUpload && (job.thumbnailImageUrl || job.inlineImageUrls?.length)) {
+      console.warn("[naver-agent] image upload metadata received, but automatic image attachment remains disabled in this phase.");
+    }
+
     if (allowDraftSave) {
       if (await clickNaverEditorSave(page)) {
         return { status: "draft_saved", externalUrl: page.url() };
@@ -379,5 +439,4 @@ export async function runNaverWriter(job: NaverDraftJob, context: { draftFile: s
     return { status: "failed", errorCode: "NAVER_WRITER_FAILED", errorMessage: error instanceof Error ? error.message : String(error) };
   }
 }
-
 

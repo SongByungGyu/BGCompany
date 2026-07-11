@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getNaverDraftAgentKeyConfigured, reportNaverDraftJobStatus, verifyNaverDraftAgentKey, type NaverDraftJobStatus } from "@/lib/naver-drafts/naver-draft-jobs";
 
-const statuses = new Set(["created", "queued", "claimed", "in_progress", "draft_saved", "user_publish_required", "completed", "failed", "login_required", "captcha_required", "security_check_required", "cancelled"]);
+const statuses = new Set(["created", "queued", "claimed", "in_progress", "draft_saved", "user_publish_required", "completed", "failed", "login_required", "captcha_required", "security_check_required", "readability_failed", "cancelled"]);
 
 function requireAgent(request: NextRequest) {
   if (!getNaverDraftAgentKeyConfigured()) {

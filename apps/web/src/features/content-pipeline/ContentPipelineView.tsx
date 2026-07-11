@@ -313,6 +313,11 @@ function buildNaverBlogPublishPrep(pipeline: ContentPipelineRun): NaverBlogPubli
     naverTags: tags,
     thumbnailText: thumbnail.thumbnailPrimaryText,
     ...thumbnail,
+    thumbnailImageUrl: pipeline.thumbnailImageUrl ?? thumbnail.thumbnailImageUrl,
+    inlineImageUrls: pipeline.inlineImageUrls ?? [],
+    imageStatus: pipeline.imageStatus,
+    imageGeneratedAt: pipeline.imageGeneratedAt,
+    imageErrorMessage: pipeline.imageErrorMessage,
     inlineImageIdeas: buildInlineImageIdeas(template),
     ...structuredSections,
     pasteReadyBody,
@@ -723,7 +728,15 @@ function NaverBlogPublishPrepPanel({ pipeline }: { pipeline: ContentPipelineRun 
     void thumbnailRefreshCount;
     const base = pipeline.naverBlogPublishPrep ?? buildNaverBlogPublishPrep(pipeline);
     const thumbnail = pipeline.thumbnailResult ?? buildStockBlogThumbnail(pipeline, base.briefingTemplate);
-    return { ...base, ...thumbnail };
+    return {
+      ...base,
+      ...thumbnail,
+      thumbnailImageUrl: pipeline.thumbnailImageUrl ?? base.thumbnailImageUrl ?? thumbnail.thumbnailImageUrl,
+      inlineImageUrls: pipeline.inlineImageUrls ?? base.inlineImageUrls ?? [],
+      imageStatus: pipeline.imageStatus ?? base.imageStatus,
+      imageGeneratedAt: pipeline.imageGeneratedAt ?? base.imageGeneratedAt,
+      imageErrorMessage: pipeline.imageErrorMessage ?? base.imageErrorMessage,
+    };
   }, [pipeline, thumbnailRefreshCount]);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
@@ -925,6 +938,18 @@ function NaverBlogPublishPrepPanel({ pipeline }: { pipeline: ContentPipelineRun 
             </li>
           ))}
         </ul>
+        {prep.inlineImageUrls?.length ? (
+          <div className="stock-image-prompt-list">
+            {prep.inlineImageUrls.map((url, index) => (
+              <article key={url} className="stock-image-prompt-item">
+                <span>자체 생성 본문 이미지 {index + 1}</span>
+                <a href={url} target="_blank" rel="noreferrer">이미지 열기</a>
+              </article>
+            ))}
+          </div>
+        ) : null}
+        <small>이미지 상태: {prep.imageStatus ?? "미생성"}{prep.imageGeneratedAt ? ` · ${new Date(prep.imageGeneratedAt).toLocaleString("ko-KR")}` : ""}</small>
+        {prep.imageErrorMessage ? <p className="content-pipeline-error">{prep.imageErrorMessage}</p> : null}
       </div>
 
       {prep.referenceBundle ? (
@@ -948,9 +973,19 @@ function NaverBlogPublishPrepPanel({ pipeline }: { pipeline: ContentPipelineRun 
           <div className="stock-reference-meta">
             <span>{prep.referenceBundle.provider}</span>
             <span>{prep.referenceBundle.mode}</span>
+            <span>{prep.referenceBundle.status ?? "상태 미정"}</span>
             <span>{prep.referenceBundle.market}</span>
           </div>
           <p>{prep.referenceBundle.sourcePolicy}</p>
+          {prep.referenceBundle.marketSnapshot ? (
+            <div className="naver-prep-block compact">
+              <label>MarketSnapshot</label>
+              <p>
+                {prep.referenceBundle.marketSnapshot.status} · {prep.referenceBundle.marketSnapshot.dataQuality} · 기준일 {prep.referenceBundle.marketSnapshot.marketDate}
+              </p>
+              {prep.referenceBundle.marketSnapshot.missingItems.length ? <small>부족: {prep.referenceBundle.marketSnapshot.missingItems.join(" · ")}</small> : null}
+            </div>
+          ) : null}
           {prep.referenceBundle.queries.length ? (
             <div className="content-pipeline-keywords">
               {prep.referenceBundle.queries.map((query) => <span key={query}>{query}</span>)}

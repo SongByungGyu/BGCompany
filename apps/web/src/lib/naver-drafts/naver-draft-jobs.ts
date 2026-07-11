@@ -3,9 +3,10 @@ import type { NaverDraftJob, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getContentPipelineDetail } from "@/lib/content-pipeline/content-pipeline-service";
 import type { ContentPipelineRun, StockBriefingTemplate } from "@/features/content-pipeline/content-pipeline-types";
-import type { ReferenceBundle, ReferenceItem } from "@/lib/stock-blog/references/reference-types";
+import type { CompetitorBlogReference, ReferenceBundle, ReferenceItem } from "@/lib/stock-blog/references/reference-types";
 import { buildStockBlogThumbnail, inferStockBriefingTemplateFromPipeline } from "@/lib/stock-blog/thumbnail-automation";
 import { evaluateStockBlogPublishQuality, getRealStockReferences } from "@/lib/stock-blog/quality-gate";
+import { renderNaverBody, type NaverBodyBlock } from "@/lib/stock-blog/naver-body";
 
 export type NaverDraftJobStatus =
   | "created"
@@ -19,6 +20,7 @@ export type NaverDraftJobStatus =
   | "login_required"
   | "captcha_required"
   | "security_check_required"
+  | "readability_failed"
   | "cancelled";
 
 export type SerializedNaverDraftJob = {
@@ -44,6 +46,11 @@ export type SerializedNaverDraftJob = {
   thumbnailPrimaryText: string | null;
   thumbnailSecondaryText: string | null;
   thumbnailKeywords: string[];
+  inlineImageUrls: string[];
+  imageStatus: string | null;
+  references: ReferenceItem[];
+  competitorBlogReferences: CompetitorBlogReference[];
+  allowImageUpload: boolean;
   disclaimer: string | null;
   externalUrl: string | null;
   errorCode: string | null;
@@ -242,19 +249,6 @@ function collectReferences(pipeline: ContentPipelineRun) {
   return (realReferences.length > 0 ? realReferences : [...(bundle?.items ?? [])]).slice(0, 5);
 }
 
-function referenceLine(item: ReferenceItem, index: number) {
-  const source = clean(item.publisher) || clean(item.provider) || item.sourceType;
-  const summary = clean(item.summary) || clean(item.usageNote) || "시장 흐름을 확인하기 위한 참고자료입니다.";
-  const url = clean(item.url);
-  return [
-    `${index + 1}. ${item.title}`,
-    `   - 출처: ${source}`,
-    `   - 요약: ${summary}`,
-    `   - 영향: ${clean(item.usageNote) || "브리핑 관점 정리와 체크포인트 도출에 활용"}`,
-    url ? `   - 링크: ${url}` : "   - 링크: 수동 확인 필요",
-  ].join("\n");
-}
-
 function ensureMeaningfulParagraph(value: string, fallback: string) {
   const cleaned = clean(value);
   if (!cleaned) return fallback;
@@ -262,7 +256,7 @@ function ensureMeaningfulParagraph(value: string, fallback: string) {
   return cleaned;
 }
 
-function buildSectionBody(pipeline: ContentPipelineRun, heading: string, index: number, template: StockBriefingTemplate) {
+function buildSectionBody(pipeline: ContentPipelineRun, index: number, template: StockBriefingTemplate) {
   const writerText = normalizeNaverBody(sectionsToText(pipeline), template);
   const writerSections = writerText.split(/\n{2,}/).map(clean).filter(Boolean);
   const source = writerSections[index] || writerSections[index + 1] || "";
@@ -275,7 +269,7 @@ function buildSectionBody(pipeline: ContentPipelineRun, heading: string, index: 
     "아래 참고자료는 원문을 복사하기 위한 것이 아니라 시장을 해석하는 방향을 잡기 위한 신호로만 활용했습니다.",
     "주말에는 당일 매매보다 한 주의 흐름을 복기하고 다음 주 체크리스트를 만드는 데 초점을 맞추는 편이 좋습니다.",
   ];
-  return `${heading}\n\n${ensureMeaningfulParagraph(source, commonFallbacks[index] ?? commonFallbacks[0])}`;
+  return ensureMeaningfulParagraph(source, commonFallbacks[index] ?? commonFallbacks[0]);
 }
 
 function buildChecklist(template: StockBriefingTemplate) {
@@ -313,32 +307,26 @@ function buildChecklist(template: StockBriefingTemplate) {
 
 function buildPlainBody(pipeline: ContentPipelineRun, template: StockBriefingTemplate, title: string, refs: ReferenceItem[]) {
   const copy = STOCK_BRIEFING_COPY[template];
-  const bodyParts: string[] = [
-    title,
-    "",
-    `${copy.introHeading}`,
-    "",
-    ensureMeaningfulParagraph(
+  const blocks: NaverBodyBlock[] = [
+    { type: "heading", text: title },
+    { type: "heading", text: copy.introHeading },
+    { type: "intro", text: ensureMeaningfulParagraph(
       clean(pipeline.writerResult?.introduction) || clean(pipeline.outputSummary),
       `${pipeline.topic}을 중심으로 시장 흐름, 수급, 섹터, 이벤트를 블로그 독자가 바로 확인할 수 있게 정리했습니다.`,
-    ),
-    "",
-    ...copy.headings.slice(0, -1).flatMap((heading, index) => [buildSectionBody(pipeline, heading, index, template), ""]),
-    "투자자 체크리스트",
-    "",
-    ...buildChecklist(template).map((item) => `- ${item}`),
-    "",
-    copy.headings.at(-1) ?? "참고자료와 해석",
-    "",
-    ...refs.slice(0, 5).map((item, index) => referenceLine(item, index).split("\n")).flat(),
-    "",
-    "마무리",
-    "",
-    clean(pipeline.writerResult?.conclusion) || "시장은 매일 다른 신호를 주지만, 결국 중요한 것은 방향을 단정하는 것보다 확인해야 할 변수를 꾸준히 줄여가는 것입니다.",
-    "",
-    INVESTMENT_DISCLAIMER,
+    ) },
+    ...copy.headings.slice(0, -1).flatMap<NaverBodyBlock>((heading, index) => [
+      { type: "heading", text: heading },
+      { type: "paragraph", text: buildSectionBody(pipeline, index, template) },
+    ]),
+    { type: "heading", text: "투자자 체크리스트" },
+    { type: "bulletList", items: buildChecklist(template) },
+    { type: "heading", text: copy.headings.at(-1) ?? "참고자료와 해석" },
+    ...refs.slice(0, 5).map<NaverBodyBlock>((item, index) => ({ type: "reference", item, index: index + 1 })),
+    { type: "heading", text: "마무리" },
+    { type: "paragraph", text: clean(pipeline.writerResult?.conclusion) || "시장은 매일 다른 신호를 주지만, 중요한 것은 방향을 단정하기보다 확인할 변수를 근거별로 줄여가는 것입니다." },
+    { type: "disclaimer", text: INVESTMENT_DISCLAIMER },
   ];
-  return sanitizeByTemplate(bodyParts.join("\n").replace(/\n{3,}/g, "\n\n").trim(), template);
+  return sanitizeByTemplate(renderNaverBody(blocks), template);
 }
 
 function buildMarkdownBody(title: string, body: string) {
@@ -432,6 +420,11 @@ export function serializeNaverDraftJob(job: NaverDraftJob): SerializedNaverDraft
     thumbnailPrimaryText: job.thumbnailText,
     thumbnailSecondaryText: null,
     thumbnailKeywords: job.thumbnailText ? [job.thumbnailText] : [],
+    inlineImageUrls: [],
+    imageStatus: null,
+    references: [],
+    competitorBlogReferences: [],
+    allowImageUpload: false,
     disclaimer: job.disclaimer,
     externalUrl: job.externalUrl,
     errorCode: job.errorCode,
@@ -443,6 +436,35 @@ export function serializeNaverDraftJob(job: NaverDraftJob): SerializedNaverDraft
     createdAt: job.createdAt.toISOString(),
     updatedAt: job.updatedAt.toISOString(),
   };
+}
+
+async function serializeNaverDraftJobWithPipeline(job: NaverDraftJob, knownPipeline?: ContentPipelineRun) {
+  const detail = knownPipeline
+    ? { pipeline: knownPipeline }
+    : job.contentPipelineId
+      ? await getContentPipelineDetail(job.contentPipelineId)
+      : null;
+  const pipeline = detail?.pipeline;
+  if (!pipeline) return serializeNaverDraftJob(job);
+  const prep = pipeline.naverBlogPublishPrep;
+  const bundle = collectReferenceBundle(pipeline);
+  return {
+    ...serializeNaverDraftJob(job),
+    thumbnailTitle: prep?.thumbnailTitle ?? job.thumbnailText,
+    thumbnailSubtitle: prep?.thumbnailSubtitle ?? null,
+    thumbnailHook: prep?.thumbnailHook ?? null,
+    thumbnailStyle: prep?.thumbnailStyle ?? null,
+    thumbnailImageUrl: pipeline.thumbnailImageUrl ?? prep?.thumbnailImageUrl ?? null,
+    thumbnailTemplateType: prep?.thumbnailTemplateType ?? prep?.briefingTemplate ?? null,
+    thumbnailPrimaryText: prep?.thumbnailPrimaryText ?? job.thumbnailText,
+    thumbnailSecondaryText: prep?.thumbnailSecondaryText ?? null,
+    thumbnailKeywords: prep?.thumbnailKeywords ?? (job.thumbnailText ? [job.thumbnailText] : []),
+    inlineImageUrls: pipeline.inlineImageUrls ?? [],
+    imageStatus: pipeline.imageStatus ?? null,
+    references: getRealStockReferences(bundle).slice(0, 10),
+    competitorBlogReferences: (bundle?.competitorBlogReferences ?? []).slice(0, 5),
+    allowImageUpload: process.env.NAVER_ALLOW_IMAGE_UPLOAD === "true",
+  } satisfies SerializedNaverDraftJob;
 }
 
 export function getNaverDraftPolicy() {
@@ -458,12 +480,12 @@ export async function listNaverDraftJobs(input: { contentPipelineId?: string | n
     orderBy: { createdAt: "desc" },
     take: 50,
   });
-  return jobs.map(serializeNaverDraftJob);
+  return Promise.all(jobs.map((job) => serializeNaverDraftJobWithPipeline(job)));
 }
 
 export async function getNaverDraftJob(jobId: string) {
   const job = await prisma.naverDraftJob.findUnique({ where: { id: jobId } });
-  return job ? serializeNaverDraftJob(job) : null;
+  return job ? serializeNaverDraftJobWithPipeline(job) : null;
 }
 
 export async function createNaverDraftJobFromPipeline(input: { contentPipelineId: string; approvalId?: string | null }) {
@@ -483,7 +505,7 @@ export async function createNaverDraftJobFromPipeline(input: { contentPipelineId
     where: { contentPipelineId: detail.pipeline.id, status: { in: activeStatuses } },
     orderBy: { createdAt: "desc" },
   });
-  if (existing) return serializeNaverDraftJob(existing);
+  if (existing) return serializeNaverDraftJobWithPipeline(existing, detail.pipeline);
 
   const draft = buildDraftFromPipeline(detail.pipeline);
   const job = await prisma.naverDraftJob.create({
@@ -495,14 +517,14 @@ export async function createNaverDraftJobFromPipeline(input: { contentPipelineId
       ...draft,
     },
   });
-  return serializeNaverDraftJob(job);
+  return serializeNaverDraftJobWithPipeline(job, detail.pipeline);
 }
 
 export async function cancelNaverDraftJob(jobId: string) {
   const job = await prisma.naverDraftJob.findUnique({ where: { id: jobId } });
   if (!job) return null;
   if (["completed", "draft_saved"].includes(job.status)) throw new Error("NAVER_DRAFT_JOB_ALREADY_FINISHED");
-  return serializeNaverDraftJob(await prisma.naverDraftJob.update({
+  return serializeNaverDraftJobWithPipeline(await prisma.naverDraftJob.update({
     where: { id: jobId },
     data: { status: "cancelled", completedAt: new Date() },
   }));
@@ -525,7 +547,7 @@ export async function getNextNaverDraftJob() {
     },
     orderBy: { createdAt: "asc" },
   });
-  return job ? serializeNaverDraftJob(job) : null;
+  return job ? serializeNaverDraftJobWithPipeline(job) : null;
 }
 
 export async function claimNaverDraftJob(jobId: string, claimedBy: string) {
@@ -555,9 +577,9 @@ export async function reportNaverDraftJobStatus(jobId: string, input: StatusRepo
     errorMessage: input.errorMessage,
   };
   if (input.status === "in_progress") data.startedAt = now;
-  if (["draft_saved", "user_publish_required", "completed", "failed", "login_required", "captcha_required", "security_check_required", "cancelled"].includes(input.status)) data.completedAt = now;
+  if (["draft_saved", "user_publish_required", "completed", "failed", "login_required", "captcha_required", "security_check_required", "readability_failed", "cancelled"].includes(input.status)) data.completedAt = now;
   const job = await prisma.naverDraftJob.update({ where: { id: jobId }, data });
-  return serializeNaverDraftJob(job);
+  return serializeNaverDraftJobWithPipeline(job);
 }
 
 export function getNaverDraftAgentKeyConfigured() {

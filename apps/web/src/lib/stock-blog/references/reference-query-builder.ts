@@ -3,23 +3,31 @@ import type { ReferenceSearchInput, StockReferenceBriefingTemplate } from "./ref
 const templateQueries: Record<StockReferenceBriefingTemplate, string[]> = {
   KOREA_DAILY_PREVIEW: [
     "오늘 한국 증시 전망",
+    "전일 미국 증시 마감",
     "코스피 코스닥 장전 체크포인트",
     "원달러 환율 금리 외국인 수급 한국 증시",
+    "반도체 자동차 2차전지 수급",
   ],
   KOREA_MARKET_CLOSE_US_PREVIEW: [
     "오늘 한국 증시 마감 정리",
-    "오늘 밤 미국 증시 전망 나스닥 S&P500",
-    "한국 증시 섹터 흐름 미국장 체크포인트",
+    "외국인 기관 수급 코스피 코스닥",
+    "오늘 강세 약세 업종",
+    "오늘 미국 증시 전망 나스닥 S&P500",
+    "미국 선물 국채금리 달러",
   ],
   WEEKLY_MARKET_REVIEW: [
     "이번 주 한국 증시 정리",
     "주간 코스피 코스닥 섹터 수급",
-    "이번 주 환율 금리 반도체 이차전지 증시",
+    "이번 주 미국 증시 S&P500 나스닥",
+    "주간 외국인 기관 수급",
+    "이번 주 강세 약세 업종 주요 경제 뉴스",
   ],
   NEXT_WEEK_MARKET_PREVIEW: [
-    "다음 주 미국 증시 일정",
-    "다음 주 FOMC CPI 고용 실적 발표 일정",
-    "다음 주 한국 미국 증시 체크포인트",
+    "다음 주 경제 일정",
+    "다음 주 미국 경제지표",
+    "다음 주 주요 실적 발표",
+    "다음 주 한국 증시 전망",
+    "다음 주 FOMC CPI 고용지표",
   ],
 };
 
@@ -31,5 +39,5 @@ export function buildReferenceQueries(input: ReferenceSearchInput): string[] {
     ...base,
     topicQuery,
     keywordQuery ? `${topicQuery} ${keywordQuery}` : topicQuery,
-  ].map((query) => query.trim()).filter(Boolean)));
+  ].map((query) => query.trim()).filter(Boolean))).slice(0, 6);
 }

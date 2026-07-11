@@ -159,6 +159,10 @@ export type ThumbnailAutomationResult = {
   thumbnailPrompt: string;
   thumbnailStatus: ThumbnailAutomationStatus;
   thumbnailImageUrl?: string;
+  inlineImageUrls?: string[];
+  imageStatus?: "generated" | "failed";
+  imageGeneratedAt?: string;
+  imageErrorMessage?: string;
   thumbnailVariants: ThumbnailVariant[];
   thumbnailErrorMessage?: string;
   thumbnailTemplateType: StockBriefingTemplate;
@@ -179,6 +183,10 @@ export type NaverBlogPublishPrep = {
   thumbnailStyle: string;
   thumbnailStatus: ThumbnailAutomationStatus;
   thumbnailImageUrl?: string;
+  inlineImageUrls?: string[];
+  imageStatus?: "generated" | "failed";
+  imageGeneratedAt?: string;
+  imageErrorMessage?: string;
   thumbnailVariants: ThumbnailVariant[];
   thumbnailErrorMessage?: string;
   thumbnailTemplateType: StockBriefingTemplate;
@@ -209,6 +217,7 @@ export type NaverBlogPublishPrep = {
 
 export type StockBlogQualityStatus =
   | "passed"
+  | "needs_credentials"
   | "needs_reference"
   | "needs_data"
   | "readability_failed"
@@ -244,6 +253,11 @@ export type ContentPipelineRun = {
   qualityGate?: StockBlogQualityGateResult;
   referenceBundle?: ReferenceBundle;
   blogImagePrompts?: BlogImagePrompt[];
+  thumbnailImageUrl?: string;
+  inlineImageUrls?: string[];
+  imageStatus?: "generated" | "failed";
+  imageGeneratedAt?: string;
+  imageErrorMessage?: string;
   hermesRequestPayload?: Record<string, unknown>;
   hermesMarketingRequestPayload?: Record<string, unknown>;
   hermesWriterRequestPayload?: Record<string, unknown>;

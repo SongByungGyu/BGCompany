@@ -1,5 +1,7 @@
 # Stock Reference Provider
 
+For the production Naver Search adapter, MarketSnapshot contract, strict Hermes preflight, and generated image policy, see `docs/stock-blog/real-reference-provider.md`.
+
 BG Company 주식 블로그는 Hermes 실제 실행 전에 참고자료 묶음(`ReferenceBundle`)을 준비한다.
 1차 운영 기준은 외부 크롤링/API 호출이 아니라 `manual` provider다. 운영자가 검증한 링크와 요약을 JSON으로 넣고, Hermes는 그 자료만 근거로 글을 작성한다.
 

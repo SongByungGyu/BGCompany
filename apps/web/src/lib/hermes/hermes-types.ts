@@ -1,10 +1,17 @@
-import type { BlogImagePrompt, ReferenceBundle } from "@/lib/stock-blog/references/reference-types";
+import type { BlogImagePrompt, CompetitorBlogReference, MarketSnapshot, ReferenceBundle, ReferenceItem, StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 
 export type ContentPlannerHermesInput = {
   topic: string;
   title: string;
   channel: string;
   language?: "ko" | "en";
+  contentType?: StockReferenceBriefingTemplate;
+  marketDate?: string;
+  marketSnapshot?: MarketSnapshot;
+  referenceBundle?: ReferenceBundle;
+  competitorBlogReferences?: CompetitorBlogReference[];
+  referencePolicy?: string[];
+  prohibitedPhrases?: string[];
 };
 
 export type MarketingReviewHermesInput = ContentPlannerHermesInput & {
@@ -35,6 +42,13 @@ export type HermesContentPlannerPayload = {
     title: string;
     channel: string;
     language: "ko" | "en";
+    contentType?: StockReferenceBriefingTemplate;
+    marketDate?: string;
+    marketSnapshot?: MarketSnapshot;
+    referenceBundle?: ReferenceBundle;
+    competitorBlogReferences?: CompetitorBlogReference[];
+    referencePolicy?: string[];
+    prohibitedPhrases?: string[];
   };
   context: {
     company: "BG Company";
@@ -53,6 +67,10 @@ export type HermesMarketingReviewPayload = {
     channel: string;
     language: "ko" | "en";
     plannerResult?: Record<string, unknown>;
+    competitorBlogReferences?: CompetitorBlogReference[];
+    searchKeywords?: string[];
+    differentiationPoints?: string[];
+    prohibitedPhrases?: string[];
   };
   context: {
     company: "BG Company";
@@ -74,6 +92,11 @@ export type HermesContentWriterPayload = {
     plannerResult?: Record<string, unknown>;
     marketingResult?: Record<string, unknown>;
     referenceBundle?: ReferenceBundle;
+    realReferences?: ReferenceItem[];
+    marketSnapshot?: MarketSnapshot;
+    competitorBlogReferences?: CompetitorBlogReference[];
+    bodyStructure?: string[];
+    prohibitedPhrases?: string[];
     blogImagePrompts?: BlogImagePrompt[];
     referencePolicy?: string[];
   };
@@ -98,6 +121,11 @@ export type HermesQaAuditPayload = {
     marketingResult?: Record<string, unknown>;
     writerResult?: Record<string, unknown>;
     referenceBundle?: ReferenceBundle;
+    realReferences?: ReferenceItem[];
+    marketSnapshot?: MarketSnapshot;
+    qualityGateDiagnostics?: Record<string, unknown>;
+    finalPasteReadyBody?: string;
+    prohibitedPhrases?: string[];
     blogImagePrompts?: BlogImagePrompt[];
     referencePolicy?: string[];
   };

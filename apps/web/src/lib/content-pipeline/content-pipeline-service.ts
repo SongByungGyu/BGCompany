@@ -9,6 +9,7 @@ import { assertHermesDailyRunAvailable } from "@/lib/hermes/hermes-usage";
 import { collectStockBlogReferences } from "@/lib/stock-blog/references/reference-adapter";
 import { buildBlogImagePrompts } from "@/lib/stock-blog/references/reference-normalizer";
 import { evaluateStockBlogReferences } from "@/lib/stock-blog/quality-gate";
+import { generateStockBlogImages, type GeneratedStockBlogImages } from "@/lib/stock-blog/stock-blog-image-generator";
 import type { NormalizedHermesRunResult } from "@/lib/hermes/hermes-types";
 import type { BlogImagePrompt, ReferenceBundle, StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 import type { ContentChannel, ContentPipelineDetail, ContentPipelineRun, ContentPipelineStatus } from "@/features/content-pipeline/content-pipeline-types";
@@ -121,6 +122,26 @@ function inferReferenceMarket(template: StockReferenceBriefingTemplate): "KR" | 
 
 function buildReferenceKeywords(input: { topic: string; title: string }) {
   return Array.from(new Set(`${input.topic} ${input.title}`.split(/[\s,·/]+/).map((item) => item.trim()).filter((item) => item.length >= 2))).slice(0, 8);
+}
+
+const STOCK_PROHIBITED_PHRASES = [
+  "급등 확정",
+  "무조건 상승",
+  "매수 추천",
+  "수익 보장",
+  "존재하지 않는 기사·수치·URL 생성",
+  "이미지 프롬프트를 독자용 본문에 출력",
+];
+
+function hermesStockContext(data: ContentPipelineInput) {
+  return {
+    contentType: data.referenceBundle?.contentType,
+    marketDate: data.referenceBundle?.marketDate,
+    marketSnapshot: data.referenceBundle?.marketSnapshot,
+    referenceBundle: data.referenceBundle,
+    competitorBlogReferences: data.referenceBundle?.competitorBlogReferences,
+    prohibitedPhrases: STOCK_PROHIBITED_PHRASES,
+  };
 }
 
 async function enrichContentPipelineInput(input: ContentPipelineInput): Promise<ContentPipelineInput> {
@@ -244,6 +265,7 @@ function pipelineMetadata(input: {
   referenceBundle?: ReferenceBundle;
   blogImagePrompts?: BlogImagePrompt[];
   qualityGate?: Record<string, unknown>;
+  generatedImages?: GeneratedStockBlogImages;
 }): Prisma.InputJsonObject {
   return toJsonObject({
     contentPipelineId: input.pipelineId,
@@ -262,6 +284,11 @@ function pipelineMetadata(input: {
     referenceBundle: input.referenceBundle,
     blogImagePrompts: input.blogImagePrompts,
     qualityGate: input.qualityGate,
+    thumbnailImageUrl: input.generatedImages?.thumbnailImageUrl,
+    inlineImageUrls: input.generatedImages?.inlineImageUrls,
+    imageStatus: input.generatedImages?.imageStatus,
+    imageGeneratedAt: input.generatedImages?.imageGeneratedAt,
+    imageErrorMessage: input.generatedImages?.imageErrorMessage,
     hermesRequestPayload: input.hermesRequestPayload,
     hermesMarketingRequestPayload: input.hermesMarketingRequestPayload,
     hermesWriterRequestPayload: input.hermesWriterRequestPayload,
@@ -350,6 +377,7 @@ function dryRunPlannerExecution(data: ContentPipelineInput): PlannerExecution {
     title: data.title,
     channel: data.channel,
     language: "ko",
+    ...hermesStockContext(data),
   });
   const outputTitle = `${data.title} · Hermes dry-run payload`;
   const outputSummary = "Hermes를 실제 호출하지 않고 content-planner 요청 payload를 생성했습니다.";
@@ -387,6 +415,7 @@ async function hermesPlannerExecution(data: ContentPipelineInput): Promise<Plann
     title: data.title,
     channel: data.channel,
     language: "ko",
+    ...hermesStockContext(data),
   });
   const hermesPayload = toJsonObject(payload);
   const normalizedResult = normalizeResultForMetadata(result);
@@ -479,6 +508,7 @@ function dryRunMarketingExecution(data: ContentPipelineInput, planner: PlannerEx
     title: data.title,
     channel: data.channel,
     language: "ko",
+    ...hermesStockContext(data),
     plannerResult: planner.result,
   });
   const outputSummary = "Hermes를 실제 호출하지 않고 marketing-manager 요청 payload를 생성했습니다.";
@@ -546,6 +576,7 @@ async function hermesMarketingExecution(data: ContentPipelineInput, planner: Pla
     title: data.title,
     channel: data.channel,
     language: "ko",
+    ...hermesStockContext(data),
     plannerResult: planner.result,
   });
   const hermesPayload = toJsonObject(payload);
@@ -662,6 +693,7 @@ function dryRunWriterExecution(data: ContentPipelineInput, planner: PlannerExecu
     title: data.title,
     channel: data.channel,
     language: "ko",
+    ...hermesStockContext(data),
     plannerResult: planner.result,
     marketingResult: marketing.result,
     referenceBundle: data.referenceBundle,
@@ -753,6 +785,7 @@ async function hermesWriterExecution(data: ContentPipelineInput, planner: Planne
     title: data.title,
     channel: data.channel,
     language: "ko",
+    ...hermesStockContext(data),
     plannerResult: planner.result,
     marketingResult: marketing.result,
     referenceBundle: data.referenceBundle,
@@ -853,6 +886,7 @@ function dryRunQaExecution(data: ContentPipelineInput, planner: PlannerExecution
     title: data.title,
     channel: data.channel,
     language: "ko",
+    ...hermesStockContext(data),
     plannerResult: planner.result,
     marketingResult: marketing.result,
     writerResult: writer.result,
@@ -970,6 +1004,7 @@ async function hermesQaExecution(data: ContentPipelineInput, planner: PlannerExe
     title: data.title,
     channel: data.channel,
     language: "ko",
+    ...hermesStockContext(data),
     plannerResult: planner.result,
     marketingResult: marketing.result,
     writerResult: writer.result,
@@ -1149,6 +1184,11 @@ function runFromEvent(event: {
     referenceBundle,
     blogImagePrompts,
     qualityGate,
+    thumbnailImageUrl: typeof payload.thumbnailImageUrl === "string" ? payload.thumbnailImageUrl : undefined,
+    inlineImageUrls: asStringArray(payload.inlineImageUrls),
+    imageStatus: payload.imageStatus === "generated" || payload.imageStatus === "failed" ? payload.imageStatus : undefined,
+    imageGeneratedAt: typeof payload.imageGeneratedAt === "string" ? payload.imageGeneratedAt : undefined,
+    imageErrorMessage: typeof payload.imageErrorMessage === "string" ? payload.imageErrorMessage : undefined,
     hermesRequestPayload: asRecord(payload.hermesRequestPayload),
     hermesMarketingRequestPayload: asRecord(payload.hermesMarketingRequestPayload),
     hermesWriterRequestPayload: asRecord(payload.hermesWriterRequestPayload),
@@ -1318,8 +1358,14 @@ export async function getContentPipelineDetail(pipelineId: string): Promise<Cont
 export async function startContentPipeline(input: unknown): Promise<ContentPipelineRun> {
   const baseData = assertValidInput(input);
   const runnerMode = baseData.runnerMode ?? "mock";
-  if (runnerMode === "hermes") await assertHermesDailyRunAvailable(HERMES_PIPELINE_REQUIRED_RUNS);
   const data = await enrichContentPipelineInput(baseData);
+  const preflightQualityGate = evaluateStockBlogReferences(data.referenceBundle, runnerMode === "hermes");
+  if (runnerMode === "hermes" && !preflightQualityGate.ok) {
+    const error = new Error(`STOCK_REFERENCE_PREFLIGHT_BLOCKED: ${preflightQualityGate.status} · ${preflightQualityGate.reasons.join(" / ")}`);
+    Object.assign(error, { code: "STOCK_REFERENCE_PREFLIGHT_BLOCKED", qualityGate: preflightQualityGate });
+    throw error;
+  }
+  if (runnerMode === "hermes") await assertHermesDailyRunAvailable(HERMES_PIPELINE_REQUIRED_RUNS);
 
   const pipelineId = `content-pipeline-${randomUUID()}`;
   const suffix = pipelineId.replace("content-pipeline-", "").slice(0, 8);
@@ -1334,7 +1380,7 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
   const marketing = await executeMarketing(data, planner);
   const writer = await executeWriter(data, planner, marketing);
   const qa = await executeQa(data, planner, marketing, writer);
-  const qualityGate = evaluateStockBlogReferences(data.referenceBundle, runnerMode === "hermes");
+  const qualityGate = preflightQualityGate;
   const qualityBlocked = runnerMode === "hermes" && !qualityGate.ok;
   const outputTitle = writer.agentRunStatus === "succeeded" && typeof writer.result.finalTitle === "string" ? writer.result.finalTitle : planner.outputTitle;
   const outputSummary = qa.agentRunStatus === "succeeded"
@@ -1344,6 +1390,13 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
       : marketing.agentRunStatus === "succeeded"
         ? marketing.outputSummary
         : planner.outputSummary;
+  const generatedImages = await generateStockBlogImages({
+    pipelineId,
+    template: data.referenceBundle?.contentType ?? inferReferenceTemplate(data),
+    title: outputTitle,
+    topic: data.topic,
+    marketDate: data.referenceBundle?.marketDate,
+  });
   const metadata = pipelineMetadata({
     pipelineId,
     topic: data.topic,
@@ -1364,6 +1417,7 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     hermesQaRequestPayload: qa.hermesPayload,
     referenceBundle: data.referenceBundle,
     blogImagePrompts: data.blogImagePrompts,
+    generatedImages,
   });
 
   await prisma.task.createMany({
@@ -1554,6 +1608,11 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     hermesQaRequestPayload: qa.hermesPayload,
     referenceBundle: data.referenceBundle,
     blogImagePrompts: data.blogImagePrompts,
+    thumbnailImageUrl: generatedImages.thumbnailImageUrl,
+    inlineImageUrls: generatedImages.inlineImageUrls,
+    imageStatus: generatedImages.imageStatus,
+    imageGeneratedAt: generatedImages.imageGeneratedAt,
+    imageErrorMessage: generatedImages.imageErrorMessage,
     qualityGate,
     createdAt: now.toISOString(),
     updatedAt: new Date().toISOString(),

@@ -51,6 +51,7 @@ export function buildManualReferenceBundle(input: ReferenceSearchInput, rawRefer
   return {
     provider: "manual",
     mode: items.length > 0 ? "real" : "real-disabled",
+    status: items.length > 0 ? "ready" : "needs_reference",
     contentType: input.contentType,
     generatedAt: options?.generatedAt ?? new Date().toISOString(),
     marketDate: options?.marketDate ?? new Date().toISOString().slice(0, 10),

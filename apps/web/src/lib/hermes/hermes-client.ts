@@ -13,6 +13,7 @@ import type {
   QaAuditResult,
   NormalizedHermesRunResult,
 } from "./hermes-types";
+import { getRealStockReferences } from "@/lib/stock-blog/quality-gate";
 
 function baseUrl(url: string) {
   return url.replace(/\/$/, "");
@@ -177,6 +178,13 @@ export function buildContentPlannerHermesPayload(input: ContentPlannerHermesInpu
       title: input.title,
       channel: input.channel,
       language: input.language ?? "ko",
+      contentType: input.contentType,
+      marketDate: input.marketDate,
+      marketSnapshot: input.marketSnapshot,
+      referenceBundle: input.referenceBundle,
+      competitorBlogReferences: input.competitorBlogReferences,
+      referencePolicy: input.referencePolicy ?? STOCK_REFERENCE_POLICY,
+      prohibitedPhrases: input.prohibitedPhrases,
     },
     context: {
       company: "BG Company",
@@ -197,6 +205,10 @@ export function buildMarketingReviewHermesPayload(input: MarketingReviewHermesIn
       channel: input.channel,
       language: input.language ?? "ko",
       plannerResult: input.plannerResult,
+      competitorBlogReferences: input.competitorBlogReferences,
+      searchKeywords: input.referenceBundle?.queries,
+      differentiationPoints: input.referenceBundle?.differentiationPoints,
+      prohibitedPhrases: input.prohibitedPhrases,
     },
     context: {
       company: "BG Company",
@@ -220,6 +232,11 @@ export function buildContentWriterHermesPayload(input: ContentWriterHermesInput)
       plannerResult: input.plannerResult,
       marketingResult: input.marketingResult,
       referenceBundle: input.referenceBundle,
+      realReferences: getRealStockReferences(input.referenceBundle),
+      marketSnapshot: input.referenceBundle?.marketSnapshot,
+      competitorBlogReferences: input.referenceBundle?.competitorBlogReferences,
+      bodyStructure: ["도입부", "시장 요약", "한국 시장", "미국 시장", "강세/약세 섹터", "다음 주 일정", "투자자 체크리스트", "참고자료", "투자 유의문구"],
+      prohibitedPhrases: input.prohibitedPhrases,
       blogImagePrompts: input.blogImagePrompts,
       referencePolicy: STOCK_REFERENCE_POLICY,
     },
@@ -246,6 +263,16 @@ export function buildQaAuditHermesPayload(input: QaAuditHermesInput): HermesQaAu
       marketingResult: input.marketingResult,
       writerResult: input.writerResult,
       referenceBundle: input.referenceBundle,
+      realReferences: getRealStockReferences(input.referenceBundle),
+      marketSnapshot: input.referenceBundle?.marketSnapshot,
+      qualityGateDiagnostics: {
+        requiredRealReferences: 5,
+        requiredDistinctPublishers: 3,
+        requiredCompetitorReferences: 3,
+        requireVerifiedMarketSnapshot: true,
+      },
+      finalPasteReadyBody: typeof input.writerResult?.fullDraft === "string" ? input.writerResult.fullDraft : undefined,
+      prohibitedPhrases: input.prohibitedPhrases,
       blogImagePrompts: input.blogImagePrompts,
       referencePolicy: STOCK_REFERENCE_POLICY,
     },

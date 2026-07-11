@@ -28,3 +28,4 @@ tools/naver-draft-agent/.env
 tools/naver-draft-agent/.naver-profile/
 tools/naver-draft-agent/logs/
 tools/naver-draft-agent/drafts/
+apps/web/public/generated/stock-blog/

@@ -1,5 +1,26 @@
 # BG Company Operations Runbook
 
+## Stock reference preflight
+
+Before enabling the production stock scheduler, verify only the presence of the variables below. Do not print their values.
+
+```bash
+for key in REFERENCE_SEARCH_ENABLE_REAL_API NAVER_SEARCH_CLIENT_ID NAVER_SEARCH_CLIENT_SECRET STOCK_MARKET_DATA_PROVIDER; do
+  if grep -q "^${key}=..*" .env; then echo "${key}=set"; else echo "${key}=missing"; fi
+done
+```
+
+Keep these safety settings until a manual end-to-end review is complete:
+
+```text
+STOCK_BLOG_SCHEDULER_ENABLED=false
+STOCK_BLOG_SCHEDULER_AUTO_APPROVE=false
+STOCK_BLOG_SCHEDULER_AUTO_CREATE_DRAFT=false
+NAVER_ALLOW_IMAGE_UPLOAD=false
+```
+
+`needs_credentials`, `needs_reference`, and `needs_data` are expected safe-stop states. Do not bypass them by raising the Hermes limit or inserting fabricated references. Generated SVG assets are stored in the `bg_company_generated_stock_blog` Docker volume. A local Naver agent `readability_failed` result means the pasted editor text must be inspected before retrying.
+
 ## 서비스 상태 확인
 
 ```bash

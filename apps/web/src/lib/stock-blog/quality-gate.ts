@@ -1,9 +1,9 @@
 import type { ContentPipelineRun } from "@/features/content-pipeline/content-pipeline-types";
-import { getStockReferenceTemplate } from "@/lib/stock-blog/references/stock-reference-templates";
 import type { ReferenceBundle, ReferenceItem } from "@/lib/stock-blog/references/reference-types";
 
 export type StockBlogQualityStatus =
   | "passed"
+  | "needs_credentials"
   | "needs_reference"
   | "needs_data"
   | "readability_failed"
@@ -25,6 +25,7 @@ export type StockBlogQualityDiagnostics = {
   pasteReadyNewlineCount: number;
   doubleNewlineBlockCount: number;
   sectionHeadingCount: number;
+  paragraphCount: number;
   bulletItemCount: number;
   bodyLength: number;
   duplicateSentenceCount: number;
@@ -34,6 +35,10 @@ export type StockBlogQualityDiagnostics = {
   hasMarketDataSignal: boolean;
   marketDataReferenceCount: number;
   officialReferenceCount: number;
+  newsReferenceCount: number;
+  marketSnapshotStatus?: string;
+  marketSnapshotDataQuality?: string;
+  repeatedPhraseWarnings: string[];
   missingReferenceItems: string[];
 };
 
@@ -67,6 +72,7 @@ const MARKET_DATA_PATTERNS = [
   /반도체|2차전지|금융|자동차|바이오|플랫폼|방산|조선|에너지/i,
 ];
 const DISCLAIMER_PATTERNS = [/투자 참고용/, /매수·매도 추천이 아닙니다/, /투자 판단과 책임/];
+const REPEATED_PHRASES = ["중요합니다", "확인할 필요가 있습니다", "살펴봐야 합니다", "방향성보다 선택이 중요합니다", "체크해야 합니다", "주목해야 합니다"];
 
 function clean(value?: string | null) {
   return typeof value === "string" ? value.trim() : "";
@@ -139,6 +145,9 @@ function diagnostics(input: {
   const publishers = new Set(realRefs.map((item) => clean(item.publisher)).filter(Boolean));
   const marketDataReferenceCount = realRefs.filter((item) => item.sourceType === "market_data").length;
   const officialReferenceCount = realRefs.filter((item) => item.reliability === "official").length;
+  const newsReferenceCount = realRefs.filter((item) => item.sourceType === "news").length;
+  const paragraphCount = body.split(/\n{2,}/).map((part) => part.trim()).filter((part) => part.length >= 20).length;
+  const repeatedPhraseWarnings = REPEATED_PHRASES.filter((phrase) => body.split(phrase).length - 1 >= 3);
   return {
     referenceProvider: input.bundle?.provider,
     referenceMode: input.bundle?.mode,
@@ -153,6 +162,7 @@ function diagnostics(input: {
     pasteReadyNewlineCount: (body.match(/\n/g) ?? []).length,
     doubleNewlineBlockCount: body.split(/\n{2,}/).filter((part) => part.trim().length >= 20).length,
     sectionHeadingCount: countSectionHeadings(body),
+    paragraphCount,
     bulletItemCount: body.split("\n").filter((line) => line.trim().startsWith("- ")).length,
     bodyLength: body.replace(/\s/g, "").length,
     duplicateSentenceCount: countDuplicateSentences(body),
@@ -162,6 +172,10 @@ function diagnostics(input: {
     hasMarketDataSignal: MARKET_DATA_PATTERNS.some((pattern) => pattern.test(body)),
     marketDataReferenceCount,
     officialReferenceCount,
+    newsReferenceCount,
+    marketSnapshotStatus: input.bundle?.marketSnapshot?.status,
+    marketSnapshotDataQuality: input.bundle?.marketSnapshot?.dataQuality,
+    repeatedPhraseWarnings,
     missingReferenceItems: input.bundle?.missingItems ?? [],
   };
 }
@@ -170,15 +184,22 @@ export function evaluateStockBlogReferences(bundle?: ReferenceBundle, requireRea
   const d = diagnostics({ bundle });
   const reasons: string[] = [];
   if (requireRealReferences) {
-    const template = bundle ? getStockReferenceTemplate(bundle.contentType) : undefined;
-    const minRefs = template?.minimumRealReferences ?? 3;
-    const minUrls = template?.minimumDistinctUrls ?? 3;
-    const minPublishers = template?.minimumPublishers ?? 2;
+    const minRefs = 5;
+    const minUrls = 5;
+    const minPublishers = 3;
     if (d.realReferenceCount < minRefs) reasons.push(`실제 참고자료 ${minRefs}개 이상 필요`);
     if (d.distinctUrlCount < minUrls) reasons.push(`중복되지 않는 실제 URL ${minUrls}개 이상 필요`);
     if (d.publisherCount < minPublishers) reasons.push(`서로 다른 발행처 ${minPublishers}곳 이상 필요`);
-    if ((template?.requiresMarketData ?? true) && d.marketDataReferenceCount + d.officialReferenceCount < 1) reasons.push("시장 데이터 또는 공식/신뢰 참고자료 1개 이상 필요");
+    if (d.newsReferenceCount < 3) reasons.push("실제 뉴스 참고자료 3개 이상 필요");
+    if (d.marketDataReferenceCount + d.officialReferenceCount < 1 && d.marketSnapshotDataQuality !== "verified") reasons.push("시장 데이터 또는 공식/신뢰 참고자료 1개 이상 필요");
+    if (d.competitorReferenceCount < 3) reasons.push("경쟁 블로그 참고자료 3개 이상 필요");
+    if (d.marketSnapshotStatus !== "ready" || d.marketSnapshotDataQuality !== "verified") reasons.push("검증된 MarketSnapshot 필요");
     if (d.missingReferenceItems.length > 0) reasons.push(`필수 참고자료 부족: ${d.missingReferenceItems.join(", ")}`);
+  }
+  if (bundle?.status === "needs_credentials" || (requireRealReferences && bundle?.status === "disabled")) return { ok: false, status: "needs_credentials", reasons: reasons.length ? reasons : ["실제 Reference Provider credentials 필요"], diagnostics: d };
+  if (d.marketSnapshotStatus === "needs_credentials") return { ok: false, status: "needs_credentials", reasons: [...reasons, "시장 데이터 Provider credentials 필요"], diagnostics: d };
+  if (bundle?.status === "needs_data" || bundle?.status === "error" || d.marketSnapshotStatus === "needs_data" || d.marketSnapshotStatus === "error") {
+    return { ok: false, status: "needs_data", reasons: reasons.length ? reasons : ["검증된 MarketSnapshot 데이터 필요"], diagnostics: d };
   }
   if (d.referenceProvider === "mock" || d.referenceMode === "mock" || d.referenceMode === "real-disabled") reasons.push("mock/real-disabled 참고자료는 운영 Hermes 결과로 인정하지 않음");
   if (reasons.length > 0) return { ok: false, status: "needs_reference", reasons, diagnostics: d };
@@ -200,26 +221,31 @@ export function evaluateStockBlogPublishQuality(input: {
   const requireReal = input.requireRealReferences ?? input.pipeline.runnerMode === "hermes";
 
   if (requireReal) {
-    const template = bundle ? getStockReferenceTemplate(bundle.contentType) : undefined;
-    const minRefs = template?.minimumRealReferences ?? 3;
-    const minUrls = template?.minimumDistinctUrls ?? 3;
-    const minPublishers = template?.minimumPublishers ?? 2;
+    const minRefs = 5;
+    const minUrls = 5;
+    const minPublishers = 3;
     if (d.realReferenceCount < minRefs) reasons.push(`실제 참고자료 ${minRefs}개 이상 필요`);
     if (d.distinctUrlCount < minUrls) reasons.push(`중복되지 않는 실제 URL ${minUrls}개 이상 필요`);
     if (d.publisherCount < minPublishers) reasons.push(`서로 다른 발행처 ${minPublishers}곳 이상 필요`);
-    if ((template?.requiresMarketData ?? true) && d.marketDataReferenceCount + d.officialReferenceCount < 1) reasons.push("시장 데이터 또는 공식/신뢰 참고자료 1개 이상 필요");
+    if (d.newsReferenceCount < 3) reasons.push("실제 뉴스 참고자료 3개 이상 필요");
+    if (d.marketDataReferenceCount + d.officialReferenceCount < 1 && d.marketSnapshotDataQuality !== "verified") reasons.push("시장 데이터 또는 공식/신뢰 참고자료 1개 이상 필요");
+    if (d.competitorReferenceCount < 3) reasons.push("경쟁 블로그 참고자료 3개 이상 필요");
+    if (d.marketSnapshotStatus !== "ready" || d.marketSnapshotDataQuality !== "verified") reasons.push("검증된 MarketSnapshot 필요");
     if (d.missingReferenceItems.length > 0) reasons.push(`필수 참고자료 부족: ${d.missingReferenceItems.join(", ")}`);
   }
   if (!d.hasMarketDataSignal && requireReal) reasons.push("지수/섹터/수급 등 시장 데이터 신호 부족");
-  if (d.pasteReadyNewlineCount < 12) reasons.push("최종 본문 줄바꿈 부족");
-  if (d.doubleNewlineBlockCount < 7) reasons.push("최종 본문 문단 블록 부족");
+  if (d.pasteReadyNewlineCount < 15) reasons.push("최종 본문 줄바꿈 15개 이상 필요");
+  if (d.doubleNewlineBlockCount < 8) reasons.push("최종 본문 문단 블록 8개 이상 필요");
   if (d.sectionHeadingCount < 6) reasons.push("섹션 제목 6개 이상 필요");
-  if (d.bulletItemCount < 4) reasons.push("투자자 체크리스트/불릿 4개 이상 필요");
-  if (d.bodyLength < 1500) reasons.push("최종 본문 길이 1500자 이상 필요");
+  if (d.paragraphCount < 10) reasons.push("최종 본문 문단 10개 이상 필요");
+  if (d.bulletItemCount < 5) reasons.push("투자자 체크리스트/불릿 5개 이상 필요");
+  if (requireReal && d.distinctUrlCount < 5) reasons.push("최종 본문용 실제 URL 5개 이상 필요");
+  if (d.bodyLength < 2000) reasons.push("최종 본문 길이 2000자 이상 필요");
   if (!d.hasDisclaimer) reasons.push("투자 유의문구 누락");
   if (d.hasMockPhrase) reasons.push("mock/수동 확인 문구가 최종 본문에 포함됨");
   if (d.hasImagePromptLeak) reasons.push("이미지 프롬프트가 최종 본문에 섞임");
   if (d.duplicateSentenceCount > 1) reasons.push("중복 문장 반복이 과도함");
+  if (d.repeatedPhraseWarnings.length > 0) reasons.push(`상투적 반복 문구 3회 이상: ${d.repeatedPhraseWarnings.join(", ")}`);
 
   if (reasons.length === 0) return { ok: true, status: "passed", reasons: [], diagnostics: d };
   if (reasons.some((reason) => reason.includes("참고자료") || reason.includes("URL") || reason.includes("발행처") || reason.includes("mock/real-disabled") || reason.includes("공식/신뢰"))) {
@@ -228,7 +254,7 @@ export function evaluateStockBlogPublishQuality(input: {
   if (reasons.some((reason) => reason.includes("시장 데이터"))) return { ok: false, status: "needs_data", reasons, diagnostics: d };
   if (d.hasImagePromptLeak) return { ok: false, status: "image_pending", reasons, diagnostics: d };
   if (d.duplicateSentenceCount > 1) return { ok: false, status: "duplicate_content_failed", reasons, diagnostics: d };
-  if (d.pasteReadyNewlineCount < 12 || d.doubleNewlineBlockCount < 7 || d.sectionHeadingCount < 6 || d.bulletItemCount < 4) {
+  if (d.pasteReadyNewlineCount < 15 || d.doubleNewlineBlockCount < 8 || d.sectionHeadingCount < 6 || d.paragraphCount < 10 || d.bulletItemCount < 5) {
     return { ok: false, status: "readability_failed", reasons, diagnostics: d };
   }
   return { ok: false, status: "quality_failed", reasons, diagnostics: d };

@@ -12,12 +12,51 @@ export function stripHtml(value: string): string {
 }
 
 export function normalizeReferenceItem(item: ReferenceItem): ReferenceItem {
+  const normalizedUrl = normalizeHttpUrl(item.url);
+  const normalizedOriginalUrl = normalizeHttpUrl(item.originalUrl);
+  const sourceName = item.sourceName?.trim() || item.publisher?.trim() || sourceNameFromUrl(normalizedOriginalUrl ?? normalizedUrl);
   return {
     ...item,
     title: stripHtml(item.title),
     summary: item.summary ? stripHtml(item.summary) : undefined,
+    url: normalizedOriginalUrl ?? normalizedUrl,
+    originalUrl: normalizedOriginalUrl,
+    publisher: sourceName,
+    sourceName,
+    collectedAt: item.collectedAt ?? new Date().toISOString(),
     copyrightPolicy: item.copyrightPolicy ?? "제목/요약을 참고 신호로만 사용하고 원문 문장을 그대로 복사하지 않습니다.",
   };
+}
+
+export function normalizeHttpUrl(value?: string): string | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+export function sourceNameFromUrl(value?: string): string | undefined {
+  if (!value) return undefined;
+  try {
+    return new URL(value).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
+export function dedupeReferenceItems(items: ReferenceItem[]) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = item.url?.toLowerCase() || `${item.publisher}:${item.title}`.toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export function summarizeReferenceItems(items: ReferenceItem[]) {

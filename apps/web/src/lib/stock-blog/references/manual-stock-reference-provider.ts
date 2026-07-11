@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { buildManualReferenceBundle } from "./stock-reference-normalizer";
+import { collectMarketSnapshot } from "./market-snapshot-provider";
 import { getStockReferenceTemplate } from "./stock-reference-templates";
 import type { ReferenceAdapter, ReferenceBundle, ReferenceSearchInput } from "./reference-types";
 
@@ -54,11 +55,19 @@ export const manualStockReferenceProvider: ReferenceAdapter = {
     const filePath = resolveManualPath(process.env.STOCK_REFERENCE_MANUAL_PATH ?? "config/stock-references/manual-references.json");
     const data = inlineJson ? safeParseJson(inlineJson) : filePath ? await loadManualFile(filePath) : null;
     const selected = selectReferences(input, data);
-    return buildManualReferenceBundle(input, selected.references, {
+    const bundle = buildManualReferenceBundle(input, selected.references, {
       marketDate: selected.marketDate,
       summary: selected.summary,
       risks: selected.risks,
       missingItems: selected.missingItems,
     });
+    const marketSnapshot = await collectMarketSnapshot(input);
+    return {
+      ...bundle,
+      status: bundle.items.length ? (marketSnapshot.status === "ready" ? "ready" : "needs_data") : "needs_reference",
+      marketSnapshot,
+      marketDate: marketSnapshot.marketDate,
+      missingItems: Array.from(new Set([...(bundle.missingItems ?? []), ...marketSnapshot.missingItems])),
+    };
   },
 };
