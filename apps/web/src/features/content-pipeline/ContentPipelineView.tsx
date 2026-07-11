@@ -17,6 +17,7 @@ import type {
 } from "./content-pipeline-types";
 import type { BlogImagePrompt, ReferenceBundle, ReferenceItem } from "@/lib/stock-blog/references/reference-types";
 import { summarizeContentPipelineStatus } from "@/lib/dashboard-summary/summary-rules";
+import { buildStockBlogThumbnail } from "@/lib/stock-blog/thumbnail-automation";
 
 const channelLabels: Record<ContentChannel, string> = {
   blog: "블로그",
@@ -77,13 +78,6 @@ const STOCK_BRIEFING_TEMPLATE_CONFIGS: Record<StockBriefingTemplate, StockBriefi
     defaultTags: ["BGMarketNote", "주식시장", "증시브리핑", "시장전망", "투자공부", "다음주증시", "경제지표", "실적시즌", "금리", "섹터흐름"],
     thumbnailTextCandidates: ["다음 주 증시 일정", "다음 주 체크포인트", "경제지표 미리보기"],
   },
-};
-
-const STOCK_BRIEFING_TEMPLATE_LABELS: Record<StockBriefingTemplate, string> = {
-  KOREA_DAILY_PREVIEW: STOCK_BRIEFING_TEMPLATE_CONFIGS.KOREA_DAILY_PREVIEW.label,
-  KOREA_MARKET_CLOSE_US_PREVIEW: STOCK_BRIEFING_TEMPLATE_CONFIGS.KOREA_MARKET_CLOSE_US_PREVIEW.label,
-  WEEKLY_MARKET_REVIEW: STOCK_BRIEFING_TEMPLATE_CONFIGS.WEEKLY_MARKET_REVIEW.label,
-  NEXT_WEEK_MARKET_PREVIEW: STOCK_BRIEFING_TEMPLATE_CONFIGS.NEXT_WEEK_MARKET_PREVIEW.label,
 };
 
 const NAVER_PUBLISH_CHECKLIST = [
@@ -155,11 +149,6 @@ function markdownToHtml(markdown: string) {
     }
     return `<p>${escapeHtml(block).replace(/\n/g, "<br />")}</p>`;
   }).join("\n");
-}
-
-function buildThumbnailText(template: StockBriefingTemplate, pipeline: ContentPipelineRun) {
-  if (pipeline.marketingResult?.thumbnailCopy) return pipeline.marketingResult.thumbnailCopy;
-  return STOCK_BRIEFING_TEMPLATE_CONFIGS[template].thumbnailTextCandidates[0];
 }
 
 function compactText(...values: Array<string | undefined | null>) {
@@ -268,16 +257,6 @@ function buildStructuredMarkdown(title: string, prep: Pick<NaverBlogPublishPrep,
   ].join("\n");
 }
 
-function buildThumbnailPrompt(title: string, template: StockBriefingTemplate) {
-  return [
-    "네이버 블로그 썸네일용 미니멀 금융 일러스트.",
-    `주제: ${title}.`,
-    `템플릿: ${STOCK_BRIEFING_TEMPLATE_LABELS[template]}.`,
-    "차트 라인, 캘린더, 메모 카드, 따뜻한 크림/블루 톤을 사용.",
-    "특정 종목 로고, 실제 지수 수치, 수익 과장 표현, 저작권 있는 뉴스 이미지는 제외.",
-  ].join(" ");
-}
-
 function buildInlineImageIdeas(template: StockBriefingTemplate): NaverBlogPublishPrep["inlineImageIdeas"] {
   const market = template === "KOREA_MARKET_CLOSE_US_PREVIEW" ? "미국장" : "한국장";
   return [
@@ -326,13 +305,14 @@ function buildNaverBlogPublishPrep(pipeline: ContentPipelineRun): NaverBlogPubli
     ...config.defaultTags,
     ...DEFAULT_NAVER_TAGS,
   ], 12);
+  const thumbnail = pipeline.thumbnailResult ?? buildStockBlogThumbnail(pipeline, template);
 
   return {
     naverTitle,
     naverCategory: recommendNaverCategory(template),
     naverTags: tags,
-    thumbnailText: buildThumbnailText(template, pipeline),
-    thumbnailPrompt: buildThumbnailPrompt(naverTitle, template),
+    thumbnailText: thumbnail.thumbnailPrimaryText,
+    ...thumbnail,
     inlineImageIdeas: buildInlineImageIdeas(template),
     ...structuredSections,
     pasteReadyBody,
@@ -733,7 +713,13 @@ function formatBlogImagePromptsForCopy(prompts?: BlogImagePrompt[]) {
 function NaverBlogPublishPrepPanel({ pipeline }: { pipeline: ContentPipelineRun }) {
   const isApproved = pipeline.status === "approved" || pipeline.status === "published_ready" || pipeline.status === "completed";
   const hasWriterPreview = Boolean(pipeline.writerResult?.ok);
-  const prep = pipeline.naverBlogPublishPrep ?? buildNaverBlogPublishPrep(pipeline);
+  const [thumbnailRefreshCount, setThumbnailRefreshCount] = useState(0);
+  const prep = useMemo(() => {
+    void thumbnailRefreshCount;
+    const base = pipeline.naverBlogPublishPrep ?? buildNaverBlogPublishPrep(pipeline);
+    const thumbnail = pipeline.thumbnailResult ?? buildStockBlogThumbnail(pipeline, base.briefingTemplate);
+    return { ...base, ...thumbnail };
+  }, [pipeline, thumbnailRefreshCount]);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
   const [checklistState, setChecklistState] = useState<Record<string, boolean>>(() =>
@@ -781,6 +767,12 @@ function NaverBlogPublishPrepPanel({ pipeline }: { pipeline: ContentPipelineRun 
     ["blogImagePrompts", "이미지 프롬프트 전체 복사", formatBlogImagePromptsForCopy(prep.blogImagePrompts)],
     ["disclaimer", "투자 유의문구 복사", prep.disclaimer],
   ].filter(([, , value]) => value.trim().length > 0);
+
+  const regenerateThumbnail = () => {
+    setThumbnailRefreshCount((count) => count + 1);
+    setCopiedKey("thumbnailRegenerated");
+    window.setTimeout(() => setCopiedKey(null), 1600);
+  };
 
   return (
     <div className="feature-card naver-publish-prep">
@@ -876,10 +868,41 @@ function NaverBlogPublishPrepPanel({ pipeline }: { pipeline: ContentPipelineRun 
       </details>
 
       <div className="naver-prep-grid">
-        <div className="naver-prep-block">
-          <label>썸네일 문구</label>
-          <strong>{prep.thumbnailText}</strong>
-          <p>{prep.thumbnailPrompt}</p>
+        <div className="naver-prep-block naver-thumbnail-panel">
+          <div className="naver-thumbnail-head">
+            <label>썸네일 자동화</label>
+            <span>{prep.thumbnailStatus === "copy_ready" ? "문구 준비 완료" : prep.thumbnailStatus}</span>
+          </div>
+          <div className="naver-thumbnail-preview">
+            <small>{prep.thumbnailTemplateType}</small>
+            <strong>{prep.thumbnailPrimaryText}</strong>
+            <p>{prep.thumbnailSecondaryText}</p>
+            <em>{prep.thumbnailHook}</em>
+          </div>
+          <div className="content-pipeline-keywords">
+            {prep.thumbnailKeywords.map((keyword) => <span key={keyword}>#{keyword}</span>)}
+          </div>
+          <p className="naver-thumbnail-style">{prep.thumbnailStyle}</p>
+          {prep.thumbnailImageUrl ? <a href={prep.thumbnailImageUrl} target="_blank" rel="noreferrer">썸네일 이미지 열기</a> : <small>실제 이미지 생성은 아직 실행하지 않았습니다. 프롬프트를 복사해 수동 생성할 수 있습니다.</small>}
+          {prep.thumbnailErrorMessage ? <p className="content-pipeline-error">{prep.thumbnailErrorMessage}</p> : null}
+          <button type="button" className="secondary-action" onClick={regenerateThumbnail}>
+            {copiedKey === "thumbnailRegenerated" ? "재생성 완료" : "현재 콘텐츠 기준 재생성"}
+          </button>
+          <details className="content-pipeline-payload">
+            <summary>썸네일 프롬프트 / 변형안 보기</summary>
+            <pre>{prep.thumbnailPrompt}</pre>
+            <div className="thumbnail-variant-list">
+              {prep.thumbnailVariants.map((variant) => (
+                <div key={variant.id} className="thumbnail-variant-card">
+                  <strong>{variant.label} · {variant.thumbnailTitle}</strong>
+                  <p>{variant.thumbnailSubtitle} · {variant.thumbnailHook}</p>
+                  <button type="button" onClick={() => copyToClipboard(`thumbnailVariant-${variant.id}`, variant.thumbnailPrompt)}>
+                    {copiedKey === `thumbnailVariant-${variant.id}` ? "복사 완료" : "변형 프롬프트 복사"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </details>
         </div>
         <div className="naver-prep-block">
           <label>투자 유의 문구</label>

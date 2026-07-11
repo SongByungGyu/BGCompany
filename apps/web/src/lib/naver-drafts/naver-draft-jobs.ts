@@ -4,6 +4,7 @@ import type { NaverDraftJob, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getContentPipelineDetail } from "@/lib/content-pipeline/content-pipeline-service";
 import type { ContentPipelineRun } from "@/features/content-pipeline/content-pipeline-types";
+import { buildStockBlogThumbnail } from "@/lib/stock-blog/thumbnail-automation";
 
 export type NaverDraftJobStatus =
   | "created"
@@ -33,6 +34,15 @@ export type SerializedNaverDraftJob = {
   category: string | null;
   thumbnailText: string | null;
   thumbnailPrompt: string | null;
+  thumbnailTitle: string | null;
+  thumbnailSubtitle: string | null;
+  thumbnailHook: string | null;
+  thumbnailStyle: string | null;
+  thumbnailImageUrl: string | null;
+  thumbnailTemplateType: string | null;
+  thumbnailPrimaryText: string | null;
+  thumbnailSecondaryText: string | null;
+  thumbnailKeywords: string[];
   disclaimer: string | null;
   externalUrl: string | null;
   errorCode: string | null;
@@ -118,10 +128,9 @@ function buildDraftFromPipeline(pipeline: ContentPipelineRun) {
     "시장브리핑",
     "BGMarketNote",
   ]).slice(0, 20);
-  const thumbnailText = clean(pipeline.marketingResult?.thumbnailCopy)
-    || clean(pipeline.plannerResult?.thumbnailIdea)
-    || `${title} 핵심 정리`;
-  const thumbnailPrompt = `네이버 블로그 썸네일, 깔끔한 금융 리포트 스타일, 제목: ${title}, 핵심 문구: ${thumbnailText}`;
+  const thumbnail = pipeline.naverBlogPublishPrep ?? buildStockBlogThumbnail(pipeline);
+  const thumbnailText = clean(thumbnail.thumbnailTitle) || clean(thumbnail.thumbnailPrimaryText) || `${title} 핵심 정리`;
+  const thumbnailPrompt = clean(thumbnail.thumbnailPrompt) || `네이버 블로그 썸네일, 깔끔한 금융 리포트 스타일, 제목: ${title}, 핵심 문구: ${thumbnailText}`;
   const category = pipeline.channel === "blog" ? "주식시장 브리핑" : "콘텐츠";
   const body = `${bodyCore}\n\n---\n${INVESTMENT_DISCLAIMER}`;
   const markdownBody = `# ${title}\n\n${body}`;
@@ -144,6 +153,15 @@ export function serializeNaverDraftJob(job: NaverDraftJob): SerializedNaverDraft
     category: job.category,
     thumbnailText: job.thumbnailText,
     thumbnailPrompt: job.thumbnailPrompt,
+    thumbnailTitle: job.thumbnailText,
+    thumbnailSubtitle: null,
+    thumbnailHook: null,
+    thumbnailStyle: null,
+    thumbnailImageUrl: null,
+    thumbnailTemplateType: null,
+    thumbnailPrimaryText: job.thumbnailText,
+    thumbnailSecondaryText: null,
+    thumbnailKeywords: job.thumbnailText ? [job.thumbnailText] : [],
     disclaimer: job.disclaimer,
     externalUrl: job.externalUrl,
     errorCode: job.errorCode,

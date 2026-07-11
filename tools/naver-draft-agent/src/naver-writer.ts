@@ -1,4 +1,4 @@
-﻿import { createInterface } from "node:readline/promises";
+import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 
 export type NaverDraftJob = {
@@ -11,6 +11,15 @@ export type NaverDraftJob = {
   category: string | null;
   thumbnailText: string | null;
   thumbnailPrompt: string | null;
+  thumbnailTitle?: string | null;
+  thumbnailSubtitle?: string | null;
+  thumbnailHook?: string | null;
+  thumbnailStyle?: string | null;
+  thumbnailImageUrl?: string | null;
+  thumbnailTemplateType?: string | null;
+  thumbnailPrimaryText?: string | null;
+  thumbnailSecondaryText?: string | null;
+  thumbnailKeywords?: string[];
   disclaimer: string | null;
 };
 

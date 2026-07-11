@@ -139,12 +139,52 @@ export type NaverBlogPublishPrepImageIdea = {
   prompt: string;
 };
 
+export type ThumbnailAutomationStatus = "copy_ready" | "image_pending" | "generated" | "failed";
+
+export type ThumbnailVariant = {
+  id: string;
+  label: string;
+  thumbnailTitle: string;
+  thumbnailSubtitle: string;
+  thumbnailHook: string;
+  thumbnailStyle: string;
+  thumbnailPrompt: string;
+};
+
+export type ThumbnailAutomationResult = {
+  thumbnailTitle: string;
+  thumbnailSubtitle: string;
+  thumbnailHook: string;
+  thumbnailStyle: string;
+  thumbnailPrompt: string;
+  thumbnailStatus: ThumbnailAutomationStatus;
+  thumbnailImageUrl?: string;
+  thumbnailVariants: ThumbnailVariant[];
+  thumbnailErrorMessage?: string;
+  thumbnailTemplateType: StockBriefingTemplate;
+  thumbnailPrimaryText: string;
+  thumbnailSecondaryText: string;
+  thumbnailKeywords: string[];
+};
+
 export type NaverBlogPublishPrep = {
   naverTitle: string;
   naverCategory: string;
   naverTags: string[];
   thumbnailText: string;
   thumbnailPrompt: string;
+  thumbnailTitle: string;
+  thumbnailSubtitle: string;
+  thumbnailHook: string;
+  thumbnailStyle: string;
+  thumbnailStatus: ThumbnailAutomationStatus;
+  thumbnailImageUrl?: string;
+  thumbnailVariants: ThumbnailVariant[];
+  thumbnailErrorMessage?: string;
+  thumbnailTemplateType: StockBriefingTemplate;
+  thumbnailPrimaryText: string;
+  thumbnailSecondaryText: string;
+  thumbnailKeywords: string[];
   inlineImageIdeas: NaverBlogPublishPrepImageIdea[];
   intro: string;
   marketSummary: string;
@@ -183,6 +223,7 @@ export type ContentPipelineRun = {
   writerResult?: ContentWriterResult;
   qaResult?: QaAuditResult;
   naverBlogPublishPrep?: NaverBlogPublishPrep;
+  thumbnailResult?: ThumbnailAutomationResult;
   referenceBundle?: ReferenceBundle;
   blogImagePrompts?: BlogImagePrompt[];
   hermesRequestPayload?: Record<string, unknown>;
@@ -258,6 +299,15 @@ export type NaverDraftJob = {
   category: string | null;
   thumbnailText: string | null;
   thumbnailPrompt: string | null;
+  thumbnailTitle?: string | null;
+  thumbnailSubtitle?: string | null;
+  thumbnailHook?: string | null;
+  thumbnailStyle?: string | null;
+  thumbnailImageUrl?: string | null;
+  thumbnailTemplateType?: string | null;
+  thumbnailPrimaryText?: string | null;
+  thumbnailSecondaryText?: string | null;
+  thumbnailKeywords?: string[];
   disclaimer: string | null;
   externalUrl: string | null;
   errorCode: string | null;

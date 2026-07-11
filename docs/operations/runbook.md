@@ -616,3 +616,12 @@ tail -n 80 logs/stock-blog-scheduler.log
 
 실제 자동 실행은 `.env`에서 `STOCK_BLOG_SCHEDULER_ENABLED=true`일 때만 수행된다.
 비용을 막아야 하면 `STOCK_BLOG_SCHEDULER_RUNNER_MODE=mock` 또는 `hermes-dry-run`을 사용한다.
+
+## Stock Blog Thumbnail Automation
+
+- 콘텐츠 파이프라인 승인 전/후 게시 준비 패널에서 썸네일 자동화 정보를 확인한다.
+- 기본 검증은 mock 또는 hermes-dry-run으로 수행하며, 실제 이미지 생성이나 OpenAI/Hermes 추가 호출은 자동 실행하지 않는다.
+- 네이버 자동 발행, 로그인 우회, VPS Playwright 실행은 금지한다.
+- 썸네일 상태가 `copy_ready`이면 문구와 프롬프트가 수동 작업 가능한 상태다.
+- `thumbnailImageUrl`은 실제 이미지 생성/저장 기능이 별도 승인되어 붙기 전까지 비어 있을 수 있다.
+- 운영 중 문제가 있으면 콘텐츠 상세 화면의 썸네일 프롬프트를 복사해 수동 이미지 생성 도구에서 사용한다.
