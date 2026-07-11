@@ -536,3 +536,53 @@
 .stock-reference-quality p {
   margin: 0 0 6px;
 }
+
+.market-snapshot-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.market-snapshot-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.market-snapshot-heading label,
+.market-snapshot-heading strong,
+.market-snapshot-heading small {
+  display: block;
+}
+
+.market-snapshot-heading strong { margin-top: 4px; }
+.market-snapshot-heading small { margin-top: 3px; color: #64748b; }
+.market-snapshot-heading > span { padding: 6px 9px; border-radius: 999px; font-size: 10px; font-weight: 900; white-space: nowrap; }
+.market-snapshot-heading > span.eligible { color: #047857; background: #d1fae5; }
+.market-snapshot-heading > span.blocked { color: #b45309; background: #fef3c7; }
+.market-snapshot-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.market-snapshot-meta span { padding: 5px 8px; border: 1px solid #dbe4ef; border-radius: 999px; color: #475569; background: #fff; font-size: 10px; font-weight: 800; }
+.market-snapshot-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.market-snapshot-metrics article { min-width: 0; padding: 10px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; }
+.market-snapshot-metrics span,
+.market-snapshot-metrics strong,
+.market-snapshot-metrics small { display: block; }
+.market-snapshot-metrics span { color: #64748b; font-size: 10px; font-weight: 800; }
+.market-snapshot-metrics strong { margin-top: 4px; font-size: 12px; }
+.market-snapshot-metrics small { margin-top: 4px; color: #64748b; font-size: 9px; }
+.market-snapshot-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.market-snapshot-columns > div { min-width: 0; padding: 10px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; }
+.market-snapshot-columns label { display: block; margin-bottom: 7px; font-weight: 900; }
+.market-snapshot-columns p { margin: 5px 0; color: #475569; font-size: 10px; line-height: 1.5; }
+.market-snapshot-sources { display: grid; gap: 6px; margin-top: 8px; }
+.market-snapshot-sources a { color: #2563eb; font-size: 10px; line-height: 1.5; text-decoration: none; overflow-wrap: anywhere; }
+
+@media (max-width: 980px) {
+  .market-snapshot-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .market-snapshot-columns { grid-template-columns: 1fr; }
+}

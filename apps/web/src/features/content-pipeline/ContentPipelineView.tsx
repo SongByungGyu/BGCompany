@@ -15,7 +15,7 @@ import type {
   StockBriefingTemplate,
   StockBriefingTemplateConfig,
 } from "./content-pipeline-types";
-import type { BlogImagePrompt, ReferenceBundle, ReferenceItem } from "@/lib/stock-blog/references/reference-types";
+import type { BlogImagePrompt, MarketSnapshot, MarketSnapshotMetric, ReferenceBundle, ReferenceItem } from "@/lib/stock-blog/references/reference-types";
 import { summarizeContentPipelineStatus } from "@/lib/dashboard-summary/summary-rules";
 import { buildStockBlogThumbnail } from "@/lib/stock-blog/thumbnail-automation";
 
@@ -678,6 +678,122 @@ function sourceTypeLabel(type: ReferenceItem["sourceType"]) {
   return labels[type] ?? type;
 }
 
+function formatSnapshotMetric(metric?: MarketSnapshotMetric) {
+  if (!metric || metric.value === undefined) return "데이터 없음";
+  const value = typeof metric.value === "number"
+    ? new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 3 }).format(metric.value)
+    : metric.value;
+  const change = typeof metric.changePct === "number"
+    ? ` (${metric.changePct > 0 ? "+" : ""}${metric.changePct.toFixed(2)}%)`
+    : "";
+  return `${value}${change}`;
+}
+
+function snapshotProviderStatus(snapshot: MarketSnapshot, provider: "kis" | "fred") {
+  if (snapshot.sources?.some((source) => source.provider === provider)) return "수집됨";
+  const credential = provider === "kis" ? "KIS_" : "FRED_";
+  if (snapshot.missingItems.some((item) => item.includes(credential) || item.toLowerCase().includes(provider))) return "자격증명 필요";
+  return snapshot.status === "error" ? "오류" : "데이터 없음";
+}
+
+function MarketSnapshotPanel({ snapshot }: { snapshot: MarketSnapshot }) {
+  const hermesEligible = snapshot.status === "ready"
+    && snapshot.dataQuality === "verified"
+    && snapshot.freshness?.status === "fresh"
+    && snapshot.missingItems.length === 0
+    && !snapshot.fallbackUsed;
+  const metrics: Array<[string, MarketSnapshotMetric | undefined]> = [
+    ["KOSPI", snapshot.korea?.kospi],
+    ["KOSDAQ", snapshot.korea?.kosdaq],
+    ["S&P 500", snapshot.us?.sp500],
+    ["NASDAQ", snapshot.us?.nasdaq],
+    ["Dow Jones", snapshot.us?.dow],
+    ["USD/KRW", snapshot.us?.fx],
+    ["미국 2년물", snapshot.macro?.us2Year],
+    ["미국 10년물", snapshot.macro?.us10Year],
+    ["10Y-2Y 금리차", snapshot.macro?.yieldSpread10Y2Y],
+  ];
+
+  return (
+    <div className="market-snapshot-panel">
+      <div className="market-snapshot-heading">
+        <div>
+          <label>Automatic MarketSnapshot</label>
+          <strong>{snapshot.provider} · {snapshot.status} · {snapshot.dataQuality}</strong>
+          <small>기준일 {snapshot.marketDate} · 수집 {formatTime(snapshot.collectedAt)}</small>
+        </div>
+        <span className={hermesEligible ? "eligible" : "blocked"}>
+          {hermesEligible ? "Hermes 실행 가능" : "Hermes 실행 차단"}
+        </span>
+      </div>
+
+      <div className="market-snapshot-meta">
+        <span>KIS: {snapshotProviderStatus(snapshot, "kis")}</span>
+        <span>FRED: {snapshotProviderStatus(snapshot, "fred")}</span>
+        <span>freshness: {snapshot.freshness?.status ?? "unknown"}</span>
+        <span>fallback: {snapshot.fallbackUsed ? "사용" : "미사용"}</span>
+      </div>
+
+      <div className="market-snapshot-metrics">
+        {metrics.map(([label, metric]) => (
+          <article key={label}>
+            <span>{label}</span>
+            <strong>{formatSnapshotMetric(metric)}</strong>
+            <small>{metric?.asOf ? `기준 ${formatTime(metric.asOf)}` : "기준 시각 없음"} · {metric?.freshness ?? "unknown"}</small>
+          </article>
+        ))}
+      </div>
+
+      <div className="market-snapshot-columns">
+        <div>
+          <label>투자자별 매매동향</label>
+          <ul className="content-pipeline-outline">
+            {(snapshot.korea?.investorFlows ?? []).map((metric) => (
+              <li key={`${metric.label}-${metric.asOf ?? "unknown"}`}>{metric.label}: {formatSnapshotMetric(metric)}</li>
+            ))}
+            {!snapshot.korea?.investorFlows?.length ? <li>데이터 없음</li> : null}
+          </ul>
+        </div>
+        <div>
+          <label>국내 강세 / 약세 업종</label>
+          <p><strong>강세</strong> {(snapshot.korea?.strongSectors ?? []).join(" · ") || "데이터 없음"}</p>
+          <p><strong>약세</strong> {(snapshot.korea?.weakSectors ?? []).join(" · ") || "데이터 없음"}</p>
+        </div>
+      </div>
+
+      <div className="market-snapshot-columns">
+        <div>
+          <label>향후 경제지표 일정</label>
+          <ul className="content-pipeline-outline">
+            {(snapshot.upcoming ?? []).slice(0, 8).map((event) => (
+              <li key={`${event.date}-${event.event}`}>{event.date} · {event.event}</li>
+            ))}
+            {!snapshot.upcoming?.length ? <li>데이터 없음</li> : null}
+          </ul>
+        </div>
+        <div>
+          <label>데이터 품질</label>
+          <p>오래된 항목: {snapshot.freshness?.staleItems.join(" · ") || "없음"}</p>
+          <p>누락 항목: {snapshot.missingItems.join(" · ") || "없음"}</p>
+        </div>
+      </div>
+
+      {snapshot.sources?.length ? (
+        <details className="content-pipeline-payload">
+          <summary>출처 · 기준 시각 · freshness 보기</summary>
+          <div className="market-snapshot-sources">
+            {snapshot.sources.map((source, index) => (
+              <a key={`${source.provider}-${source.url}-${index}`} href={source.url} target="_blank" rel="noreferrer">
+                {source.sourceName} · 기준 {formatTime(source.asOf)} · 수집 {formatTime(source.collectedAt)} · {source.freshness}
+              </a>
+            ))}
+          </div>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
 function formatReferenceBundleForCopy(bundle?: ReferenceBundle) {
   if (!bundle) return "";
   const lines = [
@@ -977,15 +1093,7 @@ function NaverBlogPublishPrepPanel({ pipeline }: { pipeline: ContentPipelineRun 
             <span>{prep.referenceBundle.market}</span>
           </div>
           <p>{prep.referenceBundle.sourcePolicy}</p>
-          {prep.referenceBundle.marketSnapshot ? (
-            <div className="naver-prep-block compact">
-              <label>MarketSnapshot</label>
-              <p>
-                {prep.referenceBundle.marketSnapshot.status} · {prep.referenceBundle.marketSnapshot.dataQuality} · 기준일 {prep.referenceBundle.marketSnapshot.marketDate}
-              </p>
-              {prep.referenceBundle.marketSnapshot.missingItems.length ? <small>부족: {prep.referenceBundle.marketSnapshot.missingItems.join(" · ")}</small> : null}
-            </div>
-          ) : null}
+          {prep.referenceBundle.marketSnapshot ? <MarketSnapshotPanel snapshot={prep.referenceBundle.marketSnapshot} /> : null}
           {prep.referenceBundle.queries.length ? (
             <div className="content-pipeline-keywords">
               {prep.referenceBundle.queries.map((query) => <span key={query}>{query}</span>)}

@@ -47,16 +47,42 @@ export type MarketSnapshotMetric = {
   changePct?: number;
   direction?: "up" | "down" | "flat" | "mixed";
   asOf?: string;
+  collectedAt?: string;
+  freshness?: "fresh" | "stale" | "expired" | "unknown";
+  ageMinutes?: number;
+  maxAgeMinutes?: number;
+  provider?: "kis" | "fred" | "manual" | "configured-api";
   sourceName?: string;
   url?: string;
 };
 
+export type MarketSnapshotSource = {
+  provider: "kis" | "fred" | "manual" | "configured-api";
+  sourceName: string;
+  url: string;
+  asOf: string;
+  collectedAt: string;
+  freshness: "fresh" | "stale" | "expired" | "unknown";
+  ageMinutes: number;
+  maxAgeMinutes: number;
+};
+
+export type MarketSnapshotFreshness = {
+  status: "fresh" | "stale" | "expired" | "unknown";
+  checkedAt: string;
+  oldestAsOf?: string;
+  staleItems: string[];
+};
+
 export type MarketSnapshot = {
-  provider: "manual" | "configured-api";
+  provider: "manual" | "configured-api" | "kis-fred";
   status: "ready" | "needs_credentials" | "needs_data" | "error";
   marketDate: string;
   collectedAt: string;
   dataQuality: "verified" | "partial" | "missing";
+  fallbackUsed?: boolean;
+  freshness?: MarketSnapshotFreshness;
+  sources?: MarketSnapshotSource[];
   korea?: {
     kospi?: MarketSnapshotMetric;
     kosdaq?: MarketSnapshotMetric;
@@ -71,6 +97,11 @@ export type MarketSnapshot = {
     treasuryYield?: MarketSnapshotMetric;
     fx?: MarketSnapshotMetric;
     leadingSectors?: string[];
+  };
+  macro?: {
+    us2Year?: MarketSnapshotMetric;
+    us10Year?: MarketSnapshotMetric;
+    yieldSpread10Y2Y?: MarketSnapshotMetric;
   };
   upcoming?: Array<{ date: string; event: string; market?: string; sourceName?: string; url?: string }>;
   missingItems: string[];

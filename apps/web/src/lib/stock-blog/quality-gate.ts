@@ -38,6 +38,10 @@ export type StockBlogQualityDiagnostics = {
   newsReferenceCount: number;
   marketSnapshotStatus?: string;
   marketSnapshotDataQuality?: string;
+  marketSnapshotProvider?: string;
+  marketSnapshotFreshnessStatus?: string;
+  staleMarketDataItems: string[];
+  manualMarketSnapshot: boolean;
   repeatedPhraseWarnings: string[];
   missingReferenceItems: string[];
 };
@@ -175,6 +179,10 @@ function diagnostics(input: {
     newsReferenceCount,
     marketSnapshotStatus: input.bundle?.marketSnapshot?.status,
     marketSnapshotDataQuality: input.bundle?.marketSnapshot?.dataQuality,
+    marketSnapshotProvider: input.bundle?.marketSnapshot?.provider,
+    marketSnapshotFreshnessStatus: input.bundle?.marketSnapshot?.freshness?.status,
+    staleMarketDataItems: input.bundle?.marketSnapshot?.freshness?.staleItems ?? [],
+    manualMarketSnapshot: input.bundle?.marketSnapshot?.provider === "manual",
     repeatedPhraseWarnings,
     missingReferenceItems: input.bundle?.missingItems ?? [],
   };
@@ -194,12 +202,18 @@ export function evaluateStockBlogReferences(bundle?: ReferenceBundle, requireRea
     if (d.marketDataReferenceCount + d.officialReferenceCount < 1 && d.marketSnapshotDataQuality !== "verified") reasons.push("시장 데이터 또는 공식/신뢰 참고자료 1개 이상 필요");
     if (d.competitorReferenceCount < 3) reasons.push("경쟁 블로그 참고자료 3개 이상 필요");
     if (d.marketSnapshotStatus !== "ready" || d.marketSnapshotDataQuality !== "verified") reasons.push("검증된 MarketSnapshot 필요");
+    if (d.marketSnapshotFreshnessStatus !== "fresh") reasons.push("최신성 검증을 통과한 MarketSnapshot 필요");
+    if (d.staleMarketDataItems.length > 0) reasons.push(`오래되거나 유효하지 않은 시장 데이터: ${d.staleMarketDataItems.join(", ")}`);
+    if (d.manualMarketSnapshot && process.env.STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES !== "true") reasons.push("Manual MarketSnapshot은 운영 Hermes에서 기본 차단됨");
     if (d.missingReferenceItems.length > 0) reasons.push(`필수 참고자료 부족: ${d.missingReferenceItems.join(", ")}`);
   }
   if (bundle?.status === "needs_credentials" || (requireRealReferences && bundle?.status === "disabled")) return { ok: false, status: "needs_credentials", reasons: reasons.length ? reasons : ["실제 Reference Provider credentials 필요"], diagnostics: d };
   if (d.marketSnapshotStatus === "needs_credentials") return { ok: false, status: "needs_credentials", reasons: [...reasons, "시장 데이터 Provider credentials 필요"], diagnostics: d };
-  if (bundle?.status === "needs_data" || bundle?.status === "error" || d.marketSnapshotStatus === "needs_data" || d.marketSnapshotStatus === "error") {
+  if (bundle?.status === "needs_data" || bundle?.status === "error" || d.marketSnapshotStatus === "needs_data" || d.marketSnapshotStatus === "error" || d.marketSnapshotFreshnessStatus === "stale" || d.marketSnapshotFreshnessStatus === "expired" || d.marketSnapshotFreshnessStatus === "unknown") {
     return { ok: false, status: "needs_data", reasons: reasons.length ? reasons : ["검증된 MarketSnapshot 데이터 필요"], diagnostics: d };
+  }
+  if (requireRealReferences && d.manualMarketSnapshot && process.env.STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES !== "true") {
+    return { ok: false, status: "needs_data", reasons, diagnostics: d };
   }
   if (d.referenceProvider === "mock" || d.referenceMode === "mock" || d.referenceMode === "real-disabled") reasons.push("mock/real-disabled 참고자료는 운영 Hermes 결과로 인정하지 않음");
   if (reasons.length > 0) return { ok: false, status: "needs_reference", reasons, diagnostics: d };
@@ -231,6 +245,9 @@ export function evaluateStockBlogPublishQuality(input: {
     if (d.marketDataReferenceCount + d.officialReferenceCount < 1 && d.marketSnapshotDataQuality !== "verified") reasons.push("시장 데이터 또는 공식/신뢰 참고자료 1개 이상 필요");
     if (d.competitorReferenceCount < 3) reasons.push("경쟁 블로그 참고자료 3개 이상 필요");
     if (d.marketSnapshotStatus !== "ready" || d.marketSnapshotDataQuality !== "verified") reasons.push("검증된 MarketSnapshot 필요");
+    if (d.marketSnapshotFreshnessStatus !== "fresh") reasons.push("최신성 검증을 통과한 MarketSnapshot 필요");
+    if (d.staleMarketDataItems.length > 0) reasons.push(`오래되거나 유효하지 않은 시장 데이터: ${d.staleMarketDataItems.join(", ")}`);
+    if (d.manualMarketSnapshot && process.env.STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES !== "true") reasons.push("Manual MarketSnapshot은 운영 Hermes에서 기본 차단됨");
     if (d.missingReferenceItems.length > 0) reasons.push(`필수 참고자료 부족: ${d.missingReferenceItems.join(", ")}`);
   }
   if (!d.hasMarketDataSignal && requireReal) reasons.push("지수/섹터/수급 등 시장 데이터 신호 부족");
@@ -251,7 +268,7 @@ export function evaluateStockBlogPublishQuality(input: {
   if (reasons.some((reason) => reason.includes("참고자료") || reason.includes("URL") || reason.includes("발행처") || reason.includes("mock/real-disabled") || reason.includes("공식/신뢰"))) {
     return { ok: false, status: "needs_reference", reasons, diagnostics: d };
   }
-  if (reasons.some((reason) => reason.includes("시장 데이터"))) return { ok: false, status: "needs_data", reasons, diagnostics: d };
+  if (reasons.some((reason) => reason.includes("시장 데이터") || reason.includes("MarketSnapshot") || reason.includes("최신성"))) return { ok: false, status: "needs_data", reasons, diagnostics: d };
   if (d.hasImagePromptLeak) return { ok: false, status: "image_pending", reasons, diagnostics: d };
   if (d.duplicateSentenceCount > 1) return { ok: false, status: "duplicate_content_failed", reasons, diagnostics: d };
   if (d.pasteReadyNewlineCount < 15 || d.doubleNewlineBlockCount < 8 || d.sectionHeadingCount < 6 || d.paragraphCount < 10 || d.bulletItemCount < 5) {

@@ -674,3 +674,27 @@ Hermes 주식 블로그 운영은 `STOCK_REFERENCE_PROVIDER=manual`을 권장한
 - 콘텐츠 상세의 `관련 기사 / 참고자료` 패널에서 품질 게이트 사유 확인
 - 부족한 참고자료 항목(`missingItems`) 확인
 - mock/dry-run으로 UI만 확인하고 실제 Hermes 반복 실행은 금지
+# Automatic MarketSnapshot 점검
+
+운영 주식 브리핑은 KIS 조회 API와 FRED API가 모두 준비된 경우에만 실제 Hermes를 실행한다.
+
+```bash
+docker compose exec -T web sh -lc '
+for key in KIS_APP_KEY KIS_APP_SECRET FRED_API_KEY; do
+  if [ -n "$(printenv "$key")" ]; then echo "$key=set"; else echo "$key=missing"; fi
+done
+echo "STOCK_MARKET_DATA_PROVIDER=$(printenv STOCK_MARKET_DATA_PROVIDER)"
+echo "STOCK_MARKET_DATA_ALLOW_MANUAL_FALLBACK=$(printenv STOCK_MARKET_DATA_ALLOW_MANUAL_FALLBACK)"
+echo "STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES=$(printenv STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES)"
+'
+```
+
+secret 원문, 요청 header, provider 전체 응답은 출력하지 않는다. 정상 운영값은 다음과 같다.
+
+```text
+STOCK_MARKET_DATA_PROVIDER=kis-fred
+STOCK_MARKET_DATA_ALLOW_MANUAL_FALLBACK=false
+STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES=false
+```
+
+`needs_credentials`, `needs_data`, `error`, stale/expired가 발생하면 mock 또는 Manual로 자동 대체하지 않는다. scheduler와 실제 Hermes를 중지한 상태에서 자격증명, provider 상태, 기준 시각을 확인한다. KIS 주문·잔고·계좌 API는 점검 목적으로도 호출하지 않는다.

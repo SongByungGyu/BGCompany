@@ -17,10 +17,15 @@ REFERENCE_SEARCH_ENABLE_REAL_API=true
 NAVER_SEARCH_CLIENT_ID=<secret>
 NAVER_SEARCH_CLIENT_SECRET=<secret>
 COMPETITOR_BLOG_SEARCH_ENABLED=true
-STOCK_MARKET_DATA_PROVIDER=manual|api
+STOCK_MARKET_DATA_PROVIDER=kis-fred
+KIS_APP_KEY=<secret>
+KIS_APP_SECRET=<secret>
+FRED_API_KEY=<secret>
+STOCK_MARKET_DATA_ALLOW_MANUAL_FALLBACK=false
+STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES=false
 ```
 
-For manual market data, provide `STOCK_MARKET_SNAPSHOT_JSON` or a file at `STOCK_MARKET_SNAPSHOT_PATH`. For an API adapter, also configure an HTTPS `STOCK_MARKET_DATA_API_URL` and `STOCK_MARKET_DATA_API_KEY`.
+KIS is restricted to allowlisted quote, investor trend, sector, overseas index, and FX lookup endpoints. Order, balance, account, and position endpoints are not implemented. FRED supplies DGS2, DGS10, and the economic release calendar. Manual MarketSnapshot input remains an emergency-only fallback and is blocked from real Hermes by default.
 
 Never print these values. Only report whether each variable is set.
 
@@ -40,7 +45,7 @@ Failure returns `needs_credentials`, `needs_reference`, or `needs_data`. It must
 
 ## MarketSnapshot
 
-`MarketSnapshot` is a date-stamped structured object for KOSPI/KOSDAQ, investor flows, sector strength, US indices/rates/FX, and upcoming events. Manual data must be reviewed before setting `dataQuality=verified`. A configured API response must use the same structure.
+`MarketSnapshot` is generated automatically from KIS and FRED data for KOSPI/KOSDAQ, investor flows, sector strength, US indices/rates/FX, and upcoming events. Every source records its URL, data timestamp, collection timestamp, age, maximum age, and freshness state. Only `ready + verified + fresh` snapshots pass the real-Hermes gate; missing or stale data is never replaced with mock data.
 
 ## Self-generated images
 
