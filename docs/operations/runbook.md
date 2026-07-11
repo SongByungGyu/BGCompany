@@ -698,3 +698,5 @@ STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES=false
 ```
 
 `needs_credentials`, `needs_data`, `error`, stale/expired가 발생하면 mock 또는 Manual로 자동 대체하지 않는다. scheduler와 실제 Hermes를 중지한 상태에서 자격증명, provider 상태, 기준 시각을 확인한다. KIS 주문·잔고·계좌 API는 점검 목적으로도 호출하지 않는다.
+
+KIS 읽기 전용 조회의 일시적 `429`, `500`, `502`, `503`, `504` 응답은 `KIS_MAX_RETRIES`(기본 2회)와 `KIS_RETRY_BASE_DELAY_MS`(기본 500ms)에 따라 제한적으로 재시도한다. 재시도 횟수를 2보다 높이지 말고, 반복 실패 시 scheduler와 Hermes를 계속 중지한 채 provider 상태를 확인한다.

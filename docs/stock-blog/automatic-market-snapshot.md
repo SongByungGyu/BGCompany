@@ -29,6 +29,8 @@ KIS_BASE_URL=https://openapi.koreainvestment.com:9443
 KIS_APP_KEY=
 KIS_APP_SECRET=
 KIS_TIMEOUT_MS=10000
+KIS_MAX_RETRIES=2
+KIS_RETRY_BASE_DELAY_MS=500
 KIS_MARKET_MAX_AGE_MINUTES=4320
 KIS_SP500_CODE=SPX
 KIS_NASDAQ_CODE=COMP
@@ -43,6 +45,8 @@ FRED_US_10Y_SERIES_ID=DGS10
 ```
 
 자격증명은 운영 `.env`에만 저장하고 로그, UI, Git에 출력하지 않는다. KIS 계좌번호는 필요하지 않으며 설정하지 않는다.
+
+KIS 조회에서 `429`, `500`, `502`, `503`, `504`가 발생하면 읽기 전용 요청만 최대 2회 지수 백오프로 재시도한다. 인증 실패, allowlist 위반, 잘못된 요청은 재시도하지 않는다. 모든 재시도가 실패하면 `needs_data`/`error`로 안전 중단하며 mock 또는 Manual 데이터로 대체하지 않는다.
 
 ## 표준 DTO와 freshness
 

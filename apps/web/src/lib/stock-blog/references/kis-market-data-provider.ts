@@ -9,6 +9,7 @@ const KIS_ALLOWED_REQUESTS = new Map<string, string>([
 ] as const);
 
 const KIS_ALLOWED_HOSTS = new Set(["openapi.koreainvestment.com", "openapivts.koreainvestment.com"]);
+const KIS_RETRYABLE_HTTP_STATUSES = new Set([429, 500, 502, 503, 504]);
 const KIS_DOC_URL = "https://github.com/koreainvestment/open-trading-api";
 
 type KisStatus = MarketSnapshot["status"];
@@ -48,6 +49,24 @@ function timeoutMs() {
   return Number.isFinite(parsed) ? Math.max(1000, Math.min(parsed, 30000)) : 10000;
 }
 
+function maxRetries() {
+  const parsed = Number.parseInt(process.env.KIS_MAX_RETRIES ?? "2", 10);
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(parsed, 2)) : 2;
+}
+
+function retryBaseDelayMs() {
+  const parsed = Number.parseInt(process.env.KIS_RETRY_BASE_DELAY_MS ?? "500", 10);
+  return Number.isFinite(parsed) ? Math.max(200, Math.min(parsed, 5000)) : 500;
+}
+
+function retryDelayMs(attempt: number) {
+  return Math.min(retryBaseDelayMs() * (2 ** attempt), 10000);
+}
+
+function wait(delayMs: number) {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
 function freshnessMinutes() {
   const parsed = Number.parseInt(process.env.KIS_MARKET_MAX_AGE_MINUTES ?? "4320", 10);
   return Number.isFinite(parsed) ? Math.max(60, parsed) : 4320;
@@ -74,16 +93,23 @@ async function kisGet(path: string, trId: string, params: Record<string, string>
   if (KIS_ALLOWED_REQUESTS.get(path) !== trId) throw new Error("KIS_QUERY_NOT_ALLOWLISTED");
   const url = new URL(path, baseUrl());
   for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
-  const response = await fetch(url, {
-    headers: {
-      authorization: `Bearer ${token}`,
-      appkey: credentials.appKey,
-      appsecret: credentials.appSecret,
-      tr_id: trId,
-      custtype: "P",
-    },
-    signal: AbortSignal.timeout(timeoutMs()),
-  });
+  let response: Response | undefined;
+  for (let attempt = 0; attempt <= maxRetries(); attempt += 1) {
+    response = await fetch(url, {
+      headers: {
+        authorization: `Bearer ${token}`,
+        appkey: credentials.appKey,
+        appsecret: credentials.appSecret,
+        tr_id: trId,
+        custtype: "P",
+      },
+      signal: AbortSignal.timeout(timeoutMs()),
+    });
+    if (response.ok || !KIS_RETRYABLE_HTTP_STATUSES.has(response.status) || attempt >= maxRetries()) break;
+    try { await response.body?.cancel(); } catch { /* response body contains no required data */ }
+    await wait(retryDelayMs(attempt));
+  }
+  if (!response) throw new Error("KIS_UNKNOWN_ERROR");
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) throw new Error("KIS_AUTH_FAILED");
     if (response.status === 429) throw new Error("KIS_RATE_LIMITED");
@@ -274,6 +300,8 @@ export async function collectKisMarketData(input: ReferenceSearchInput): Promise
 export const KIS_READ_ONLY_POLICY = {
   tokenPath: "/oauth2/tokenP",
   allowedRequests: Array.from(KIS_ALLOWED_REQUESTS.entries()).map(([path, trId]) => ({ path, trId })),
+  retryableHttpStatuses: Array.from(KIS_RETRYABLE_HTTP_STATUSES),
+  maximumRetries: 2,
   prohibitedCapabilities: ["order", "balance", "account", "position", "buy", "sell"],
   documentation: KIS_DOC_URL,
 } as const;
