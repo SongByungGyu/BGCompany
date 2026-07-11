@@ -12,12 +12,19 @@ const KIS_ALLOWED_HOSTS = new Set(["openapi.koreainvestment.com", "openapivts.ko
 const KIS_DOC_URL = "https://github.com/koreainvestment/open-trading-api";
 
 type KisStatus = MarketSnapshot["status"];
+export type KisDiagnostic = {
+  item: string;
+  code: string;
+  httpStatus?: number;
+};
+
 export type KisResult = {
   status: KisStatus;
   korea?: MarketSnapshot["korea"];
   us?: MarketSnapshot["us"];
   sources: MarketSnapshotSource[];
   missingItems: string[];
+  diagnostics?: KisDiagnostic[];
 };
 
 type KisToken = { value: string; expiresAt: number };
@@ -77,10 +84,27 @@ async function kisGet(path: string, trId: string, params: Record<string, string>
     },
     signal: AbortSignal.timeout(timeoutMs()),
   });
-  if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? "KIS_AUTH_FAILED" : `KIS_HTTP_${response.status}`);
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) throw new Error("KIS_AUTH_FAILED");
+    if (response.status === 429) throw new Error("KIS_RATE_LIMITED");
+    throw new Error(`KIS_HTTP_${response.status}`);
+  }
   const body = asRecord(await response.json());
-  if (!body || (typeof body.rt_cd === "string" && body.rt_cd !== "0")) throw new Error("KIS_RESPONSE_FAILED");
+  if (!body) throw new Error("KIS_PARSE_FAILED");
+  if (typeof body.rt_cd === "string" && body.rt_cd !== "0") {
+    const messageCode = typeof body.msg_cd === "string" ? body.msg_cd.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40) : "UNKNOWN";
+    throw new Error(`KIS_RESPONSE_${messageCode}`);
+  }
   return body;
+}
+
+function safeDiagnostic(item: string, error: unknown): KisDiagnostic {
+  const raw = error instanceof Error ? error.message : "KIS_UNKNOWN_ERROR";
+  const code = /^KIS_(?:AUTH_FAILED|RATE_LIMITED|PARSE_FAILED|QUERY_NOT_ALLOWLISTED|BASE_URL_NOT_ALLOWED|TOKEN_PARSE_FAILED|TOKEN_HTTP_\d{3}|HTTP_\d{3}|RESPONSE_[A-Za-z0-9_-]+)$/.test(raw)
+    ? raw
+    : "KIS_UNKNOWN_ERROR";
+  const match = code.match(/(?:TOKEN_)?HTTP_(\d{3})$/);
+  return { item, code, ...(match ? { httpStatus: Number(match[1]) } : {}) };
 }
 
 function seoulDate(date = new Date()) {
@@ -160,6 +184,7 @@ export async function collectKisMarketData(input: ReferenceSearchInput): Promise
   const collectedAt = new Date().toISOString();
   const sources: MarketSnapshotSource[] = [];
   const missingItems: string[] = [];
+  const diagnostics: KisDiagnostic[] = [];
   const korea: NonNullable<MarketSnapshot["korea"]> = { investorFlows: [], strongSectors: [], weakSectors: [] };
   const us: NonNullable<MarketSnapshot["us"]> = {};
   try {
@@ -172,7 +197,7 @@ export async function collectKisMarketData(input: ReferenceSearchInput): Promise
         }, credentials, token);
         const result = indexMetric(label, body.output2, collectedAt, indexPath);
         if (result) { korea[key] = result.metric; sources.push(result.source); } else missingItems.push(label);
-      } catch { missingItems.push(label); }
+      } catch (error) { missingItems.push(label); diagnostics.push(safeDiagnostic(label, error)); }
     }
 
     const investorPath = "/uapi/domestic-stock/v1/quotations/inquire-investor-daily-by-market";
@@ -185,7 +210,7 @@ export async function collectKisMarketData(input: ReferenceSearchInput): Promise
         }, credentials, token);
         const result = investorMetrics(body.output, label, collectedAt, investorPath);
         if (result) { korea.investorFlows?.push(...result.metrics); sources.push(result.source); } else missingItems.push(`${label} 투자자 수급`);
-      } catch { missingItems.push(`${label} 투자자 수급`); }
+      } catch (error) { const item = `${label} 투자자 수급`; missingItems.push(item); diagnostics.push(safeDiagnostic(item, error)); }
     }
 
     const sectorPath = "/uapi/domestic-stock/v1/quotations/inquire-index-category-price";
@@ -201,7 +226,7 @@ export async function collectKisMarketData(input: ReferenceSearchInput): Promise
         const dataSource = source(`${label} 업종 흐름`, collectedAt, collectedAt, sectorPath);
         sources.push(dataSource);
         if (!sectors.strong.length || !sectors.weak.length) missingItems.push(`${label} 강세/약세 업종`);
-      } catch { missingItems.push(`${label} 강세/약세 업종`); }
+      } catch (error) { const item = `${label} 강세/약세 업종`; missingItems.push(item); diagnostics.push(safeDiagnostic(item, error)); }
     }
 
     const overseasPath = "/uapi/overseas-price/v1/quotations/inquire-daily-chartprice";
@@ -220,14 +245,16 @@ export async function collectKisMarketData(input: ReferenceSearchInput): Promise
           FID_INPUT_DATE_2: endDate, FID_PERIOD_DIV_CODE: "D",
         }, credentials, token);
         const result = overseasMetric(label, body, collectedAt, overseasPath);
-        if (result) { us[key] = result.metric; sources.push(result.source); } else missingItems.push(label);
-      } catch { missingItems.push(label); }
+        if (result) { us[key] = result.metric; sources.push(result.source); }
+        else { missingItems.push(label); diagnostics.push({ item: label, code: "KIS_EMPTY_METRIC" }); }
+      } catch (error) { missingItems.push(label); diagnostics.push(safeDiagnostic(label, error)); }
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "KIS_ERROR";
     return {
       status: message === "KIS_AUTH_FAILED" ? "needs_credentials" : "error",
       sources,
+      diagnostics: [...diagnostics, safeDiagnostic("KIS provider", error)],
       missingItems: message === "KIS_AUTH_FAILED" ? ["유효한 KIS 조회 API 자격증명"] : ["한국투자증권 조회 API 응답"],
     };
   }
@@ -239,6 +266,7 @@ export async function collectKisMarketData(input: ReferenceSearchInput): Promise
     korea,
     us,
     sources,
+    diagnostics,
     missingItems: Array.from(new Set(missingItems)),
   };
 }

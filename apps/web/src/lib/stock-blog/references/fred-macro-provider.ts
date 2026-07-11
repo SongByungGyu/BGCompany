@@ -10,6 +10,13 @@ export type FredResult = {
   upcoming?: MarketSnapshot["upcoming"];
   sources: MarketSnapshotSource[];
   missingItems: string[];
+  diagnostics?: FredDiagnostic[];
+};
+
+export type FredDiagnostic = {
+  item: string;
+  code: string;
+  httpStatus?: number;
 };
 
 function maxAgeMinutes() {
@@ -29,10 +36,33 @@ async function fredGet(path: string, params: Record<string, string>, apiKey: str
   url.searchParams.set("api_key", apiKey);
   url.searchParams.set("file_type", "json");
   const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs()) });
-  if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? "FRED_AUTH_FAILED" : `FRED_HTTP_${response.status}`);
-  const body = asRecord(await response.json());
+  if (!response.ok) {
+    const errorText = (await response.text()).slice(0, 800).toLowerCase();
+    const authenticationFailure = response.status === 401
+      || response.status === 403
+      || (response.status === 400 && /api[_ -]?key|registered|registration/.test(errorText));
+    if (authenticationFailure) throw new Error("FRED_AUTH_FAILED");
+    if (response.status === 429) throw new Error("FRED_RATE_LIMITED");
+    throw new Error(`FRED_HTTP_${response.status}`);
+  }
+  let decoded: unknown;
+  try {
+    decoded = await response.json();
+  } catch {
+    throw new Error("FRED_PARSE_FAILED");
+  }
+  const body = asRecord(decoded);
   if (!body) throw new Error("FRED_PARSE_FAILED");
   return body;
+}
+
+function safeDiagnostic(item: string, error: unknown): FredDiagnostic {
+  const raw = error instanceof Error ? error.message : "FRED_UNKNOWN_ERROR";
+  const code = /^FRED_(?:AUTH_FAILED|RATE_LIMITED|PARSE_FAILED|QUERY_NOT_ALLOWLISTED|HTTP_\d{3})$/.test(raw)
+    ? raw
+    : "FRED_UNKNOWN_ERROR";
+  const match = code.match(/HTTP_(\d{3})$/);
+  return { item, code, ...(match ? { httpStatus: Number(match[1]) } : {}) };
 }
 
 function latestObservation(body: Record<string, unknown>) {
@@ -149,6 +179,7 @@ export async function collectFredMacroData(): Promise<FredResult> {
       status: message === "FRED_AUTH_FAILED" ? "needs_credentials" : "error",
       macro,
       sources,
+      diagnostics: [safeDiagnostic("FRED macro provider", error)],
       missingItems: message === "FRED_AUTH_FAILED" ? ["유효한 FRED_API_KEY"] : ["FRED 국채금리/경제 일정 응답"],
     };
   }
