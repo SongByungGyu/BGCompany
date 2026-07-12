@@ -1,5 +1,7 @@
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 export type NaverDraftJob = {
   id: string;
@@ -36,6 +38,8 @@ type WriterResult = {
 };
 
 const openBrowserContexts = new Set<unknown>();
+const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
 
 function classifySecurityPage(url: string, text: string): WriterResult["status"] | null {
   const haystack = `${url}\n${text}`.toLowerCase();
@@ -161,6 +165,124 @@ async function verifyNaverEditorReadability(page: import("playwright").Page, exp
   const ok = actual.characterCount >= minimumCharacters && actual.lineCount >= minimumLines;
   console.log(`[naver-agent] readability check: chars=${actual.characterCount}/${expected.characterCount}, lines=${actual.lineCount}/${expected.lineCount}, paragraphs=${actual.paragraphCount}/${expected.paragraphCount}`);
   return { ok, expected, actual };
+}
+
+function safeFileSegment(value: string) {
+  return value.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 100) || "naver-draft";
+}
+
+function resolveTrustedAssetUrl(value: string, assetBaseUrl: string) {
+  const base = new URL(assetBaseUrl);
+  const url = new URL(value, base);
+  if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error("NAVER_IMAGE_URL_PROTOCOL_NOT_ALLOWED");
+  if (url.origin !== base.origin) throw new Error("NAVER_IMAGE_URL_ORIGIN_NOT_ALLOWED");
+  if (!url.pathname.startsWith("/generated/stock-blog/")) throw new Error("NAVER_IMAGE_URL_PATH_NOT_ALLOWED");
+  return url;
+}
+
+async function downloadTrustedThumbnail(input: {
+  page: import("playwright").Page;
+  jobId: string;
+  imageUrl: string;
+  assetBaseUrl: string;
+}) {
+  const url = resolveTrustedAssetUrl(input.imageUrl, input.assetBaseUrl);
+  const response = await fetch(url, { redirect: "error" });
+  if (!response.ok) throw new Error(`NAVER_IMAGE_DOWNLOAD_FAILED_${response.status}`);
+  const contentType = (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+  if (!ALLOWED_IMAGE_TYPES.has(contentType)) throw new Error(`NAVER_IMAGE_TYPE_NOT_ALLOWED_${contentType || "unknown"}`);
+  const contentLength = Number(response.headers.get("content-length") ?? "0");
+  if (Number.isFinite(contentLength) && contentLength > MAX_IMAGE_BYTES) throw new Error("NAVER_IMAGE_TOO_LARGE");
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.byteLength === 0 || buffer.byteLength > MAX_IMAGE_BYTES) throw new Error("NAVER_IMAGE_SIZE_INVALID");
+
+  const outputDir = path.resolve("drafts", "assets", safeFileSegment(input.jobId));
+  await mkdir(outputDir, { recursive: true });
+  if (contentType !== "image/svg+xml") {
+    const extension = contentType === "image/jpeg" ? "jpg" : contentType === "image/webp" ? "webp" : "png";
+    const outputFile = path.join(outputDir, `thumbnail.${extension}`);
+    await writeFile(outputFile, buffer);
+    console.log(`[naver-agent] thumbnail downloaded: ${url.pathname}`);
+    return outputFile;
+  }
+
+  const svg = buffer.toString("utf8");
+  if (!svg.includes("<svg")) throw new Error("NAVER_SVG_INVALID");
+  const renderPage = await input.page.context().newPage();
+  const outputFile = path.join(outputDir, "thumbnail.png");
+  try {
+    await renderPage.setViewportSize({ width: 1200, height: 675 });
+    const encoded = buffer.toString("base64");
+    await renderPage.setContent(
+      `<html><head><style>html,body{margin:0;width:1200px;height:675px;overflow:hidden;background:#071426}img{display:block;width:1200px;height:675px}</style></head><body><img src="data:image/svg+xml;base64,${encoded}" /></body></html>`,
+      { waitUntil: "load", timeout: 20000 },
+    );
+    await renderPage.locator("img").waitFor({ state: "visible", timeout: 10000 });
+    await renderPage.screenshot({ path: outputFile, type: "png", fullPage: false });
+  } finally {
+    await renderPage.close().catch(() => undefined);
+  }
+  console.log(`[naver-agent] thumbnail converted to PNG: ${url.pathname}`);
+  return outputFile;
+}
+
+async function countNaverImages(page: import("playwright").Page) {
+  const selectors = [".se-component-image", ".se-image", "img.se-image-resource", ".se-main-container img"];
+  let count = 0;
+  for (const scope of [page, ...page.frames()]) {
+    for (const selector of selectors) count = Math.max(count, await scope.locator(selector).count().catch(() => 0));
+  }
+  return count;
+}
+
+async function focusEditorStart(page: import("playwright").Page, selectors: string[]) {
+  for (const scope of [page, ...page.frames()]) {
+    for (const selector of selectors) {
+      const target = scope.locator(selector).first();
+      if (!(await target.count().catch(() => 0))) continue;
+      await target.click({ timeout: 5000 }).catch(() => undefined);
+      await page.keyboard.press(process.platform === "darwin" ? "Meta+Home" : "Control+Home").catch(() => undefined);
+      return;
+    }
+  }
+}
+
+async function uploadNaverThumbnail(page: import("playwright").Page, bodySelectors: string[], imageFile: string) {
+  await dismissNaverDraftModal(page).catch(() => undefined);
+  await focusEditorStart(page, bodySelectors);
+  const before = await countNaverImages(page);
+  const fileInputs = page.locator('input[type="file"][accept*="image"], input[type="file"][multiple]');
+  if (await fileInputs.count().catch(() => 0)) {
+    await fileInputs.first().setInputFiles(imageFile, { timeout: 10000 });
+    console.log("[naver-agent] thumbnail selected through Naver image input.");
+  } else {
+    const selectors = [
+      'button:has-text("사진")',
+      'a:has-text("사진")',
+      '[role="button"]:has-text("사진")',
+      'button[class*="image"]',
+      'a[class*="image"]',
+    ];
+    let selected = false;
+    for (const selector of selectors) {
+      const button = page.locator(selector).first();
+      if (!(await button.count().catch(() => 0))) continue;
+      const chooser = page.waitForEvent("filechooser", { timeout: 7000 });
+      await button.click({ timeout: 7000 }).catch(() => undefined);
+      const fileChooser = await chooser.catch(() => null);
+      if (!fileChooser) continue;
+      await fileChooser.setFiles(imageFile);
+      console.log(`[naver-agent] thumbnail selected via ${selector}.`);
+      selected = true;
+      break;
+    }
+    if (!selected) throw new Error("NAVER_IMAGE_INPUT_NOT_FOUND");
+  }
+
+  await page.waitForTimeout(8000);
+  const after = await countNaverImages(page);
+  if (after <= before) throw new Error(`NAVER_IMAGE_ATTACH_NOT_CONFIRMED_${before}_${after}`);
+  console.log(`[naver-agent] thumbnail attachment confirmed: images=${before}->${after}`);
 }
 
 async function pasteTextWithClipboard(page: import("playwright").Page, value: string) {
@@ -322,7 +444,7 @@ export async function testNaverBrowser() {
   await contextBrowser.close().catch(() => undefined);
 }
 
-export async function runNaverWriter(job: NaverDraftJob, context: { draftFile: string }): Promise<WriterResult> {
+export async function runNaverWriter(job: NaverDraftJob, context: { draftFile: string; assetBaseUrl: string }): Promise<WriterResult> {
   const dryRun = !isExplicitLiveMode();
   const allowDraftSave = process.env.NAVER_ALLOW_DRAFT_SAVE === "true";
   if (dryRun) {
@@ -417,8 +539,23 @@ export async function runNaverWriter(job: NaverDraftJob, context: { draftFile: s
       };
     }
 
-    if (job.allowImageUpload && (job.thumbnailImageUrl || job.inlineImageUrls?.length)) {
-      console.warn("[naver-agent] image upload metadata received, but automatic image attachment remains disabled in this phase.");
+    if (job.allowImageUpload && job.thumbnailImageUrl) {
+      try {
+        const thumbnailFile = await downloadTrustedThumbnail({
+          page,
+          jobId: job.id,
+          imageUrl: job.thumbnailImageUrl,
+          assetBaseUrl: context.assetBaseUrl,
+        });
+        await uploadNaverThumbnail(page, bodySelectors, thumbnailFile);
+      } catch (error) {
+        return {
+          status: "failed",
+          externalUrl: page.url(),
+          errorCode: "NAVER_THUMBNAIL_UPLOAD_FAILED",
+          errorMessage: error instanceof Error ? error.message : String(error),
+        };
+      }
     }
 
     if (allowDraftSave) {
@@ -439,4 +576,3 @@ export async function runNaverWriter(job: NaverDraftJob, context: { draftFile: s
     return { status: "failed", errorCode: "NAVER_WRITER_FAILED", errorMessage: error instanceof Error ? error.message : String(error) };
   }
 }
-

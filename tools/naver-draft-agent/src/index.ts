@@ -86,7 +86,7 @@ async function processJob(cfg: AgentConfig, job: NaverDraftJob) {
   const claimed = await claimJob(cfg, job.id);
   await reportStatus(cfg, claimed.job.id, { status: "in_progress" });
   const draftFile = await saveLocalDraft(claimed.job);
-  const result = await runNaverWriter(claimed.job, { draftFile });
+  const result = await runNaverWriter(claimed.job, { draftFile, assetBaseUrl: cfg.baseUrl });
   await reportStatus(cfg, claimed.job.id, result);
   console.log(`[naver-agent] ${claimed.job.id} -> ${result.status}`);
 }

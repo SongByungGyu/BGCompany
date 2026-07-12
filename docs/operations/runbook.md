@@ -21,6 +21,34 @@ NAVER_ALLOW_IMAGE_UPLOAD=false
 
 `needs_credentials`, `needs_reference`, and `needs_data` are expected safe-stop states. Do not bypass them by raising the Hermes limit or inserting fabricated references. Generated SVG assets are stored in the `bg_company_generated_stock_blog` Docker volume. A local Naver agent `readability_failed` result means the pasted editor text must be inspected before retrying.
 
+## Naver thumbnail upload and Windows auto-start
+
+The Local Naver Draft Agent can attach the generated BG Market Note thumbnail before saving a draft. It never clicks Naver's publish button.
+
+Safety boundaries:
+
+- Only image URLs on `BG_COMPANY_BASE_URL` are accepted.
+- Only `/generated/stock-blog/` paths are accepted.
+- Allowed formats are SVG, PNG, JPEG, and WebP with a 12 MB limit.
+- SVG is rendered to a local `1200x675` PNG by Playwright before upload.
+- If download, conversion, editor attachment, or attachment verification fails, draft saving stops with `NAVER_THUMBNAIL_UPLOAD_FAILED`.
+
+After updating and browser-testing the Windows agent, enable image metadata on the VPS:
+
+```text
+NAVER_ALLOW_IMAGE_UPLOAD=true
+```
+
+Register the local agent for the current Windows user at logon:
+
+```powershell
+Set-Location "C:\bg-company\naver-draft-agent-windows"
+powershell -ExecutionPolicy Bypass -File ".\windows\register-startup-task.ps1"
+Get-ScheduledTask -TaskName "BGCompany-NaverDraftAgent"
+```
+
+The task runs hidden after interactive Windows logon. The persistent Naver browser profile remains local. Login, CAPTCHA, and security verification are never bypassed. Agent logs are written to `logs/naver-draft-agent.log`; `.env`, `.naver-profile`, `logs`, `drafts`, and downloaded image files must not be committed.
+
 ## 서비스 상태 확인
 
 ```bash
