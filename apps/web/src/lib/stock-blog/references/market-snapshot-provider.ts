@@ -3,6 +3,7 @@ import path from "node:path";
 import { collectFredMacroData, type FredResult } from "./fred-macro-provider";
 import { collectKisMarketData, type KisResult } from "./kis-market-data-provider";
 import { aggregateFreshness } from "./market-data-utils";
+import { supplementFredMacroData } from "./official-us-macro-provider";
 import type { MarketSnapshot, ReferenceSearchInput } from "./reference-types";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -118,7 +119,10 @@ export function buildAutomaticMarketSnapshot(kis: KisResult, fred: FredResult, c
 }
 
 async function collectAutomaticSnapshot(input: ReferenceSearchInput): Promise<MarketSnapshot> {
-  const [kis, fred] = await Promise.all([collectKisMarketData(input), collectFredMacroData()]);
+  const [kis, primaryFred] = await Promise.all([collectKisMarketData(input), collectFredMacroData()]);
+  const fred = primaryFred.status === "ready"
+    ? primaryFred
+    : await supplementFredMacroData(primaryFred);
   return buildAutomaticMarketSnapshot(kis, fred);
 }
 

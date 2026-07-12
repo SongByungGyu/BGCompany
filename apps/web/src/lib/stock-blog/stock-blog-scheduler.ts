@@ -31,6 +31,8 @@ export type StockBlogSchedulerConfig = {
   autoApprove: boolean;
   autoCreateDraftJob: boolean;
   lookbackMinutes: number;
+  maxRetries: number;
+  retryDelayMinutes: number;
 };
 
 export type StockBlogSchedulerPlanItem = StockBlogScheduleItem & {
@@ -55,6 +57,7 @@ export type StockBlogSchedulerRunResult = {
   scheduleKey: string;
   scheduledFor: string;
   status: StockBlogSchedulerRunStatus;
+  attempt?: number;
   reason?: string;
   pipelineId?: string;
   approvalId?: string;
@@ -72,6 +75,8 @@ export type StockBlogSchedulerStatus = {
   autoApprove: boolean;
   autoCreateDraftJob: boolean;
   lookbackMinutes: number;
+  maxRetries: number;
+  retryDelayMinutes: number;
   now: string;
   plan: StockBlogSchedulerPlanItem[];
   nextRun: StockBlogSchedulerPlanItem | null;
@@ -85,6 +90,8 @@ export type StockBlogSchedulerStatus = {
 
 const DEFAULT_TIMEZONE = "Asia/Seoul";
 const DEFAULT_LOOKBACK_MINUTES = 180;
+const DEFAULT_MAX_RETRIES = 3;
+const DEFAULT_RETRY_DELAY_MINUTES = 10;
 const EVENT_TYPE = "StockBlogScheduledRun";
 
 type StockBlogSchedulerDefinition = StockBlogScheduleItem & {
@@ -202,6 +209,8 @@ export function getStockBlogSchedulerConfig(): StockBlogSchedulerConfig {
     autoApprove: parseBoolean(process.env.STOCK_BLOG_SCHEDULER_AUTO_APPROVE, false),
     autoCreateDraftJob: parseBoolean(process.env.STOCK_BLOG_SCHEDULER_AUTO_CREATE_DRAFT, false),
     lookbackMinutes: parsePositiveInt(process.env.STOCK_BLOG_SCHEDULER_LOOKBACK_MINUTES, DEFAULT_LOOKBACK_MINUTES),
+    maxRetries: parsePositiveInt(process.env.STOCK_BLOG_SCHEDULER_MAX_RETRIES, DEFAULT_MAX_RETRIES),
+    retryDelayMinutes: parsePositiveInt(process.env.STOCK_BLOG_SCHEDULER_RETRY_DELAY_MINUTES, DEFAULT_RETRY_DELAY_MINUTES),
   };
 }
 
@@ -351,6 +360,28 @@ async function writeSchedulerEvent(input: {
   });
 }
 
+function eventPayload(value: Prisma.JsonValue): Record<string, Prisma.JsonValue> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, Prisma.JsonValue>
+    : {};
+}
+
+function retryState(existing: Awaited<ReturnType<typeof prisma.eventLog.findUnique>>, now: Date, config: StockBlogSchedulerConfig) {
+  if (!existing) return { allowed: true, attempt: 1 };
+  const payload = eventPayload(existing.payload);
+  const status = typeof payload.status === "string" ? payload.status : "";
+  const previousAttempt = typeof payload.attempt === "number" ? payload.attempt : 1;
+  if (status !== "failed") return { allowed: false, attempt: previousAttempt, reason: "이미 처리된 스케줄입니다." };
+  if (previousAttempt >= config.maxRetries) return { allowed: false, attempt: previousAttempt, reason: `실패 재시도 한도 ${config.maxRetries}회에 도달했습니다.` };
+  const elapsedMs = now.getTime() - existing.timestamp.getTime();
+  const delayMs = config.retryDelayMinutes * 60 * 1000;
+  if (elapsedMs < delayMs) {
+    const waitMinutes = Math.max(1, Math.ceil((delayMs - elapsedMs) / 60000));
+    return { allowed: false, attempt: previousAttempt, reason: `실패 재시도 대기 중 · 약 ${waitMinutes}분 후 가능` };
+  }
+  return { allowed: true, attempt: previousAttempt + 1 };
+}
+
 export function buildStockBlogSchedulerPlan(now = new Date(), config = getStockBlogSchedulerConfig()): StockBlogSchedulerPlanItem[] {
   return STOCK_BLOG_SCHEDULE_DEFINITIONS.map((definition) => {
     const time = parseTime(definition.scheduledTime);
@@ -383,6 +414,8 @@ export async function getStockBlogSchedulerStatus(now = new Date()): Promise<Sto
     autoApprove: config.autoApprove,
     autoCreateDraftJob: config.autoCreateDraftJob,
     lookbackMinutes: config.lookbackMinutes,
+    maxRetries: config.maxRetries,
+    retryDelayMinutes: config.retryDelayMinutes,
     now: now.toISOString(),
     plan,
     nextRun: plan[0] ?? null,
@@ -398,7 +431,9 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
   const scheduledFor = scheduledAt.toISOString();
 
   const existing = await prisma.eventLog.findUnique({ where: { id } });
-  if (existing) return { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "already_ran", reason: "이미 처리된 스케줄입니다." };
+  const retry = retryState(existing, now, config);
+  if (!retry.allowed) return { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "already_ran", attempt: retry.attempt, reason: retry.reason };
+  const attempt = retry.attempt;
 
   await writeSchedulerEvent({
     key,
@@ -406,7 +441,7 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
     scheduledFor,
     status: "skipped",
     summary: `${contentType} 자동 실행 시작`,
-    payload: { phase: "started", runnerMode: config.runnerMode },
+    payload: { phase: "started", runnerMode: config.runnerMode, attempt },
   });
 
   try {
@@ -420,6 +455,7 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
           scheduleKey: key,
           scheduledFor,
           status: "skipped",
+          attempt,
           reason: `Hermes 남은 횟수 부족: ${requiredRuns}회 필요, ${hermesUsageBefore.remaining}회 남음`,
           hermesUsageBefore,
         };
@@ -477,6 +513,7 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
       scheduleKey: key,
       scheduledFor,
       status,
+      attempt,
       reason: notes.join(" · ") || undefined,
       pipelineId: pipeline.id,
       approvalId: approvalId ?? undefined,
@@ -496,7 +533,7 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
     return result;
   } catch (error) {
     const reason = error instanceof HermesDailyLimitExceededError ? error.message : error instanceof Error ? error.message : "알 수 없는 스케줄러 오류";
-    const result: StockBlogSchedulerRunResult = { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "failed", reason };
+    const result: StockBlogSchedulerRunResult = { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "failed", attempt, reason };
     await writeSchedulerEvent({
       key,
       contentType,

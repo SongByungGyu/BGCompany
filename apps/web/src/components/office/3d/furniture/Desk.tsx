@@ -9,16 +9,17 @@ function isMultiMonitorDesk(desk: FurnitureDesk) {
     desk.id.includes("ops") ||
     desk.id.includes("stock") ||
     desk.id.includes("finance") ||
-    desk.id.includes("director")
+    desk.id.includes("director") ||
+    desk.id.includes("content")
   );
 }
 
 export function Desk({ desk, debug }: { desk: FurnitureDesk; debug: boolean }) {
   const [x, y, z] = desk.position;
   const isReserved = desk.isReserved;
-  const isDirectorDesk = desk.id.includes("director");
-  const width = isDirectorDesk ? 2.35 : desk.capacity > 1 ? 1.9 : 1.36;
-  const depth = isDirectorDesk ? 1.12 : 0.8;
+  const isExecutiveDesk = desk.id.includes("director") || desk.id.includes("ceo");
+  const width = isExecutiveDesk ? 2.35 : desk.capacity > 1 ? 1.9 : 1.52;
+  const depth = isExecutiveDesk ? 1.12 : 0.86;
   const hasMultiMonitor = isMultiMonitorDesk(desk);
 
   return (
@@ -26,7 +27,7 @@ export function Desk({ desk, debug }: { desk: FurnitureDesk; debug: boolean }) {
       <mesh castShadow receiveShadow position={[0, 0.29, 0]}>
         <boxGeometry args={[width, 0.17, depth]} />
         <meshStandardMaterial
-          color={isReserved ? "#D9E4EF" : isDirectorDesk ? "#A8754F" : "#C8A783"}
+          color={isReserved ? "#D9E4EF" : isExecutiveDesk ? "#70513A" : "#536271"}
           opacity={isReserved ? 0.62 : 1}
           roughness={0.7}
           transparent={isReserved}
@@ -34,7 +35,7 @@ export function Desk({ desk, debug }: { desk: FurnitureDesk; debug: boolean }) {
       </mesh>
       <mesh castShadow receiveShadow position={[0, 0.44, -depth / 2 + 0.07]}>
         <boxGeometry args={[width * 0.92, 0.28, 0.08]} />
-        <meshStandardMaterial color={isReserved ? "#B8C5D3" : isDirectorDesk ? "#7B5A42" : "#B7A289"} roughness={0.82} />
+        <meshStandardMaterial color={isReserved ? "#B8C5D3" : isExecutiveDesk ? "#4B382D" : "#394A5A"} roughness={0.82} />
       </mesh>
       {[
         [-width / 2 + 0.13, -depth / 2 + 0.12],
@@ -59,7 +60,7 @@ export function Desk({ desk, debug }: { desk: FurnitureDesk; debug: boolean }) {
         <boxGeometry args={[0.18, 0.055, 0.22]} />
         <meshStandardMaterial color="#A8C1A0" roughness={0.78} />
       </mesh>
-      {isDirectorDesk ? (
+      {isExecutiveDesk ? (
         <>
           <mesh castShadow position={[0, 0.405, 0.36]}>
             <boxGeometry args={[width * 0.68, 0.08, 0.12]} />
@@ -73,7 +74,7 @@ export function Desk({ desk, debug }: { desk: FurnitureDesk; debug: boolean }) {
       ) : null}
       <Chair
         position={[0, 0, 0.78]}
-        color={isReserved ? "#CBD5E1" : desk.id.includes("director") ? "#9BA7C4" : "#8AA4C8"}
+        color={isReserved ? "#CBD5E1" : isExecutiveDesk ? "#59687A" : "#526A82"}
       />
       {debug && isReserved ? (
         <Html center position={[0, 0.92, 0]}>

@@ -586,3 +586,280 @@
   .market-snapshot-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .market-snapshot-columns { grid-template-columns: 1fr; }
 }
+
+/* Phase 1 office redesign: command-center palette and explicit room wayfinding. */
+.office-canvas-wrap {
+  background: radial-gradient(circle at 50% 20%, #173554 0%, #0b1b30 58%, #06111f 100%);
+}
+
+.office-viewport-status-bar {
+  color: #dce9f6;
+  background: linear-gradient(90deg, #0b1c31, #102945);
+  border-bottom-color: #294461;
+}
+
+.office-viewport-status-bar > strong { color: #f4f8fc; }
+.office-viewport-status-bar span { color: #a9bdd2; }
+
+.employee-dock-bar {
+  background: #0b1c31;
+  border-top-color: #294461;
+}
+
+.employee-dock-bar > header { color: #8099b2; }
+.employee-dock-bar > header strong { color: #e6eef7; }
+.employee-dock-bar .dock-list button {
+  color: #dbe8f5;
+  background: #132a43;
+  border-color: #28445f;
+}
+.employee-dock-bar .dock-list button:hover,
+.employee-dock-bar .dock-list button.selected {
+  background: #1a3958;
+  border-color: #63a7ed;
+}
+
+.office-room-label-text {
+  gap: 3px;
+  padding: 5px 8px;
+  color: #f3f8fd;
+  background: #071426d6;
+  border: 1px solid #4b6f91;
+  border-radius: 7px;
+  box-shadow: 0 5px 16px #02081280;
+  text-shadow: none;
+}
+.office-room-label-text strong { font-size: 9px; letter-spacing: .01em; }
+.office-room-label-text span { color: #94b6d3; font-size: 6.5px; }
+.office-room-label-sub-text { border-color: #3e7c72; }
+
+.office-door-label {
+  padding: 5px 9px;
+  color: #dffff8;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  white-space: nowrap;
+  background: #092b30e8;
+  border: 1px solid #5ad6c7;
+  border-radius: 999px;
+  box-shadow: 0 0 16px #35c7b866;
+  pointer-events: none;
+}
+
+.office-employee-label {
+  color: #eaf2fb;
+  background: #08182be8;
+  border-color: #496782;
+  box-shadow: 0 5px 14px #02081280;
+}
+.office-employee-label-selected {
+  color: #fff;
+  border-color: #70a9ef;
+  box-shadow: 0 0 18px #4f7dde80;
+}
+.office-employee-label em { color: #8fc3ff; }
+
+.avatar[data-dept="게시 운영"] { background: #39aebf; }
+
+/* Dark command-center shell used only while the 3D office is mounted. */
+.control-room:has(.office-canvas) {
+  color: #e7f0f8;
+  background: #050e1a;
+}
+.control-room:has(.office-canvas) .top-bar {
+  color: #e7f0f8;
+  background: #071426;
+  border-bottom-color: #1d344d;
+  box-shadow: 0 8px 28px #02081280;
+}
+.control-room:has(.office-canvas) .brand span,
+.control-room:has(.office-canvas) .kpis span { color: #7790aa; }
+.control-room:has(.office-canvas) .clock {
+  color: #a8bed2;
+  background: #0e2239;
+  border-color: #27435f;
+}
+.control-room:has(.office-canvas) .kpis > button { border-left-color: #1d344d; }
+.control-room:has(.office-canvas) .kpis .gear,
+.control-room:has(.office-canvas) .kpis .logout-button {
+  color: #a7bdd2;
+  background: #0c1d31;
+  border-color: #29445f;
+}
+.control-room:has(.office-canvas) .left-nav {
+  background: linear-gradient(180deg, #071426, #08182b);
+  border-right-color: #1d344d;
+}
+.control-room:has(.office-canvas) .left-nav button { color: #758ba2; }
+.control-room:has(.office-canvas) .left-nav button:hover { color: #d9e8f4; background: #102a45; }
+.control-room:has(.office-canvas) .left-nav button.active {
+  color: #5ce1d2;
+  background: #153552;
+  box-shadow: inset 3px 0 0 #4bdacb;
+}
+.control-room:has(.office-canvas) .stage { background: #050e1a; }
+.control-room:has(.office-canvas) .viewport {
+  background: #071426;
+  border-color: #25415e;
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 1px #294863, 0 18px 46px #020812b3;
+}
+.control-room:has(.office-canvas) .office-canvas-wrap {
+  background:
+    radial-gradient(circle at 50% 42%, #102d48 0%, #071627 58%, #030a13 100%);
+}
+.control-room:has(.office-canvas) .panel {
+  color: #e3edf6;
+  background: #08182b;
+  border-left-color: #1f3954;
+  box-shadow: -12px 0 34px #02081280;
+}
+.control-room:has(.office-canvas) .tabs {
+  background: #0a1d32f2;
+  border-bottom-color: #213b56;
+}
+.control-room:has(.office-canvas) .tabs button { color: #7890a8; }
+.control-room:has(.office-canvas) .tabs button.active { color: #55ddcf; background: #123552; }
+.control-room:has(.office-canvas) .profile p,
+.control-room:has(.office-canvas) .task label,
+.control-room:has(.office-canvas) .metric label,
+.control-room:has(.office-canvas) .output label,
+.control-room:has(.office-canvas) .next label { color: #7890a8; }
+.control-room:has(.office-canvas) .task,
+.control-room:has(.office-canvas) .metric,
+.control-room:has(.office-canvas) .output,
+.control-room:has(.office-canvas) .next {
+  color: #e3edf6;
+  background: #0d2137;
+  border-color: #213c58;
+}
+.control-room:has(.office-canvas) .task > div > span { background: #1c334b; }
+.control-room:has(.office-canvas) .output small { color: #7890a8; }
+.control-room:has(.office-canvas) .next { color: #9ec4e8; }
+.control-room:has(.office-canvas) .office-room-label-text {
+  min-width: 118px;
+  padding: 7px 10px;
+  border-color: #5d7892;
+  border-radius: 9px;
+}
+.control-room:has(.office-canvas) .office-room-label-text strong { font-size: 10px; }
+.control-room:has(.office-canvas) .office-room-label-text span { font-size: 7px; }
+.control-room:has(.office-canvas) .office-room-label-text > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.control-room:has(.office-canvas) .office-room-label-text b {
+  display: grid;
+  width: 17px;
+  height: 17px;
+  place-items: center;
+  color: #172338;
+  font-size: 8px;
+  background: #d8e4ee;
+  border-radius: 50%;
+}
+.control-room:has(.office-canvas) .office-room-label-text i {
+  width: 7px;
+  height: 7px;
+  margin-left: auto;
+  background: #4fe0d1;
+  border-radius: 50%;
+  box-shadow: 0 0 9px #4fe0d1;
+}
+.control-room:has(.office-canvas) .avatar { border-radius: 50%; }
+.control-room:has(.office-canvas) .avatar.small {
+  width: 38px;
+  height: 38px;
+  border: 2px solid #43617d;
+  border-radius: 50%;
+  box-shadow: inset 0 0 12px #ffffff1c;
+}
+.control-room:has(.office-canvas) .avatar[data-employee] {
+  --portrait-x: 257;
+  --portrait-y: 852;
+  overflow: visible;
+  color: transparent;
+  background-color: #12253a;
+  background-image: url("/office/employee-portrait-sprite.png");
+  background-repeat: no-repeat;
+  background-position: calc(27px - var(--portrait-x) * 1px) calc(27px - var(--portrait-y) * 1px);
+  background-size: 1672px 941px;
+  border: 2px solid #43617d;
+  box-shadow: inset 0 0 12px #ffffff1c, 0 0 0 1px #091727;
+}
+.control-room:has(.office-canvas) .avatar[data-employee] > span {
+  opacity: 0;
+}
+.control-room:has(.office-canvas) .avatar.small[data-employee] {
+  background-position: calc(19px - var(--portrait-x) * 1px) calc(19px - var(--portrait-y) * 1px);
+}
+.control-room:has(.office-canvas) .avatar[data-employee="ceo"] { --portrait-x: 257; }
+.control-room:has(.office-canvas) .avatar[data-employee="director"] { --portrait-x: 366; }
+.control-room:has(.office-canvas) .avatar[data-employee="stock-monitor"] { --portrait-x: 476; }
+.control-room:has(.office-canvas) .avatar[data-employee="content-planner"] { --portrait-x: 586; }
+.control-room:has(.office-canvas) .avatar[data-employee="marketing-manager"] { --portrait-x: 696; }
+.control-room:has(.office-canvas) .avatar[data-employee="content-writer"] { --portrait-x: 805; }
+.control-room:has(.office-canvas) .avatar[data-employee="qa-auditor"] { --portrait-x: 915; }
+.control-room:has(.office-canvas) .avatar[data-employee="finance-manager"] { --portrait-x: 1025; }
+.control-room:has(.office-canvas) .avatar[data-employee="developer"] { --portrait-x: 1135; }
+.control-room:has(.office-canvas) .avatar[data-employee="local-publisher"] { --portrait-x: 1318; }
+.office-employee-portrait {
+  --portrait-x: 257;
+  --portrait-y: 852;
+  width: 28px;
+  height: 28px;
+  background-color: #12253a;
+  background-image: url("/office/employee-portrait-sprite.png");
+  background-repeat: no-repeat;
+  background-position: calc(14px - var(--portrait-x) * 1px) calc(14px - var(--portrait-y) * 1px);
+  background-size: 1672px 941px;
+  border: 2px solid #9bb5ca;
+  border-radius: 50%;
+  box-shadow: 0 2px 7px #020812b3, 0 0 0 1px #081624;
+  pointer-events: none;
+}
+.office-employee-portrait[data-employee="ceo"] { --portrait-x: 257; }
+.office-employee-portrait[data-employee="director"] { --portrait-x: 366; }
+.office-employee-portrait[data-employee="stock-monitor"] { --portrait-x: 476; }
+.office-employee-portrait[data-employee="content-planner"] { --portrait-x: 586; }
+.office-employee-portrait[data-employee="marketing-manager"] { --portrait-x: 696; }
+.office-employee-portrait[data-employee="content-writer"] { --portrait-x: 805; }
+.office-employee-portrait[data-employee="qa-auditor"] { --portrait-x: 915; }
+.office-employee-portrait[data-employee="finance-manager"] { --portrait-x: 1025; }
+.office-employee-portrait[data-employee="developer"] { --portrait-x: 1135; }
+.control-room:has(.office-canvas) .dock-list button { min-width: 126px; height: 58px; }
+.control-room:has(.office-canvas) .dock-list button.selected {
+  border-color: #4fe0d1;
+  box-shadow: 0 0 14px #4fe0d140;
+}
+.control-room:has(.office-canvas) .dock-list button.selected strong { color: #64e6d8; }
+.control-room:has(.office-canvas) .employee-movement-dev-panel {
+  right: 12px;
+  bottom: 12px;
+  left: 12px;
+  max-width: calc(100% - 24px);
+  overflow-x: auto;
+  color: #a9bdd2;
+  background: #071426e8;
+  border-color: #31506d;
+  box-shadow: 0 10px 30px #020812b3;
+  scrollbar-width: thin;
+}
+.control-room:has(.office-canvas) .employee-movement-dev-panel strong { color: #5ce1d2; }
+.control-room:has(.office-canvas) .employee-movement-dev-panel select {
+  color: #dbe8f4;
+  background: #102941;
+  border-color: #34536f;
+}
+.control-room:has(.office-canvas) .employee-movement-dev-panel button {
+  color: #9ec8ef;
+  background: #143553;
+  white-space: nowrap;
+}
+.control-room:has(.office-canvas) .employee-movement-dev-panel button:last-child,
+.control-room:has(.office-canvas) .employee-movement-dev-panel button:first-of-type {
+  color: #052321;
+  background: #55ddcf;
+}

@@ -5,7 +5,7 @@
       16
     ],
     "floorHeight": 0,
-    "floorColor": "#E1BD8E",
+    "floorColor": "#10243B",
     "labelsEnabled": true
   },
   "debug": {
@@ -46,7 +46,7 @@
   "rooms": [
     {
       "id": "director-room",
-      "name": "대표실",
+      "name": "대표실 · AI 디렉터",
       "position": [
         -8.5,
         0,
@@ -56,12 +56,12 @@
         7,
         5.5
       ],
-      "color": "#F4E9DD",
+      "color": "#173454",
       "wallType": "glass"
     },
     {
       "id": "meeting-room",
-      "name": "대회의실",
+      "name": "중앙 회의실",
       "position": [
         0,
         0,
@@ -71,12 +71,12 @@
         10,
         5.5
       ],
-      "color": "#EAE5F8",
+      "color": "#24345D",
       "wallType": "glass"
     },
     {
       "id": "content-zone",
-      "name": "콘텐츠·마케팅",
+      "name": "콘텐츠 스튜디오",
       "position": [
         8.5,
         0,
@@ -86,12 +86,12 @@
         7,
         5.5
       ],
-      "color": "#F8E7EC",
+      "color": "#442E4C",
       "wallType": "low"
     },
     {
       "id": "review-zone",
-      "name": "비서실",
+      "name": "게시 운영실",
       "position": [
         -8.5,
         0,
@@ -101,12 +101,12 @@
         7,
         5.5
       ],
-      "color": "#F2EEE2",
+      "color": "#173C4D",
       "wallType": "low"
     },
     {
       "id": "dev-ops-zone",
-      "name": "개발·운영",
+      "name": "개발 · 서버실",
       "position": [
         0,
         0,
@@ -116,12 +116,12 @@
         10,
         5.5
       ],
-      "color": "#E4ECFA",
+      "color": "#173355",
       "wallType": "low"
     },
     {
       "id": "finance-stock-zone",
-      "name": "재정·주식",
+      "name": "시장 분석 · 재정실",
       "position": [
         8.5,
         0,
@@ -131,7 +131,7 @@
         7,
         5.5
       ],
-      "color": "#FAF0D9",
+      "color": "#453B26",
       "wallType": "low"
     },
     {
@@ -146,12 +146,12 @@
         7,
         5
       ],
-      "color": "#F3E9DF",
+      "color": "#24443C",
       "wallType": "low"
     },
     {
       "id": "lobby-common-zone",
-      "name": "로비·공용공간",
+      "name": "승인 게이트 · 중앙 로비",
       "position": [
         0,
         0,
@@ -161,12 +161,12 @@
         10,
         5
       ],
-      "color": "#EDF2F7",
+      "color": "#152D49",
       "wallType": "open"
     },
     {
       "id": "knowledge-audit-zone",
-      "name": "지식관리·감사",
+      "name": "QA · 감사실",
       "position": [
         8.5,
         0,
@@ -176,12 +176,12 @@
         7,
         5
       ],
-      "color": "#EDE9F8",
+      "color": "#302D52",
       "wallType": "low"
     },
     {
       "id": "pantry-coffee-zone",
-      "name": "탕비·커피존",
+      "name": "라운지 커피존",
       "position": [
         2.8,
         0.04,
@@ -191,7 +191,7 @@
         4,
         3.8
       ],
-      "color": "#E2F1EA",
+      "color": "#24483E",
       "wallType": "open",
       "parentId": "lobby-common-zone"
     }
@@ -924,11 +924,11 @@
     {
       "id": "approval-wait-point",
       "type": "waitingPoint",
-      "roomId": "director-room",
+      "roomId": "lobby-common-zone",
       "position": [
-        -8.5,
+        -1.4,
         0,
-        -3.08
+        4.48
       ]
     },
     {
@@ -3540,13 +3540,16 @@
     ]
   },
   "employeeSeats": {
+    "ceo": "director-report-point",
     "director": "director-seat",
     "content-planner": "content-seat-01",
     "marketing-manager": "content-seat-02",
+    "content-writer": "content-seat-03",
     "developer": "dev-seat-01",
     "finance-manager": "finance-seat-01",
     "stock-monitor": "stock-seat-01",
-    "qa-auditor": "audit-seat-01"
+    "qa-auditor": "audit-seat-01",
+    "local-publisher": "secretary-seat-01"
   },
   "seats": [
     {
@@ -3566,7 +3569,7 @@
       "id": "secretary-seat-01",
       "deskId": "secretary-desk-01",
       "roomId": "review-zone",
-      "employeeId": null,
+      "employeeId": "local-publisher",
       "position": [
         -8.55,
         0,
@@ -3618,7 +3621,7 @@
       "id": "content-seat-03",
       "deskId": "content-desk-03",
       "roomId": "content-zone",
-      "employeeId": null,
+      "employeeId": "content-writer",
       "position": [
         8.25,
         0,
@@ -4016,11 +4019,11 @@
     {
       "id": "approval-wait-point",
       "type": "waitingPoint",
-      "roomId": "director-room",
+      "roomId": "lobby-common-zone",
       "position": [
-        -8.5,
+        -1.4,
         0,
-        -3.08
+        4.48
       ],
       "rotation": -0.6
     },

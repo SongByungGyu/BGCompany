@@ -30,16 +30,21 @@ const meetingSeatIds = [
   "meeting-seat-04",
   "meeting-seat-05",
   "meeting-seat-06",
+  "meeting-seat-07",
+  "meeting-seat-08",
+  "meeting-seat-09",
 ];
 
 const preferredMeetingSeatMap: Record<string, string> = {
-  director: "meeting-seat-01",
-  "content-planner": "meeting-seat-02",
-  "marketing-manager": "meeting-seat-03",
-  developer: "meeting-seat-04",
-  "finance-manager": "meeting-seat-05",
-  "stock-monitor": "meeting-seat-06",
-  "qa-auditor": "meeting-seat-05",
+  ceo: "meeting-seat-01",
+  director: "meeting-seat-02",
+  "content-planner": "meeting-seat-03",
+  "marketing-manager": "meeting-seat-04",
+  "content-writer": "meeting-seat-05",
+  "qa-auditor": "meeting-seat-06",
+  "finance-manager": "meeting-seat-07",
+  "stock-monitor": "meeting-seat-08",
+  developer: "meeting-seat-09",
 };
 
 const departmentFallbackDestinationMap: Record<string, string> = {
@@ -49,16 +54,21 @@ const departmentFallbackDestinationMap: Record<string, string> = {
   주식팀: "stock-seat-01",
   개발팀: "dev-seat-01",
   "지식·감사": "audit-seat-01",
+  "게시 운영": "publishing-station-point",
 };
 
 const roomEntryNodeMap: Record<string, string> = {
+  "ceo-office": "ceo-open-node",
   "director-room": "director-open-node",
+  "market-analysis-room": "market-open-node",
   "meeting-room": "meeting-open-hub",
   "content-zone": "content-open-node",
   "review-zone": "review-open-node",
-  "dev-ops-zone": "dev-open-hub",
+  "dev-ops-zone": "dev-open-room-node",
+  "finance-room": "finance-open-node",
   "finance-stock-zone": "finance-open-node",
   "break-lounge": "lounge-open-node",
+  "approval-zone": "approval-open-node",
   "lobby-common-zone": "lobby-open-hub",
   "pantry-coffee-zone": "pantry-open-node",
   "knowledge-audit-zone": "knowledge-open-node",
@@ -160,9 +170,12 @@ function resolveStatusDestinationId(
   switch (employee.status) {
     case "회의 중":
       return reserveFirstAvailable(preferredMeetingSeatIds(employee), destinationMap, occupancy, employee.id);
-    case "조사 중":
-      return reserveFirstAvailable(
-        ["knowledge-search-point", "knowledge-seat-01", baseDestinationId],
+      case "조사 중":
+        if (employee.id === "stock-monitor") {
+          return reserveFirstAvailable([baseDestinationId], destinationMap, occupancy, employee.id);
+        }
+        return reserveFirstAvailable(
+          ["knowledge-search-point", "knowledge-seat-01", baseDestinationId],
         destinationMap,
         occupancy,
         employee.id,
@@ -201,7 +214,7 @@ function buildDestinationRoute(destination: MovementDestination, navNodeMap: Map
   const mainNode = navNodeMap.get("dev-open-hub");
   const roomEntryNode = navNodeMap.get(roomEntryNodeMap[destination.roomId] ?? "");
 
-  if (destination.roomId === "lobby-common-zone") {
+  if (destination.roomId === "lobby-common-zone" || destination.roomId === "approval-zone") {
     pushUniquePoint(path, lobbyNode);
   } else if (destination.roomId === "pantry-coffee-zone" || destination.roomId === "break-lounge") {
     pushUniquePoint(path, lobbyNode);

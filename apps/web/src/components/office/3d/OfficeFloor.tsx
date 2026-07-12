@@ -1,6 +1,6 @@
 import type { OfficeLayout } from "./types";
 
-const WOOD_PLANK_COUNT = 26;
+const WOOD_PLANK_COUNT = 18;
 
 export function OfficeFloor({ layout }: { layout: OfficeLayout }) {
   const [width, depth] = layout.office.size;
@@ -19,8 +19,8 @@ export function OfficeFloor({ layout }: { layout: OfficeLayout }) {
           <mesh key={index} receiveShadow position={[0, 0.018, z]}>
             <boxGeometry args={[width - 0.18, 0.012, 0.018]} />
             <meshStandardMaterial
-              color={index % 2 === 0 ? "#D8B98F" : "#E4C7A0"}
-              opacity={0.42}
+              color={index % 2 === 0 ? "#2C4358" : "#38536A"}
+              opacity={0.16}
               roughness={0.94}
               transparent
             />

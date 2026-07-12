@@ -2,11 +2,12 @@
 
 import { Canvas } from "@react-three/fiber";
 import officeLayout from "@config/office-layout.json";
+import { createConceptOfficeLayout } from "./conceptOfficeLayout";
 import { OfficeScene } from "./OfficeScene";
 import type { OfficeEmployee, OfficeLayout } from "./types";
 
-const layout = officeLayout as unknown as OfficeLayout;
-const showOfficeDebugLabels = layout.office.labelsEnabled && layout.debug.showOfficeDebugLabels;
+const layout = createConceptOfficeLayout(officeLayout as unknown as OfficeLayout);
+const showOfficeLabels = layout.office.labelsEnabled;
 
 export default function OfficeCanvas({
   employees,
@@ -29,7 +30,7 @@ export default function OfficeCanvas({
           layout={layout}
           onSelectEmployee={onSelectEmployee}
           selectedEmployeeId={selectedEmployeeId}
-          showLabels={showOfficeDebugLabels}
+          showLabels={showOfficeLabels}
         />
       </Canvas>
     </div>

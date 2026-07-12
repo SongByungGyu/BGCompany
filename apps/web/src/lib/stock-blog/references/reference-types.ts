@@ -51,13 +51,13 @@ export type MarketSnapshotMetric = {
   freshness?: "fresh" | "stale" | "expired" | "unknown";
   ageMinutes?: number;
   maxAgeMinutes?: number;
-  provider?: "kis" | "fred" | "manual" | "configured-api";
+  provider?: "kis" | "fred" | "us-treasury" | "bls" | "bea" | "federal-reserve" | "manual" | "configured-api";
   sourceName?: string;
   url?: string;
 };
 
 export type MarketSnapshotSource = {
-  provider: "kis" | "fred" | "manual" | "configured-api";
+  provider: "kis" | "fred" | "us-treasury" | "bls" | "bea" | "federal-reserve" | "manual" | "configured-api";
   sourceName: string;
   url: string;
   asOf: string;

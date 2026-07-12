@@ -11,7 +11,7 @@ import {
 } from "./employeeMovement";
 import type { OfficeEmployee, OfficeLayout, Vec3 } from "./types";
 
-const MOVEMENT_SPEED = 1.85;
+const MOVEMENT_SPEED = 2.55;
 const ARRIVAL_THRESHOLD = 0.045;
 
 const departmentColors: Record<string, string> = {
@@ -21,6 +21,7 @@ const departmentColors: Record<string, string> = {
   주식팀: "#D9A23E",
   개발팀: "#6E97E0",
   "지식·감사": "#9B86DB",
+  "게시 운영": "#47C7D9",
 };
 
 const statusColors: Record<string, string> = {
@@ -133,6 +134,49 @@ function ActionEffect({
   }
 
   return null;
+}
+
+function LocalPublisherRobot({ statusColor, selected }: { statusColor: string; selected: boolean }) {
+  return (
+    <>
+      <mesh castShadow position={[0, 0.25, 0]}>
+        <cylinderGeometry args={[0.25, 0.3, 0.18, 20]} />
+        <meshStandardMaterial color="#20344F" metalness={0.42} roughness={0.38} />
+      </mesh>
+      <mesh castShadow position={[0, 0.56, 0]}>
+        <boxGeometry args={[0.5, 0.5, 0.38]} />
+        <meshStandardMaterial color="#2A5273" metalness={0.28} roughness={0.38} />
+      </mesh>
+      <mesh position={[0, 0.58, 0.2]}>
+        <boxGeometry args={[0.35, 0.25, 0.035]} />
+        <meshStandardMaterial color="#071426" emissive="#0B3554" emissiveIntensity={0.45} />
+      </mesh>
+      <mesh position={[-0.095, 0.61, 0.225]}>
+        <boxGeometry args={[0.055, 0.035, 0.02]} />
+        <meshBasicMaterial color="#63E7D7" />
+      </mesh>
+      <mesh position={[0.095, 0.61, 0.225]}>
+        <boxGeometry args={[0.055, 0.035, 0.02]} />
+        <meshBasicMaterial color="#63E7D7" />
+      </mesh>
+      <mesh castShadow position={[0, 0.94, 0]}>
+        <boxGeometry args={[0.42, 0.28, 0.34]} />
+        <meshStandardMaterial color="#D9E9F5" metalness={0.12} roughness={0.34} />
+      </mesh>
+      <mesh position={[0, 0.98, 0.18]}>
+        <boxGeometry args={[0.28, 0.12, 0.025]} />
+        <meshStandardMaterial color="#0C2037" emissive="#174B6C" emissiveIntensity={0.5} />
+      </mesh>
+      <mesh position={[0, 1.17, 0]}>
+        <cylinderGeometry args={[0.018, 0.018, 0.2, 8]} />
+        <meshStandardMaterial color="#8DA9BD" metalness={0.5} />
+      </mesh>
+      <mesh position={[0, 1.3, 0]}>
+        <sphereGeometry args={[0.055, 12, 8]} />
+        <meshStandardMaterial color={statusColor} emissive={statusColor} emissiveIntensity={selected ? 0.75 : 0.4} />
+      </mesh>
+    </>
+  );
 }
 
 function EmployeeAvatar3D({
@@ -255,6 +299,10 @@ function EmployeeAvatar3D({
       <ActionEffect actionKind={actionKind} isMoving={isMoving} pulseRef={pulseRef} />
 
       <group ref={bodyRef}>
+        {employee.id === "local-publisher" ? (
+          <LocalPublisherRobot statusColor={visibleStatusColor} selected={selected} />
+        ) : (
+          <>
         <mesh castShadow position={[0, 0.22, 0.08]} rotation={[0.2, 0, 0]}>
           <cylinderGeometry args={[0.07, 0.08, 0.3, 10]} />
           <meshStandardMaterial color="#6D7480" roughness={0.72} />
@@ -288,7 +336,15 @@ function EmployeeAvatar3D({
             roughness={0.55}
           />
         </mesh>
+          </>
+        )}
       </group>
+
+      {employee.id !== "local-publisher" ? (
+        <Html center position={[0, 0.91, 0.24]} occlude={false} zIndexRange={[9, 0]}>
+          <div className="office-employee-portrait" data-employee={employee.id} />
+        </Html>
+      ) : null}
 
       <Html center position={[0, 1.28, 0]} occlude={false} zIndexRange={[10, 0]}>
         <div className={`office-employee-label ${selected ? "office-employee-label-selected" : ""}`}>
