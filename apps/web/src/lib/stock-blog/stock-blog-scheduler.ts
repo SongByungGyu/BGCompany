@@ -6,6 +6,7 @@ import { HermesDailyLimitExceededError, getHermesUsageSummary } from "@/lib/herm
 import { createNaverDraftJobFromPipeline } from "@/lib/naver-drafts/naver-draft-jobs";
 import type { StockBlogQualityGateResult } from "@/features/content-pipeline/content-pipeline-types";
 import { evaluateStockBlogPublishQuality } from "@/lib/stock-blog/quality-gate";
+import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
 import { resolveApproval } from "@/lib/repositories/approval-actions";
 import {
   getExpectedHermesRunsForStockBlog,
@@ -296,7 +297,16 @@ function briefDateLabel(now: Date, timezone: string) {
 
 function buildPipelineInput(definition: StockBlogSchedulerDefinition, runnerMode: StockBlogSchedulerRunnerMode, now: Date, timezone: string) {
   const date = briefDateLabel(now, timezone);
-  return { topic: definition.topic, title: definition.title(date), channel: "blog", runnerMode };
+  return {
+    topic: definition.topic,
+    title: buildStockBlogEditorialTitle({
+      template: definition.contentType,
+      marketDate: date,
+      sourceTitle: definition.title(date),
+    }),
+    channel: "blog",
+    runnerMode,
+  };
 }
 
 function usageSnapshot(usage: Awaited<ReturnType<typeof getHermesUsageSummary>>) {

@@ -7,6 +7,7 @@ import type { CompetitorBlogReference, ReferenceBundle, ReferenceItem } from "@/
 import { buildStockBlogThumbnail, inferStockBriefingTemplateFromPipeline } from "@/lib/stock-blog/thumbnail-automation";
 import { evaluateStockBlogPublishQuality, getRealStockReferences } from "@/lib/stock-blog/quality-gate";
 import { renderNaverBody, type NaverBodyBlock } from "@/lib/stock-blog/naver-body";
+import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
 
 export type NaverDraftJobStatus =
   | "created"
@@ -357,13 +358,15 @@ function buildDraftQualityCheck(template: StockBriefingTemplate, body: string, r
 function buildDraftFromPipeline(pipeline: ContentPipelineRun): DraftBuildResult {
   const template = pipeline.naverBlogPublishPrep?.briefingTemplate ?? inferStockBriefingTemplateFromPipeline(pipeline);
   const copy = STOCK_BRIEFING_COPY[template];
+  const sourceTitle = clean(pipeline.writerResult?.finalTitle)
+    || clean(pipeline.marketingResult?.recommendedTitle)
+    || clean(pipeline.plannerResult?.title)
+    || clean(pipeline.outputTitle)
+    || clean(pipeline.title)
+    || copy.fallbackTitle;
+  const marketDate = collectReferenceBundle(pipeline)?.marketDate || pipeline.createdAt;
   const title = sanitizeByTemplate(
-    clean(pipeline.writerResult?.finalTitle)
-      || clean(pipeline.marketingResult?.recommendedTitle)
-      || clean(pipeline.plannerResult?.title)
-      || clean(pipeline.outputTitle)
-      || clean(pipeline.title)
-      || copy.fallbackTitle,
+    buildStockBlogEditorialTitle({ template, marketDate, sourceTitle }),
     template,
   );
   const thumbnail = pipeline.naverBlogPublishPrep ?? buildStockBlogThumbnail(pipeline, template);

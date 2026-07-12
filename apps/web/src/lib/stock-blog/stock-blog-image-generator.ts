@@ -3,6 +3,7 @@ import "server-only";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { StockBriefingTemplate } from "@/features/content-pipeline/content-pipeline-types";
+import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
 
 export type GeneratedStockBlogImages = {
   thumbnailImageUrl?: string;
@@ -14,15 +15,41 @@ export type GeneratedStockBlogImages = {
 
 type ImageTheme = {
   eyebrow: string;
+  marketLabel: string;
   accent: string;
   secondary: string;
+  skyline: string;
 };
 
 const THEMES: Record<StockBriefingTemplate, ImageTheme> = {
-  KOREA_DAILY_PREVIEW: { eyebrow: "KOREA DAILY PREVIEW", accent: "#42A5FF", secondary: "#8ED0FF" },
-  KOREA_MARKET_CLOSE_US_PREVIEW: { eyebrow: "KOREA CLOSE · US PREVIEW", accent: "#D5A64A", secondary: "#FFE09A" },
-  WEEKLY_MARKET_REVIEW: { eyebrow: "WEEKLY MARKET REVIEW", accent: "#56D7B0", secondary: "#A7F0D8" },
-  NEXT_WEEK_MARKET_PREVIEW: { eyebrow: "NEXT WEEK PREVIEW", accent: "#9B8CFF", secondary: "#D0C9FF" },
+  KOREA_DAILY_PREVIEW: {
+    eyebrow: "KOREA MARKET PREVIEW",
+    marketLabel: "KOSPI · KOSDAQ",
+    accent: "#4DA3FF",
+    secondary: "#B8DCFF",
+    skyline: "#123D68",
+  },
+  KOREA_MARKET_CLOSE_US_PREVIEW: {
+    eyebrow: "KOREA CLOSE · US PREVIEW",
+    marketLabel: "KOSPI · NASDAQ · S&P 500",
+    accent: "#D9AB50",
+    secondary: "#FFE5A8",
+    skyline: "#173653",
+  },
+  WEEKLY_MARKET_REVIEW: {
+    eyebrow: "WEEKLY MARKET REVIEW",
+    marketLabel: "GLOBAL WEEKLY FLOW",
+    accent: "#56D7B0",
+    secondary: "#B9F3E2",
+    skyline: "#123F4C",
+  },
+  NEXT_WEEK_MARKET_PREVIEW: {
+    eyebrow: "NEXT WEEK PREVIEW",
+    marketLabel: "EVENTS · RATES · EARNINGS",
+    accent: "#9B8CFF",
+    secondary: "#D8D2FF",
+    skyline: "#28355D",
+  },
 };
 
 function xmlEscape(value: string) {
@@ -38,7 +65,7 @@ function safeSegment(value: string) {
   return value.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 120) || "pipeline";
 }
 
-function splitTitle(value: string, maxLength = 17) {
+function splitTitle(value: string, maxLength = 19) {
   const words = value.trim().split(/\s+/).filter(Boolean);
   if (words.length === 0) return ["시장 브리핑"];
   const lines: string[] = [];
@@ -47,16 +74,70 @@ function splitTitle(value: string, maxLength = 17) {
     if (!current || `${current} ${word}`.length > maxLength) lines.push(word);
     else lines[lines.length - 1] = `${current} ${word}`;
   }
-  return lines.slice(0, 3);
+  return lines.slice(0, 2);
 }
 
 function chartPath(width: number, height: number) {
-  const points = [0.03, 0.18, 0.12, 0.35, 0.3, 0.48, 0.42, 0.39, 0.57, 0.68, 0.62, 0.82, 0.78, 0.91];
+  const points = [0.14, 0.25, 0.19, 0.43, 0.36, 0.52, 0.48, 0.63, 0.57, 0.76, 0.69, 0.9, 0.8, 0.96];
   return points.map((value, index) => {
     const x = Math.round((index / (points.length - 1)) * width);
     const y = Math.round(height - value * height);
     return `${index === 0 ? "M" : "L"}${x},${y}`;
   }).join(" ");
+}
+
+function gridSvg(width: number, height: number) {
+  const vertical = Array.from({ length: 10 }, (_, index) => {
+    const x = Math.round((index / 9) * width);
+    return `<line x1="${x}" y1="0" x2="${x}" y2="${height}"/>`;
+  }).join("");
+  const horizontal = Array.from({ length: 6 }, (_, index) => {
+    const y = Math.round((index / 5) * height);
+    return `<line x1="0" y1="${y}" x2="${width}" y2="${y}"/>`;
+  }).join("");
+  return `<g stroke="#AFCBE8" stroke-width="1" opacity="0.09">${vertical}${horizontal}</g>`;
+}
+
+function candleSvg(theme: ImageTheme) {
+  const candles = [
+    [95, 108, 62, 136, 32], [132, 94, 48, 122, 35], [169, 117, 77, 142, 31],
+    [206, 83, 41, 119, 34], [243, 67, 34, 103, 31], [280, 89, 51, 126, 34],
+    [317, 59, 24, 96, 31], [354, 49, 18, 82, 33], [391, 72, 39, 108, 31],
+  ];
+  return candles.map(([x, open, close, low, width], index) => {
+    const rising = close < open;
+    const color = rising ? theme.accent : "#E9899B";
+    const bodyY = Math.min(open, close);
+    const bodyHeight = Math.max(10, Math.abs(open - close));
+    return `<g opacity="${0.58 + index * 0.035}"><line x1="${x + width / 2}" y1="${close - 18}" x2="${x + width / 2}" y2="${low}" stroke="${color}" stroke-width="3"/><rect x="${x}" y="${bodyY}" width="${width}" height="${bodyHeight}" rx="3" fill="${color}"/></g>`;
+  }).join("");
+}
+
+function skylineSvg(width: number, baseY: number, theme: ImageTheme) {
+  const buildings = [
+    [0, 145, 72], [70, 105, 54], [122, 170, 86], [205, 120, 62], [265, 195, 78],
+    [340, 152, 52], [390, 225, 94], [482, 176, 66], [546, 250, 80], [624, 185, 56],
+    [678, 215, 74], [750, 162, 58], [806, 275, 98], [902, 205, 70], [970, 154, 62],
+    [1030, 232, 88], [1115, 178, 85],
+  ];
+  const shapes = buildings.map(([x, height, buildingWidth], index) => {
+    const y = baseY - height;
+    const windows = Array.from({ length: Math.max(2, Math.floor(buildingWidth / 18)) }, (_, windowIndex) => {
+      const wx = x + 9 + windowIndex * 16;
+      return `<line x1="${wx}" y1="${y + 18}" x2="${wx}" y2="${baseY - 12}"/>`;
+    }).join("");
+    return `<g><rect x="${x}" y="${y}" width="${buildingWidth}" height="${height}" fill="${index % 3 === 0 ? "#0A2038" : theme.skyline}" opacity="${0.78 + (index % 3) * 0.07}"/><g stroke="#B9D5EE" stroke-width="2" opacity="0.13">${windows}</g></g>`;
+  }).join("");
+  return `<g clip-path="url(#cityClip)">${shapes}<rect x="0" y="${baseY}" width="${width}" height="80" fill="#071426"/></g>`;
+}
+
+function marketPanelSvg(theme: ImageTheme) {
+  const rows = theme.marketLabel.split(" · ").slice(0, 4);
+  return `<g transform="translate(886 118)">
+    <rect width="260" height="${86 + rows.length * 48}" rx="20" fill="#06182B" opacity="0.78" stroke="#88B7E3" stroke-opacity="0.24"/>
+    <text x="24" y="38" fill="${theme.secondary}" font-size="17" font-weight="700" letter-spacing="2" font-family="Arial, sans-serif">MARKET CHECK</text>
+    ${rows.map((row, index) => `<g transform="translate(24 ${70 + index * 48})"><text y="18" fill="#EAF3FC" font-size="18" font-weight="700" font-family="Arial, 'Noto Sans KR', sans-serif">${xmlEscape(row)}</text><line x1="130" y1="12" x2="210" y2="12" stroke="${theme.accent}" stroke-width="4" opacity="${0.88 - index * 0.12}"/></g>`).join("")}
+  </g>`;
 }
 
 function svgCard(input: {
@@ -66,36 +147,43 @@ function svgCard(input: {
   subtitle: string;
   footer: string;
   theme: ImageTheme;
+  hero?: boolean;
 }) {
-  const lines = splitTitle(input.title, input.width >= 1100 ? 24 : 17);
-  const titleSize = input.width >= 1100 ? 66 : 72;
-  const startY = input.height >= 1000 ? 350 : 250;
-  const lineGap = titleSize + 18;
+  const lines = splitTitle(input.title, input.width >= 1100 ? 21 : 17);
+  const titleSize = input.hero ? 58 : 60;
+  const startY = input.hero ? 278 : 268;
   const titleSvg = lines.map((line, index) => (
-    `<text x="72" y="${startY + index * lineGap}" fill="#FFFFFF" font-size="${titleSize}" font-weight="800" font-family="Arial, 'Noto Sans KR', sans-serif">${xmlEscape(line)}</text>`
+    `<text x="70" y="${startY + index * 72}" fill="#FFFFFF" font-size="${titleSize}" font-weight="800" font-family="'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif" paint-order="stroke" stroke="#061322" stroke-width="3">${xmlEscape(line)}</text>`
   )).join("\n");
-  const chartTop = Math.round(input.height * 0.63);
-  const chartWidth = input.width - 144;
-  const chartHeight = Math.round(input.height * 0.18);
+  const chartTop = input.hero ? 388 : 360;
+  const chartWidth = 500;
+  const chartHeight = 145;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${input.width}" height="${input.height}" viewBox="0 0 ${input.width} ${input.height}">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#071426"/><stop offset="1" stop-color="#102F55"/></linearGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#041326"/><stop offset="0.54" stop-color="#0A2B4E"/><stop offset="1" stop-color="#102F55"/></linearGradient>
+    <linearGradient id="overlay" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#031020" stop-opacity="0.96"/><stop offset="0.62" stop-color="#071A30" stop-opacity="0.48"/><stop offset="1" stop-color="#0B2D50" stop-opacity="0.2"/></linearGradient>
     <linearGradient id="line" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${input.theme.secondary}"/><stop offset="1" stop-color="${input.theme.accent}"/></linearGradient>
+    <clipPath id="cityClip"><rect width="${input.width}" height="${input.height}"/></clipPath>
     <filter id="glow"><feGaussianBlur stdDeviation="5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <pattern id="dots" width="26" height="26" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="2" fill="#9BC7ED" opacity="0.13"/></pattern>
   </defs>
-  <rect width="100%" height="100%" rx="34" fill="url(#bg)"/>
-  <circle cx="${input.width - 120}" cy="100" r="180" fill="${input.theme.accent}" opacity="0.10"/>
-  <text x="72" y="95" fill="${input.theme.secondary}" font-size="24" font-weight="700" letter-spacing="3" font-family="Arial, sans-serif">${xmlEscape(input.theme.eyebrow)}</text>
-  <rect x="72" y="126" width="92" height="8" rx="4" fill="${input.theme.accent}"/>
-  <text x="72" y="210" fill="#C9D8EA" font-size="30" font-weight="600" font-family="Arial, 'Noto Sans KR', sans-serif">${xmlEscape(input.subtitle)}</text>
+  <rect width="100%" height="100%" rx="28" fill="url(#bg)"/>
+  <rect width="100%" height="100%" rx="28" fill="url(#dots)"/>
+  ${gridSvg(input.width, input.height)}
+  <g transform="translate(30 85)">${candleSvg(input.theme)}</g>
+  <g transform="translate(58 ${chartTop})"><path d="${chartPath(chartWidth, chartHeight)}" fill="none" stroke="url(#line)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="0.72" filter="url(#glow)"/></g>
+  ${skylineSvg(input.width, input.height - 42, input.theme)}
+  <rect width="100%" height="100%" rx="28" fill="url(#overlay)"/>
+  <text x="70" y="70" fill="#FFFFFF" font-size="24" font-weight="800" letter-spacing="2" font-family="Georgia, 'Times New Roman', serif">BG MARKET NOTE</text>
+  <text x="70" y="112" fill="${input.theme.secondary}" font-size="18" font-weight="700" letter-spacing="3" font-family="Arial, sans-serif">${xmlEscape(input.theme.eyebrow)}</text>
+  <rect x="70" y="132" width="96" height="6" rx="3" fill="${input.theme.accent}"/>
+  <text x="70" y="205" fill="#D2E2F1" font-size="25" font-weight="600" font-family="'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif">${xmlEscape(input.subtitle)}</text>
   ${titleSvg}
-  <g transform="translate(72 ${chartTop})">
-    <line x1="0" y1="${chartHeight}" x2="${chartWidth}" y2="${chartHeight}" stroke="#FFFFFF" opacity="0.15"/>
-    <path d="${chartPath(chartWidth, chartHeight)}" fill="none" stroke="url(#line)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
-  </g>
-  <text x="72" y="${input.height - 62}" fill="#9EB2CA" font-size="23" font-family="Arial, 'Noto Sans KR', sans-serif">${xmlEscape(input.footer)}</text>
-  <text x="${input.width - 72}" y="${input.height - 62}" text-anchor="end" fill="#FFFFFF" font-size="25" font-weight="700" font-family="Arial, sans-serif">BG MARKET NOTE</text>
+  ${marketPanelSvg(input.theme)}
+  <rect x="0" y="${input.height - 64}" width="100%" height="64" fill="#041120" opacity="0.92"/>
+  <text x="70" y="${input.height - 23}" fill="#AFC5DA" font-size="17" font-family="'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif">${xmlEscape(input.footer)}</text>
+  <text x="${input.width - 55}" y="${input.height - 23}" text-anchor="end" fill="#FFFFFF" font-size="18" font-weight="700" font-family="Arial, sans-serif">한국·미국 시장 흐름을 정리하는 브리핑</text>
 </svg>`;
 }
 
@@ -111,13 +199,18 @@ export async function generateStockBlogImages(input: {
   const relativeDir = `/generated/stock-blog/${id}`;
   const outputDir = path.join(process.cwd(), "public", "generated", "stock-blog", id);
   const theme = THEMES[input.template];
-  const footer = `${input.marketDate || generatedAt.slice(0, 10)} · 자체 생성 정보 카드`;
+  const footer = `${input.marketDate || generatedAt.slice(0, 10)} · BG Market Note original graphic`;
+  const editorialTitle = buildStockBlogEditorialTitle({
+    template: input.template,
+    marketDate: input.marketDate,
+    sourceTitle: input.title,
+  });
   try {
     await mkdir(outputDir, { recursive: true });
     const files = [
       {
         name: "thumbnail.svg",
-        svg: svgCard({ width: 1080, height: 1080, title: input.title, subtitle: "핵심 흐름과 체크포인트", footer, theme }),
+        svg: svgCard({ width: 1200, height: 675, title: editorialTitle, subtitle: input.topic, footer, theme, hero: true }),
       },
       {
         name: "market-summary.svg",
