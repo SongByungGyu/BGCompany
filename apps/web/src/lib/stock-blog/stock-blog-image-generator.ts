@@ -74,7 +74,15 @@ function splitTitle(value: string, maxLength = 19) {
     if (!current || `${current} ${word}`.length > maxLength) lines.push(word);
     else lines[lines.length - 1] = `${current} ${word}`;
   }
-  return lines.slice(0, 2);
+  if (lines.length <= 2) return lines;
+  const visible = lines.slice(0, 2);
+  visible[1] = `${visible[1].slice(0, Math.max(1, maxLength - 1))}…`;
+  return visible;
+}
+
+function truncate(value: string, maxLength: number) {
+  const cleaned = value.trim().replace(/\s+/g, " ");
+  return cleaned.length > maxLength ? `${cleaned.slice(0, maxLength - 1)}…` : cleaned;
 }
 
 function chartPath(width: number, height: number) {
@@ -133,10 +141,10 @@ function skylineSvg(width: number, baseY: number, theme: ImageTheme) {
 
 function marketPanelSvg(theme: ImageTheme) {
   const rows = theme.marketLabel.split(" · ").slice(0, 4);
-  return `<g transform="translate(886 118)">
-    <rect width="260" height="${86 + rows.length * 48}" rx="20" fill="#06182B" opacity="0.78" stroke="#88B7E3" stroke-opacity="0.24"/>
+  return `<g transform="translate(830 118)">
+    <rect width="250" height="${86 + rows.length * 48}" rx="20" fill="#06182B" opacity="0.78" stroke="#88B7E3" stroke-opacity="0.24"/>
     <text x="24" y="38" fill="${theme.secondary}" font-size="17" font-weight="700" letter-spacing="2" font-family="Arial, sans-serif">MARKET CHECK</text>
-    ${rows.map((row, index) => `<g transform="translate(24 ${70 + index * 48})"><text y="18" fill="#EAF3FC" font-size="18" font-weight="700" font-family="Arial, 'Noto Sans KR', sans-serif">${xmlEscape(row)}</text><line x1="130" y1="12" x2="210" y2="12" stroke="${theme.accent}" stroke-width="4" opacity="${0.88 - index * 0.12}"/></g>`).join("")}
+    ${rows.map((row, index) => `<g transform="translate(24 ${70 + index * 48})"><text y="18" fill="#EAF3FC" font-size="17" font-weight="700" font-family="Arial, 'Noto Sans KR', sans-serif">${xmlEscape(row)}</text><line x1="128" y1="12" x2="202" y2="12" stroke="${theme.accent}" stroke-width="4" opacity="${0.88 - index * 0.12}"/></g>`).join("")}
   </g>`;
 }
 
@@ -149,14 +157,15 @@ function svgCard(input: {
   theme: ImageTheme;
   hero?: boolean;
 }) {
-  const lines = splitTitle(input.title, input.width >= 1100 ? 21 : 17);
-  const titleSize = input.hero ? 58 : 60;
-  const startY = input.hero ? 278 : 268;
+  const safeX = 120;
+  const lines = splitTitle(input.title, input.hero ? 19 : 13);
+  const titleSize = input.hero ? 52 : 50;
+  const startY = input.hero ? 286 : 278;
   const titleSvg = lines.map((line, index) => (
-    `<text x="70" y="${startY + index * 72}" fill="#FFFFFF" font-size="${titleSize}" font-weight="800" font-family="'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif" paint-order="stroke" stroke="#061322" stroke-width="3">${xmlEscape(line)}</text>`
+    `<text x="${safeX}" y="${startY + index * 66}" fill="#FFFFFF" font-size="${titleSize}" font-weight="800" font-family="'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif" paint-order="stroke" stroke="#061322" stroke-width="3">${xmlEscape(line)}</text>`
   )).join("\n");
   const chartTop = input.hero ? 388 : 360;
-  const chartWidth = 500;
+  const chartWidth = input.hero ? 900 : 560;
   const chartHeight = 145;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${input.width}" height="${input.height}" viewBox="0 0 ${input.width} ${input.height}">
@@ -171,19 +180,19 @@ function svgCard(input: {
   <rect width="100%" height="100%" rx="28" fill="url(#bg)"/>
   <rect width="100%" height="100%" rx="28" fill="url(#dots)"/>
   ${gridSvg(input.width, input.height)}
-  <g transform="translate(30 85)">${candleSvg(input.theme)}</g>
-  <g transform="translate(58 ${chartTop})"><path d="${chartPath(chartWidth, chartHeight)}" fill="none" stroke="url(#line)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="0.72" filter="url(#glow)"/></g>
+  <g transform="translate(70 85)">${candleSvg(input.theme)}</g>
+  <g transform="translate(${safeX} ${chartTop})"><path d="${chartPath(chartWidth, chartHeight)}" fill="none" stroke="url(#line)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="0.72" filter="url(#glow)"/></g>
   ${skylineSvg(input.width, input.height - 42, input.theme)}
   <rect width="100%" height="100%" rx="28" fill="url(#overlay)"/>
-  <text x="70" y="70" fill="#FFFFFF" font-size="24" font-weight="800" letter-spacing="2" font-family="Georgia, 'Times New Roman', serif">BG MARKET NOTE</text>
-  <text x="70" y="112" fill="${input.theme.secondary}" font-size="18" font-weight="700" letter-spacing="3" font-family="Arial, sans-serif">${xmlEscape(input.theme.eyebrow)}</text>
-  <rect x="70" y="132" width="96" height="6" rx="3" fill="${input.theme.accent}"/>
-  <text x="70" y="205" fill="#D2E2F1" font-size="25" font-weight="600" font-family="'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif">${xmlEscape(input.subtitle)}</text>
+  <text x="${safeX}" y="70" fill="#FFFFFF" font-size="24" font-weight="800" letter-spacing="2" font-family="Georgia, 'Times New Roman', serif">BG MARKET NOTE</text>
+  <text x="${safeX}" y="112" fill="${input.theme.secondary}" font-size="18" font-weight="700" letter-spacing="3" font-family="Arial, sans-serif">${xmlEscape(input.theme.eyebrow)}</text>
+  <rect x="${safeX}" y="132" width="96" height="6" rx="3" fill="${input.theme.accent}"/>
+  <text x="${safeX}" y="205" fill="#D2E2F1" font-size="22" font-weight="600" font-family="'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif">${xmlEscape(truncate(input.subtitle, input.hero ? 40 : 25))}</text>
   ${titleSvg}
-  ${marketPanelSvg(input.theme)}
+  ${input.hero ? "" : marketPanelSvg(input.theme)}
   <rect x="0" y="${input.height - 64}" width="100%" height="64" fill="#041120" opacity="0.92"/>
-  <text x="70" y="${input.height - 23}" fill="#AFC5DA" font-size="17" font-family="'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif">${xmlEscape(input.footer)}</text>
-  <text x="${input.width - 55}" y="${input.height - 23}" text-anchor="end" fill="#FFFFFF" font-size="18" font-weight="700" font-family="Arial, sans-serif">한국·미국 시장 흐름을 정리하는 브리핑</text>
+  <text x="${safeX}" y="${input.height - 23}" fill="#AFC5DA" font-size="17" font-family="'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif">${xmlEscape(input.footer)}</text>
+  <text x="${input.width - safeX}" y="${input.height - 23}" text-anchor="end" fill="#FFFFFF" font-size="18" font-weight="700" font-family="Arial, sans-serif">한국·미국 시장 흐름을 정리하는 브리핑</text>
 </svg>`;
 }
 
