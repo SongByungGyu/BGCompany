@@ -829,7 +829,51 @@
 .office-employee-portrait[data-employee="qa-auditor"] { --portrait-x: 915; }
 .office-employee-portrait[data-employee="finance-manager"] { --portrait-x: 1025; }
 .office-employee-portrait[data-employee="developer"] { --portrait-x: 1135; }
-.control-room:has(.office-canvas) .dock-list button { min-width: 126px; height: 58px; }
+.control-room:has(.office-canvas) .viewport,
+.control-room:has(.office-canvas) .office-viewport-status-bar,
+.control-room:has(.office-canvas) .office-canvas-wrap,
+.control-room:has(.office-canvas) .employee-dock-bar {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.control-room:has(.office-canvas) .office-viewport-status-bar {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+.control-room:has(.office-canvas) .office-viewport-status-bar > div {
+  min-width: max-content;
+}
+.control-room:has(.office-canvas) .employee-dock-bar {
+  overflow: hidden;
+}
+.control-room:has(.office-canvas) .dock-list {
+  width: 100%;
+  min-width: 0;
+  gap: 6px;
+  overflow: hidden;
+}
+.control-room:has(.office-canvas) .dock-list button {
+  min-width: 0;
+  height: 58px;
+  flex: 1 1 0;
+  gap: 6px;
+  padding: 6px;
+  overflow: hidden;
+}
+.control-room:has(.office-canvas) .dock-list button > span {
+  overflow: hidden;
+}
+.control-room:has(.office-canvas) .dock-list button strong,
+.control-room:has(.office-canvas) .dock-list button small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.control-room:has(.office-canvas) .dock-list button strong { font-size: 12px; }
+.control-room:has(.office-canvas) .dock-list button small { font-size: 9.5px; }
 .control-room:has(.office-canvas) .dock-list button.selected {
   border-color: #4fe0d1;
   box-shadow: 0 0 14px #4fe0d140;
@@ -847,6 +891,7 @@
   box-shadow: 0 10px 30px #020812b3;
   scrollbar-width: thin;
 }
+.control-room:has(.office-canvas) .employee-movement-dev-panel > * { flex: 0 0 auto; }
 .control-room:has(.office-canvas) .employee-movement-dev-panel strong { color: #5ce1d2; }
 .control-room:has(.office-canvas) .employee-movement-dev-panel select {
   color: #dbe8f4;
