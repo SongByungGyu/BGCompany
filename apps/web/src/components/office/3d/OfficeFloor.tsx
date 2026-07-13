@@ -27,6 +27,43 @@ export function OfficeFloor({ layout }: { layout: OfficeLayout }) {
           </mesh>
         );
       })}
+      {layout.walkableAreas
+        .filter((area) => area.roomId === "central-corridor")
+        .map((area) => (
+          <group key={area.id} position={[area.position[0], 0.035, area.position[2]]}>
+            <mesh receiveShadow>
+              <boxGeometry args={[area.size[0], 0.045, area.size[1]]} />
+              <meshStandardMaterial color="#172A3B" metalness={0.2} roughness={0.62} />
+            </mesh>
+            <mesh position={[0, 0.027, 0]}>
+              <boxGeometry args={[Math.max(0.08, area.size[0] - 0.16), 0.012, Math.max(0.08, area.size[1] - 0.16)]} />
+              <meshStandardMaterial color="#243F55" metalness={0.18} roughness={0.54} />
+            </mesh>
+            {area.size[0] > area.size[1] ? (
+              <>
+                <mesh position={[0, 0.042, -area.size[1] * 0.31]}>
+                  <boxGeometry args={[area.size[0] - 0.3, 0.014, 0.025]} />
+                  <meshBasicMaterial color="#4FE0D1" opacity={0.22} transparent />
+                </mesh>
+                <mesh position={[0, 0.042, area.size[1] * 0.31]}>
+                  <boxGeometry args={[area.size[0] - 0.3, 0.014, 0.025]} />
+                  <meshBasicMaterial color="#4FE0D1" opacity={0.22} transparent />
+                </mesh>
+              </>
+            ) : (
+              <>
+                <mesh position={[-area.size[0] * 0.31, 0.042, 0]}>
+                  <boxGeometry args={[0.025, 0.014, area.size[1] - 0.3]} />
+                  <meshBasicMaterial color="#4FE0D1" opacity={0.22} transparent />
+                </mesh>
+                <mesh position={[area.size[0] * 0.31, 0.042, 0]}>
+                  <boxGeometry args={[0.025, 0.014, area.size[1] - 0.3]} />
+                  <meshBasicMaterial color="#4FE0D1" opacity={0.22} transparent />
+                </mesh>
+              </>
+            )}
+          </group>
+        ))}
       {layout.debug.showGrid && (
         <gridHelper
           args={[24, 24, "#BFAF9B", "#D8C8B3"]}

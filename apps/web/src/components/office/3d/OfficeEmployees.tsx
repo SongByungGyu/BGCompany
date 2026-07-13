@@ -9,7 +9,7 @@ import {
   resolveEmployeeMovementPlans,
   type EmployeeMovementPlan,
 } from "./employeeMovement";
-import type { OfficeEmployee, OfficeLayout, Vec3 } from "./types";
+import type { NavNode, OfficeEmployee, OfficeLayout, Vec3 } from "./types";
 
 const MOVEMENT_SPEED = 2.55;
 const ARRIVAL_THRESHOLD = 0.045;
@@ -182,13 +182,13 @@ function LocalPublisherRobot({ statusColor, selected }: { statusColor: string; s
 function EmployeeAvatar3D({
   employee,
   movementPlan,
-  navNodePositions,
+  navNodes,
   selected,
   onSelect,
 }: {
   employee: OfficeEmployee;
   movementPlan: EmployeeMovementPlan;
-  navNodePositions: Vec3[];
+  navNodes: NavNode[];
   selected: boolean;
   onSelect: (employeeId: string) => void;
 }) {
@@ -221,7 +221,7 @@ function EmployeeAvatar3D({
     lastDestinationId.current = movementPlan.destinationId;
 
     if (isNewDestination) {
-      const runtimeRoute = buildRuntimeWaypointRoute(vectorToVec3(root.position), movementPlan.route, navNodePositions);
+      const runtimeRoute = buildRuntimeWaypointRoute(vectorToVec3(root.position), movementPlan.route, navNodes);
       pathRef.current = runtimeRoute.map((point) => vec3ToWalkVector(point));
       pathIndexRef.current = 0;
     }
@@ -229,7 +229,7 @@ function EmployeeAvatar3D({
     if (isNewDestination && root.position.distanceTo(targetPosition) > ARRIVAL_THRESHOLD) {
       setIsMoving(true);
     }
-  }, [movementPlan.destinationId, movementPlan.route, navNodePositions, targetPosition]);
+  }, [movementPlan.destinationId, movementPlan.route, navNodes, targetPosition]);
 
   useFrame(({ clock }, delta) => {
     const root = rootRef.current;
@@ -373,7 +373,7 @@ export function OfficeEmployees({
     () => new Map(plans.map((plan) => [plan.employeeId, plan])),
     [plans],
   );
-  const navNodePositions = useMemo(() => layout.navNodes.map((node) => node.position), [layout.navNodes]);
+  const navNodes = layout.navNodes;
 
   return (
     <group>
@@ -386,7 +386,7 @@ export function OfficeEmployees({
             key={employee.id}
             employee={employee}
             movementPlan={movementPlan}
-            navNodePositions={navNodePositions}
+            navNodes={navNodes}
             selected={employee.id === selectedEmployeeId}
             onSelect={onSelectEmployee}
           />

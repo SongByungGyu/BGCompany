@@ -1,6 +1,6 @@
 "use client";
 
-import type { OfficeDestination, OfficeEmployee, OfficeLayout, Vec3 } from "./types";
+import type { NavNode, OfficeDestination, OfficeEmployee, OfficeLayout, Vec3 } from "./types";
 
 export type MovementDestinationType = NonNullable<OfficeDestination["type"]>;
 
@@ -58,20 +58,21 @@ const departmentFallbackDestinationMap: Record<string, string> = {
 };
 
 const roomEntryNodeMap: Record<string, string> = {
-  "ceo-office": "ceo-open-node",
-  "director-room": "director-open-node",
-  "market-analysis-room": "market-open-node",
-  "meeting-room": "meeting-open-hub",
-  "content-zone": "content-open-node",
-  "review-zone": "review-open-node",
-  "dev-ops-zone": "dev-open-room-node",
-  "finance-room": "finance-open-node",
-  "finance-stock-zone": "finance-open-node",
-  "break-lounge": "lounge-open-node",
-  "approval-zone": "approval-open-node",
-  "lobby-common-zone": "lobby-open-hub",
-  "pantry-coffee-zone": "pantry-open-node",
-  "knowledge-audit-zone": "knowledge-open-node",
+  "ceo-office": "ceo-room-node",
+  "director-room": "director-room-node",
+  "market-analysis-room": "market-room-node",
+  "meeting-room": "meeting-room-node",
+  "content-zone": "content-room-node",
+  "review-zone": "review-room-node",
+  "dev-ops-zone": "dev-room-node",
+  "finance-room": "finance-room-node",
+  "finance-stock-zone": "finance-room-node",
+  "break-lounge": "lounge-room-node",
+  "approval-zone": "approval-room-node",
+  "lobby-common-zone": "lower-junction",
+  "pantry-coffee-zone": "lounge-room-node",
+  "knowledge-audit-zone": "qa-room-node",
+  "central-corridor": "lower-junction",
 };
 
 const protectedDestinationFallbacks: Record<string, string[]> = {
@@ -123,7 +124,7 @@ export function buildDestinationMap(layout: OfficeLayout) {
 }
 
 export function buildNavNodeMap(layout: OfficeLayout) {
-  return new Map(layout.navNodes.map((node) => [node.id, node.position] as const));
+  return new Map(layout.navNodes.map((node) => [node.id, node] as const));
 }
 
 export function getAssignedDestinationId(layout: OfficeLayout, employee: OfficeEmployee) {
@@ -208,22 +209,10 @@ function pushUniquePoint(path: Vec3[], point: Vec3 | undefined) {
   if (!exists) path.push(point);
 }
 
-function buildDestinationRoute(destination: MovementDestination, navNodeMap: Map<string, Vec3>) {
+function buildDestinationRoute(destination: MovementDestination, navNodeMap: Map<string, NavNode>) {
   const path: Vec3[] = [];
-  const lobbyNode = navNodeMap.get("lobby-open-hub");
-  const mainNode = navNodeMap.get("dev-open-hub");
   const roomEntryNode = navNodeMap.get(roomEntryNodeMap[destination.roomId] ?? "");
-
-  if (destination.roomId === "lobby-common-zone" || destination.roomId === "approval-zone") {
-    pushUniquePoint(path, lobbyNode);
-  } else if (destination.roomId === "pantry-coffee-zone" || destination.roomId === "break-lounge") {
-    pushUniquePoint(path, lobbyNode);
-    pushUniquePoint(path, roomEntryNode);
-  } else {
-    pushUniquePoint(path, lobbyNode);
-    pushUniquePoint(path, mainNode);
-    pushUniquePoint(path, roomEntryNode);
-  }
+  pushUniquePoint(path, roomEntryNode?.position);
   pushUniquePoint(path, destination.position);
 
   return path;
@@ -283,24 +272,64 @@ function distanceSquared(a: Vec3, b: Vec3) {
   return dx * dx + dz * dz;
 }
 
-function nearestNavNode(position: Vec3, navNodePositions: Vec3[]) {
-  return navNodePositions.reduce<Vec3 | undefined>((closest, point) => {
-    if (!closest) return point;
-    return distanceSquared(position, point) < distanceSquared(position, closest) ? point : closest;
+function nearestNavNode(position: Vec3, navNodes: NavNode[]) {
+  return navNodes.reduce<NavNode | undefined>((closest, node) => {
+    if (!closest) return node;
+    return distanceSquared(position, node.position) < distanceSquared(position, closest.position) ? node : closest;
   }, undefined);
 }
 
-export function buildRuntimeWaypointRoute(currentPosition: Vec3, plannedRoute: Vec3[], navNodePositions: Vec3[]): Vec3[] {
+function shortestNavNodeRoute(start: NavNode, end: NavNode, navNodes: NavNode[]) {
+  if (start.id === end.id) return [start];
+  const nodeMap = new Map(navNodes.map((node) => [node.id, node] as const));
+  const queue = [start.id];
+  const visited = new Set([start.id]);
+  const previous = new Map<string, string>();
+
+  while (queue.length > 0) {
+    const currentId = queue.shift();
+    if (!currentId) break;
+    const current = nodeMap.get(currentId);
+    if (!current) continue;
+    for (const neighborId of current.connectsTo) {
+      if (visited.has(neighborId) || !nodeMap.has(neighborId)) continue;
+      visited.add(neighborId);
+      previous.set(neighborId, currentId);
+      if (neighborId === end.id) {
+        const ids = [end.id];
+        let cursor = end.id;
+        while (previous.has(cursor)) {
+          cursor = previous.get(cursor)!;
+          ids.unshift(cursor);
+          if (cursor === start.id) break;
+        }
+        return ids.map((id) => nodeMap.get(id)).filter((node): node is NavNode => Boolean(node));
+      }
+      queue.push(neighborId);
+    }
+  }
+
+  console.warn(`[office-movement] No corridor route from ${start.id} to ${end.id}; movement cancelled.`);
+  return [];
+}
+
+export function buildRuntimeWaypointRoute(currentPosition: Vec3, plannedRoute: Vec3[], navNodes: NavNode[]): Vec3[] {
   const route: Vec3[] = [];
   const finalDestination = plannedRoute.at(-1);
-  const nearest = nearestNavNode(currentPosition, navNodePositions);
+  const targetEntry = plannedRoute.length > 1 ? plannedRoute.at(-2) : finalDestination;
+  const startNode = nearestNavNode(currentPosition, navNodes);
+  const endNode = targetEntry ? nearestNavNode(targetEntry, navNodes) : undefined;
 
   if (finalDestination && distanceSquared(currentPosition, finalDestination) < 0.16) {
     return [finalDestination];
   }
 
-  pushUniquePoint(route, nearest);
-  plannedRoute.forEach((point) => pushUniquePoint(route, point));
+  if (!startNode || !endNode) return [currentPosition];
+  const graphRoute = shortestNavNodeRoute(startNode, endNode, navNodes);
+  if (graphRoute.length === 0) return [currentPosition];
+  graphRoute.forEach((node) => pushUniquePoint(route, node.position));
+  if (targetEntry) pushUniquePoint(route, targetEntry);
+  if (finalDestination) pushUniquePoint(route, finalDestination);
 
-  return route.length > 0 ? route : finalDestination ? [finalDestination] : ([[0, 0, 0]] as Vec3[]);
+  return route.length > 0 ? route : [currentPosition];
 }

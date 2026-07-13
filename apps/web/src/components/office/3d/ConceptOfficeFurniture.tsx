@@ -200,10 +200,10 @@ function Sofa({ position, rotation = 0, width = 2.5 }: { position: Vec3; rotatio
 
 function MeetingTable() {
   return (
-    <group position={[-2.6, 0, -0.65]}>
-      <Box color="#AEB8C2" metalness={0.16} position={[0, 0.45, 0]} roughness={0.42} size={[5.25, 0.16, 1.78]} />
-      <Box color="#556575" metalness={0.22} position={[-1.7, 0.22, 0]} size={[0.22, 0.44, 1.28]} />
-      <Box color="#556575" metalness={0.22} position={[1.7, 0.22, 0]} size={[0.22, 0.44, 1.28]} />
+    <group position={[-4.4, 0, -0.55]}>
+      <Box color="#AEB8C2" metalness={0.16} position={[0, 0.45, 0]} roughness={0.42} size={[5.05, 0.16, 1.62]} />
+      <Box color="#556575" metalness={0.22} position={[-1.65, 0.22, 0]} size={[0.22, 0.44, 1.18]} />
+      <Box color="#556575" metalness={0.22} position={[1.65, 0.22, 0]} size={[0.22, 0.44, 1.18]} />
       <Box color="#142B3C" emissive="#174B65" emissiveIntensity={0.28} position={[0, 0.55, 0]} size={[0.85, 0.06, 0.55]} />
       <mesh position={[0, 0.62, 0]}>
         <cylinderGeometry args={[0.16, 0.16, 0.08, 24]} />
@@ -215,7 +215,7 @@ function MeetingTable() {
 
 function ApprovalGate() {
   return (
-    <group position={[-3.85, 0, 5.35]}>
+    <group position={[-4.2, 0, 5.35]}>
       <Box color="#6B512D" metalness={0.16} position={[0, 0.55, 0]} roughness={0.4} size={[3.1, 0.82, 0.92]} />
       <Box color="#B78B3C" emissive="#6C4B16" emissiveIntensity={0.28} position={[0, 0.98, 0]} size={[3.28, 0.08, 1.02]} />
       <Box color="#1A2733" position={[0, 0.55, 0.48]} size={[2.45, 0.52, 0.04]} />
@@ -231,81 +231,81 @@ function ApprovalGate() {
 }
 
 const meetingChairs: Array<[Vec3, number]> = [
-  [[-5.55, 0, -0.65], Math.PI / 2],
-  [[-4.7, 0, -2.0], 0],
-  [[-3.3, 0, -2.0], 0],
-  [[-1.9, 0, -2.0], 0],
-  [[-0.5, 0, -2.0], 0],
-  [[0.35, 0, -0.65], -Math.PI / 2],
-  [[-4.7, 0, 0.75], Math.PI],
-  [[-2.6, 0, 0.75], Math.PI],
-  [[-0.5, 0, 0.75], Math.PI],
+  [[-7.2, 0, -0.55], Math.PI / 2],
+  [[-6.4, 0, -1.65], 0],
+  [[-5.1, 0, -1.65], 0],
+  [[-3.7, 0, -1.65], 0],
+  [[-2.35, 0, -1.65], 0],
+  [[-1.55, 0, -0.55], -Math.PI / 2],
+  [[-6.4, 0, 0.55], Math.PI],
+  [[-4.4, 0, 0.55], Math.PI],
+  [[-2.35, 0, 0.55], Math.PI],
 ];
 
 export function ConceptOfficeFurniture() {
   return (
     <group>
       {/* 1. CEO Office */}
-      <Workstation executive monitors={1} position={[-11.25, 0, -5.85]} width={2.65} />
-      <Cabinet color="#594131" position={[-12.65, 0, -7.22]} width={2.0} />
-      <Box color="#D1A64A" emissive="#6C4A15" emissiveIntensity={0.35} position={[-13.05, 0.72, -4.45]} size={[0.12, 1.42, 0.12]} />
-      <OfficeChair color="#5B4638" position={[-12.15, 0, -4.35]} rotation={Math.PI} />
-      <OfficeChair color="#5B4638" position={[-10.35, 0, -4.35]} rotation={Math.PI} />
+      <Workstation executive monitors={1} position={[-11.5, 0, -6.15]} width={2.55} />
+      <Cabinet color="#594131" position={[-12.45, 0, -7.55]} width={1.75} />
+      <Box color="#D1A64A" emissive="#6C4A15" emissiveIntensity={0.35} position={[-13.3, 0.72, -4.7]} size={[0.12, 1.42, 0.12]} />
+      <OfficeChair color="#5B4638" position={[-12.2, 0, -4.65]} rotation={Math.PI} />
+      <OfficeChair color="#5B4638" position={[-10.8, 0, -4.65]} rotation={Math.PI} />
 
       {/* 2. AI Director */}
-      <Workstation accent="#4FE0D1" executive monitors={3} position={[-6.1, 0, -5.85]} width={2.75} />
-      <WallDashboard position={[-6.1, 0.82, -7.82]} width={2.9} />
+      <Workstation accent="#4FE0D1" executive monitors={3} position={[-6.8, 0, -6.15]} width={2.6} />
+      <WallDashboard position={[-6.8, 0.82, -7.75]} width={2.8} />
 
       {/* 3. Market analysis */}
-      <Workstation accent="#3DA5E6" monitors={3} position={[-1.25, 0, -5.85]} width={2.6} />
-      <WallDashboard accent="#3DA5E6" position={[-1.25, 0.82, -7.82]} width={3.0} />
+      <Workstation accent="#3DA5E6" monitors={3} position={[-2.6, 0, -6.15]} width={2.45} />
+      <WallDashboard accent="#3DA5E6" position={[-2.6, 0.82, -7.75]} width={2.75} />
 
       {/* 4. Content Studio */}
-      <Workstation accent="#4FE0D1" monitors={2} position={[3.35, 0, -5.85]} width={2.1} />
-      <Workstation accent="#D7A84F" monitors={2} position={[6.65, 0, -5.85]} width={2.1} />
-      <Workstation accent="#68B9F0" monitors={2} position={[9.7, 0, -5.85]} width={2.1} />
-      <WallDashboard position={[6.6, 0.82, -7.82]} width={5.6} />
-      <Plant position={[11.55, 0, -4.25]} scale={0.85} />
+      <Workstation accent="#4FE0D1" monitors={2} position={[3.0, 0, -6.15]} width={2.0} />
+      <Workstation accent="#D7A84F" monitors={2} position={[6.2, 0, -6.15]} width={2.0} />
+      <Workstation accent="#68B9F0" monitors={2} position={[9.4, 0, -6.15]} width={2.0} />
+      <WallDashboard position={[6.2, 0.82, -7.75]} width={5.8} />
+      <Plant position={[11.25, 0, -4.45]} scale={0.85} />
 
       {/* 5. QA & Audit */}
-      <Workstation accent="#9B86DB" monitors={2} position={[-10.5, 0, -0.8]} width={2.25} />
-      <WallDashboard accent="#9B86DB" position={[-10.5, 0.82, -3.28]} width={3.3} />
-      <Cabinet position={[-12.6, 0, 0.75]} width={1.55} />
+      <Workstation accent="#9B86DB" monitors={2} position={[-11.0, 0, -0.65]} width={2.25} />
+      <WallDashboard accent="#9B86DB" position={[-11.0, 0.82, -2.75]} width={3.15} />
+      <Cabinet position={[-12.75, 0, 0.7]} width={1.3} />
 
       {/* 9. Central meeting */}
       <MeetingTable />
       {meetingChairs.map(([position, rotation], index) => <OfficeChair key={index} color="#4B5967" position={position} rotation={rotation} />)}
-      <WallDashboard position={[-2.6, 0.82, -3.28]} width={4.0} />
-      <Plant position={[-6.45, 0, 1.2]} scale={0.82} />
-      <Plant position={[1.2, 0, 1.2]} scale={0.82} />
+      <WallDashboard position={[-4.4, 0.82, -2.75]} width={4.0} />
+      <Plant position={[-7.7, 0, 1.05]} scale={0.82} />
+      <Plant position={[-1.1, 0, 1.05]} scale={0.82} />
 
       {/* 6. Finance */}
-      <Workstation accent="#4FE0D1" monitors={3} position={[4.55, 0, -0.8]} width={2.65} />
-      <WallDashboard position={[4.55, 0.82, -3.28]} width={3.0} />
+      <Workstation accent="#4FE0D1" monitors={3} position={[2.6, 0, -0.65]} width={2.45} />
+      <WallDashboard position={[2.6, 0.82, -2.75]} width={2.75} />
 
       {/* 7. Dev & Server */}
-      <Workstation accent="#F26B55" monitors={3} position={[9.25, 0, -0.8]} width={2.5} />
-      <ServerRack position={[11.35, 0, -1.15]} />
-      <ServerRack position={[12.15, 0, -1.15]} />
-      <WallDashboard accent="#F26B55" position={[9.2, 0.82, -3.28]} width={3.2} />
-      <pointLight color="#F26B55" intensity={2.2} position={[11.7, 2.2, -0.5]} distance={3.8} />
+      <Workstation accent="#F26B55" monitors={3} position={[7.6, 0, -0.65]} width={2.5} />
+      <ServerRack position={[10.35, 0, -1.05]} />
+      <ServerRack position={[11.15, 0, -1.05]} />
+      <WallDashboard accent="#F26B55" position={[7.6, 0.82, -2.75]} width={3.4} />
+      <pointLight color="#F26B55" intensity={2.2} position={[10.75, 2.2, -0.5]} distance={3.8} />
 
       {/* 8. Publishing station */}
-      <group position={[-10.6, 0, 5.85]}>
+      <group position={[-10.8, 0, 5.45]}>
         <Box color="#344657" metalness={0.24} position={[0, 0.42, 0]} size={[3.8, 0.2, 1.05]} />
         {[-1.1, 0, 1.1].map((offset) => <Monitor key={offset} position={[offset, 0.92, -0.08]} scale={0.88} />)}
         <Box color={COLORS.accent} emissive={COLORS.accent} emissiveIntensity={0.55} position={[0, 0.55, 0.51]} size={[2.7, 0.035, 0.02]} />
       </group>
-      <WallDashboard position={[-10.6, 0.82, 2.38]} width={3.6} />
+      <WallDashboard position={[-10.8, 0.82, 7.25]} rotation={Math.PI} width={3.6} />
 
       {/* 10. Approval gate */}
       <ApprovalGate />
 
       {/* 11. Lounge */}
-      <Box color="#344656" position={[5.4, 0.025, 5.45]} roughness={0.92} size={[6.3, 0.05, 3.8]} />
-      <Sofa position={[5.2, 0, 4.65]} width={3.15} />
-      <Sofa position={[2.75, 0, 5.8]} rotation={Math.PI / 2} width={2.05} />
-      <group position={[5.1, 0, 6.3]}>
+      <Box color="#344656" position={[6.2, 0.025, 5.45]} roughness={0.92} size={[7.6, 0.05, 3.4]} />
+      <Sofa position={[6.0, 0, 4.7]} width={3.15} />
+      <Sofa position={[3.5, 0, 5.8]} rotation={Math.PI / 2} width={2.05} />
+      <group position={[6.0, 0, 6.15]}>
         <mesh castShadow position={[0, 0.32, 0]}>
           <cylinderGeometry args={[0.85, 0.85, 0.18, 28]} />
           <meshStandardMaterial color="#76543E" roughness={0.48} />
@@ -315,13 +315,13 @@ export function ConceptOfficeFurniture() {
           <meshStandardMaterial color="#D0B58E" roughness={0.72} />
         </mesh>
       </group>
-      <Cabinet color="#705B47" position={[9.45, 0, 6.55]} width={2.25} />
-      <Box color="#CBD4DA" metalness={0.32} position={[9.45, 1.12, 6.48]} size={[0.62, 0.82, 0.48]} />
-      <Plant position={[10.85, 0, 4.55]} />
-      <Plant position={[1.0, 0, 6.9]} scale={0.9} />
+      <Cabinet color="#705B47" position={[10.2, 0, 6.45]} width={2.1} />
+      <Box color="#CBD4DA" metalness={0.32} position={[10.2, 1.12, 6.38]} size={[0.62, 0.82, 0.48]} />
+      <Plant position={[10.9, 0, 4.45]} />
+      <Plant position={[1.25, 0, 6.85]} scale={0.9} />
 
       {/* Architectural ambient fixtures */}
-      {[[-11.25, -5.7], [-6.1, -5.7], [-1.25, -5.7], [6.7, -5.7], [-10.5, -0.65], [-2.6, -0.65], [4.55, -0.65], [10.2, -0.65], [-10.6, 5.25], [-3.85, 5.25], [5.55, 5.25]].map(([x, z], index) => (
+      {[[-11.5, -6.0], [-6.8, -6.0], [-2.6, -6.0], [6.2, -6.0], [-11.0, -0.55], [-4.4, -0.55], [2.6, -0.55], [8.2, -0.55], [-10.8, 5.25], [-4.2, 5.25], [6.2, 5.25]].map(([x, z], index) => (
         <pointLight key={index} color={index === 9 ? "#D1A64A" : "#A8DDF4"} distance={5.4} intensity={1.4} position={[x, 3.0, z]} />
       ))}
     </group>
