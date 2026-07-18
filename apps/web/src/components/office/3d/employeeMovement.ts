@@ -36,14 +36,14 @@ const meetingSeatIds = [
 ];
 
 const preferredMeetingSeatMap: Record<string, string> = {
-  ceo: "meeting-seat-01",
+  ceo: "meeting-seat-08",
   director: "meeting-seat-02",
   "content-planner": "meeting-seat-03",
   "marketing-manager": "meeting-seat-04",
   "content-writer": "meeting-seat-05",
   "qa-auditor": "meeting-seat-06",
-  "finance-manager": "meeting-seat-07",
-  "stock-monitor": "meeting-seat-08",
+  "finance-manager": "meeting-seat-01",
+  "stock-monitor": "meeting-seat-07",
   developer: "meeting-seat-09",
 };
 

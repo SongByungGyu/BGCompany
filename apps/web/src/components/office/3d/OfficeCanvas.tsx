@@ -1,15 +1,14 @@
 "use client";
 
-import { Canvas } from "@react-three/fiber";
 import officeLayout from "@config/office-layout.json";
+import { memo } from "react";
 import { createConceptOfficeLayout } from "./conceptOfficeLayout";
-import { OfficeScene } from "./OfficeScene";
+import { OfficeHybridScene } from "./OfficeHybridScene";
 import type { OfficeEmployee, OfficeLayout } from "./types";
 
 const layout = createConceptOfficeLayout(officeLayout as unknown as OfficeLayout);
-const showOfficeLabels = layout.office.labelsEnabled;
 
-export default function OfficeCanvas({
+function OfficeCanvas({
   employees,
   onSelectEmployee,
   selectedEmployeeId,
@@ -20,19 +19,14 @@ export default function OfficeCanvas({
 }) {
   return (
     <div className="office-canvas" data-testid="office-canvas">
-      <Canvas
-        dpr={[1, 1.5]}
-        shadows
-        gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
-      >
-        <OfficeScene
-          employees={employees}
-          layout={layout}
-          onSelectEmployee={onSelectEmployee}
-          selectedEmployeeId={selectedEmployeeId}
-          showLabels={showOfficeLabels}
-        />
-      </Canvas>
+      <OfficeHybridScene
+        employees={employees}
+        layout={layout}
+        onSelectEmployee={onSelectEmployee}
+        selectedEmployeeId={selectedEmployeeId}
+      />
     </div>
   );
 }
+
+export default memo(OfficeCanvas);
