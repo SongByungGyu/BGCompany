@@ -417,7 +417,10 @@ function buildDraftQualityCheck(template: StockBriefingTemplate, body: string, r
 
 
 function buildDraftFromPipeline(pipeline: ContentPipelineRun): DraftBuildResult {
-  const template = pipeline.naverBlogPublishPrep?.briefingTemplate ?? inferStockBriefingTemplateFromPipeline(pipeline);
+  const bundleTemplate = collectReferenceBundle(pipeline)?.contentType;
+  const template = pipeline.naverBlogPublishPrep?.briefingTemplate
+    ?? bundleTemplate
+    ?? inferStockBriefingTemplateFromPipeline(pipeline);
   const copy = STOCK_BRIEFING_COPY[template];
   const sourceTitle = clean(pipeline.writerResult?.finalTitle)
     || clean(pipeline.marketingResult?.recommendedTitle)
