@@ -500,6 +500,16 @@ async function waitForNaverAutosave(page: import("playwright").Page) {
   console.log("[naver-agent] autosave wait completed.");
 }
 
+export function savedDraftTitleMatchToken(title: string) {
+  const normalized = title.replace(/\s+/g, " ").trim();
+  return normalized.length >= 12 ? normalized.slice(0, 32).trim() : normalized;
+}
+
+export function hasSavedDraftTitle(listText: string, title: string) {
+  const token = savedDraftTitleMatchToken(title);
+  return token.length >= 8 && listText.replace(/\s+/g, " ").includes(token);
+}
+
 async function fillNaverTags(page: import("playwright").Page, tags: string[]) {
   if (tags.length === 0) return true;
   const selectors = [
@@ -519,13 +529,26 @@ async function fillNaverTags(page: import("playwright").Page, tags: string[]) {
   return false;
 }
 
-async function verifyDraftSave(page: import("playwright").Page) {
-  await page.waitForTimeout(3000);
+async function verifyDraftSave(page: import("playwright").Page, expectedTitle: string) {
+  await page.waitForTimeout(1000);
   const blocked = await detectBlockedStatus(page);
   if (blocked) return { ok: false, blocked };
   const bodyText = await page.locator("body").innerText({ timeout: 5000 }).catch(() => "");
-  const hasSaveSignal = ["임시저장", "저장되었습니다", "저장 완료"].some((token) => bodyText.includes(token));
-  return { ok: hasSaveSignal, blocked: null };
+  const hasSaveSignal = ["임시저장 되었습니다", "임시저장되었습니다", "저장되었습니다", "저장 완료"].some((token) => bodyText.includes(token));
+  if (hasSaveSignal) {
+    console.log("[naver-agent] draft save confirmed by completion message.");
+    return { ok: true, blocked: null };
+  }
+
+  const savedListButton = page.locator('[aria-label*="임시저장된 글 보기"]').first();
+  if (!(await savedListButton.count().catch(() => 0))) return { ok: false, blocked: null };
+  if (!(await savedListButton.click({ timeout: 10000 }).then(() => true, () => false))) return { ok: false, blocked: null };
+  await page.waitForTimeout(1500);
+  const listText = await page.locator("body").innerText({ timeout: 5000 }).catch(() => "");
+  const titleConfirmed = hasSavedDraftTitle(listText, expectedTitle);
+  await dismissNaverDraftModal(page).catch(() => undefined);
+  console.log(`[naver-agent] draft save title confirmation: ${titleConfirmed ? "matched" : "not_matched"}`);
+  return { ok: titleConfirmed, blocked: null };
 }
 
 function naverPostIdFromUrl(value: string) {
@@ -787,7 +810,7 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
           errorMessage: "Draft content was entered, but the Naver editor save button was not found.",
         };
       }
-      const saveCheck = await verifyDraftSave(page);
+      const saveCheck = await verifyDraftSave(page, job.title);
       if (saveCheck.blocked) {
         return { status: saveCheck.blocked, externalUrl: page.url(), errorCode: "NAVER_SECURITY_AFTER_DRAFT_SAVE", errorMessage: "Naver security check appeared after draft save." };
       }

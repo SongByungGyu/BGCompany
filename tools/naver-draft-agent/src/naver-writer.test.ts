@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildMultilineEditorInputSteps, pickMostReadableEditorText } from "./naver-writer.js";
+import {
+  buildMultilineEditorInputSteps,
+  hasSavedDraftTitle,
+  pickMostReadableEditorText,
+  savedDraftTitleMatchToken,
+} from "./naver-writer.js";
 
 function reconstruct(steps: ReturnType<typeof buildMultilineEditorInputSteps>) {
   return steps.map((step) => step.type === "enter" ? "\n" : step.value).join("");
@@ -45,4 +50,13 @@ test("글자 수가 같으면 줄과 문단 구조가 더 풍부한 후보를 �
   const selected = pickMostReadableEditorText(["가나다라마바", "가나\n다라\n마바"]);
 
   assert.equal(selected, "가나\n다라\n마바");
+});
+
+test("임시저장 목록의 말줄임 표시 전 제목 접두어로 저장 성공을 확인한다", () => {
+  const title = "7/19 다음 주 증시 전망 2026년 7월 20~24일 한국 미국 주식시장 전망…";
+  const listText = "임시저장 글\n7/19 다음 주 증시 전망 2026년 7월 20~24일 한국 미국 주식시장 전...\n2026.07.19";
+
+  assert.equal(savedDraftTitleMatchToken(title), "7/19 다음 주 증시 전망 2026년 7월 20~24일");
+  assert.equal(hasSavedDraftTitle(listText, title), true);
+  assert.equal(hasSavedDraftTitle("임시저장 글\n다른 제목", title), false);
 });

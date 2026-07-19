@@ -269,6 +269,7 @@ export function buildMarketingReviewHermesPayload(input: MarketingReviewHermesIn
 }
 
 export function buildContentWriterHermesPayload(input: ContentWriterHermesInput): HermesContentWriterPayload {
+  const nextWeekPreview = input.referenceBundle?.contentType === "NEXT_WEEK_MARKET_PREVIEW";
   return {
     agentId: "content-writer",
     role: "content_writer",
@@ -284,7 +285,9 @@ export function buildContentWriterHermesPayload(input: ContentWriterHermesInput)
       realReferences: getRealStockReferences(input.referenceBundle),
       marketSnapshot: input.referenceBundle?.marketSnapshot,
       competitorBlogReferences: input.referenceBundle?.competitorBlogReferences,
-      bodyStructure: ["도입부", "시장 요약", "한국 시장", "미국 시장", "강세/약세 섹터", "다음 주 일정", "투자자 체크리스트", "참고자료", "투자 유의문구"],
+      bodyStructure: nextWeekPreview
+        ? ["1. 지난주 시장은 어땠을까", "2. 다음 주 한국 증시 전망", "3. 다음 주 미국 증시 전망", "4. 다음 주 핵심 일정", "5. 이번 주에 눈여겨볼 기회와 위험", "6. 개인 투자자가 확인할 것", "함께 확인한 기사", "7. 마무리", "투자 유의문구"]
+        : ["도입부", "시장 요약", "한국 시장", "미국 시장", "강세/약세 섹터", "다음 주 일정", "투자자 체크리스트", "참고자료", "투자 유의문구"],
       prohibitedPhrases: input.prohibitedPhrases,
       blogImagePrompts: input.blogImagePrompts,
       referencePolicy: STOCK_REFERENCE_POLICY,

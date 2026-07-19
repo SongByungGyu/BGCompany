@@ -85,6 +85,60 @@ const MARKET_DATA_PATTERNS = [
 ];
 const DISCLAIMER_PATTERNS = [/투자 참고용/, /매수·매도 추천이 아닙니다/, /투자 판단과 책임/];
 const REPEATED_PHRASES = ["중요합니다", "확인할 필요가 있습니다", "살펴봐야 합니다", "방향성보다 선택이 중요합니다", "체크해야 합니다", "주목해야 합니다"];
+const NEXT_WEEK_HEADINGS = [
+  "1. 지난주 시장은 어땠을까",
+  "2. 다음 주 한국 증시 전망",
+  "3. 다음 주 미국 증시 전망",
+  "4. 다음 주 핵심 일정",
+  "5. 이번 주에 눈여겨볼 기회와 위험",
+  "6. 개인 투자자가 확인할 것",
+  "함께 확인한 기사",
+  "마무리",
+];
+const NEXT_WEEK_DISCLAIMER = "본 글은 시장 정보를 정리한 투자 참고 자료이며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 최종 투자 판단과 책임은 투자자 본인에게 있습니다.";
+const NEXT_WEEK_FORBIDDEN_PATTERNS = [
+  /\basOf\b/i,
+  /JSON\s*(?:필드|field)/i,
+  /데이터 수집 과정/,
+  /내부 분석 과정/,
+  /AI 활용 설정/i,
+  /사진 설명을 입력하세요/,
+  /제목과 짧은 설명을 바탕으로 재구성했습니다/,
+  /^\s*시장 영향\s*$/m,
+];
+
+export function inspectNextWeekEditorialContract(body: string) {
+  const articleHeadingIndex = body.indexOf("함께 확인한 기사");
+  const conclusionMarkers = ["\n\n7. 마무리", "\n\n마무리"];
+  const articleEndCandidates = conclusionMarkers
+    .map((marker) => body.indexOf(marker, Math.max(0, articleHeadingIndex)))
+    .filter((index) => index >= 0);
+  const articleEnd = articleEndCandidates.length > 0 ? Math.min(...articleEndCandidates) : body.length;
+  const articleText = articleHeadingIndex >= 0 ? body.slice(articleHeadingIndex, articleEnd) : "";
+  const outsideArticleText = articleHeadingIndex >= 0
+    ? `${body.slice(0, articleHeadingIndex)}\n${body.slice(articleEnd)}`
+    : body;
+  const articleUrls = articleText.match(/https?:\/\/[^\s)]+/g) ?? [];
+  const outsideArticleUrls = outsideArticleText.match(/https?:\/\/[^\s)]+/g) ?? [];
+  const articleEntryCount = articleText.split("\n").filter((line) => /^\s*[1-3]\.\s+/.test(line)).length;
+  const disclaimerCount = body.split(NEXT_WEEK_DISCLAIMER).length - 1;
+  let cursor = -1;
+  const missingOrOutOfOrderHeadings: string[] = [];
+  for (const heading of NEXT_WEEK_HEADINGS) {
+    const nextIndex = body.indexOf(heading, cursor + 1);
+    if (nextIndex < 0) missingOrOutOfOrderHeadings.push(heading);
+    else cursor = nextIndex;
+  }
+  return {
+    bodyCharacterCount: body.length,
+    articleUrlCount: articleUrls.length,
+    outsideArticleUrlCount: outsideArticleUrls.length,
+    articleEntryCount,
+    disclaimerCount,
+    missingOrOutOfOrderHeadings,
+    forbiddenTerms: NEXT_WEEK_FORBIDDEN_PATTERNS.filter((pattern) => pattern.test(body)).map((pattern) => pattern.source),
+  };
+}
 
 function clean(value?: string | null) {
   return typeof value === "string" ? value.trim() : "";
@@ -257,6 +311,8 @@ export function evaluateStockBlogPublishQuality(input: {
   const d = diagnostics({ bundle, pasteReadyBody: body, writerText });
   const reasons: string[] = [];
   const requireReal = input.requireRealReferences ?? input.pipeline.runnerMode === "hermes";
+  const nextWeekPreview = bundle?.contentType === "NEXT_WEEK_MARKET_PREVIEW";
+  const editorialContract = nextWeekPreview ? inspectNextWeekEditorialContract(body) : undefined;
 
   if (d.marketSnapshotDegraded && !d.hasFredDegradedDisclosure) reasons.push("FRED 제한 모드 고지 문구 누락");
 
@@ -284,7 +340,14 @@ export function evaluateStockBlogPublishQuality(input: {
   if (d.paragraphCount < 10) reasons.push("최종 본문 문단 10개 이상 필요");
   if (d.bulletItemCount < 5) reasons.push("투자자 체크리스트/불릿 5개 이상 필요");
   if (requireReal && d.distinctUrlCount < 5) reasons.push("최종 본문용 실제 URL 5개 이상 필요");
-  if (d.bodyLength < 2000) reasons.push("최종 본문 길이 2000자 이상 필요");
+  if (nextWeekPreview && editorialContract) {
+    if (editorialContract.bodyCharacterCount < 2000 || editorialContract.bodyCharacterCount > 3200) reasons.push("다음 주 전망 공개 본문은 공백 포함 2000~3200자 필요");
+    if (editorialContract.articleEntryCount !== 3 || editorialContract.articleUrlCount !== 3) reasons.push("함께 확인한 기사 3개와 원문 링크 3개 필요");
+    if (editorialContract.outsideArticleUrlCount > 0) reasons.push("함께 확인한 기사 밖의 본문 중간 링크 노출 금지");
+    if (editorialContract.disclaimerCount !== 1) reasons.push("지정 투자 유의문구 정확히 1회 필요");
+    if (editorialContract.missingOrOutOfOrderHeadings.length > 0) reasons.push(`주간 전망 섹션 누락 또는 순서 오류: ${editorialContract.missingOrOutOfOrderHeadings.join(", ")}`);
+    if (editorialContract.forbiddenTerms.length > 0) reasons.push("내부·시스템·기계적 용어가 공개 본문에 포함됨");
+  } else if (d.bodyLength < 2000) reasons.push("최종 본문 길이 2000자 이상 필요");
   if (!d.hasDisclaimer) reasons.push("투자 유의문구 누락");
   if (d.hasMockPhrase) reasons.push("mock/수동 확인 문구가 최종 본문에 포함됨");
   if (d.hasImagePromptLeak) reasons.push("이미지 프롬프트가 최종 본문에 섞임");

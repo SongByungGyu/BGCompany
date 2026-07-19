@@ -244,13 +244,14 @@ class RuntimeGuardrailTests(unittest.TestCase):
 
 
 class VerifiedSchedulePromptTests(unittest.TestCase):
-    def test_writer_prompt_marks_upcoming_values_as_immutable(self) -> None:
+    def test_next_week_writer_prompt_uses_natural_blog_editorial_contract(self) -> None:
         prompt = bridge.build_content_writer_prompt({
             "input": {
                 "topic": "다음 주 증시 일정",
                 "title": "주요 일정",
                 "channel": "blog",
                 "language": "ko",
+                "referenceBundle": {"contentType": "NEXT_WEEK_MARKET_PREVIEW"},
                 "marketSnapshot": {
                     "upcoming": [{
                         "date": "2026-07-19",
@@ -260,9 +261,24 @@ class VerifiedSchedulePromptTests(unittest.TestCase):
                 },
             },
         })
+        self.assertIn("개인 투자자가 운영하는 네이버 주식 블로그의 전문 에디터", prompt)
+        self.assertIn('URL은 마지막 "함께 확인한 기사"', prompt)
+        self.assertIn("공백 포함 약 2,000~3,000자", prompt)
+        self.assertIn("실제 활용한 기사 3개만", prompt)
+        self.assertNotIn('첫 번째 sections 항목의 heading은 반드시 "데이터 기준"', prompt)
+
+    def test_non_preview_writer_keeps_immutable_schedule_policy(self) -> None:
+        prompt = bridge.build_content_writer_prompt({
+            "input": {
+                "topic": "한국 증시 장전 브리핑",
+                "title": "장전 브리핑",
+                "channel": "blog",
+                "language": "ko",
+                "referenceBundle": {"contentType": "KOREA_DAILY_PREVIEW"},
+            },
+        })
         self.assertIn("upcoming 날짜·이벤트명·URL은 변경할 수 없는 원문 값", prompt)
         self.assertIn("하루 앞뒤로 옮기지 말고", prompt)
-        self.assertIn("시장 강약 항목", prompt)
 
     def test_qa_prompt_receives_server_schedule_validation(self) -> None:
         prompt = bridge.build_qa_audit_prompt({
@@ -271,6 +287,7 @@ class VerifiedSchedulePromptTests(unittest.TestCase):
                 "title": "주요 일정",
                 "channel": "blog",
                 "language": "ko",
+                "referenceBundle": {"contentType": "NEXT_WEEK_MARKET_PREVIEW"},
                 "writerResult": {
                     "fullDraft": "검증된 주요 일정",
                     "verifiedSchedule": {"immutable": True, "events": []},
@@ -279,8 +296,9 @@ class VerifiedSchedulePromptTests(unittest.TestCase):
             },
         })
         self.assertIn('"scheduleValidation"', prompt)
-        self.assertIn("scheduleValidation.ok가 true이면", prompt)
-        self.assertIn("검증되지 않은 한국 일정을 임의로 추가하라고 요구하지 않는다", prompt)
+        self.assertIn("URL을 공개 본문에 쓰라고 요구하지 않는다", prompt)
+        self.assertIn("실제 활용한 신뢰 가능한 기사 정확히 3개", prompt)
+        self.assertIn("지정된 투자 유의 문구가 cta에 정확히 한 번", prompt)
 
 
 class UsageGuardrailContractTests(unittest.TestCase):

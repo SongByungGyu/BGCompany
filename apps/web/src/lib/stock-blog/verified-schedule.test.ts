@@ -44,8 +44,9 @@ test("Writer가 바꾼 일정 날짜를 검증값으로 교체한다", () => {
 
   assert.equal(applied.validation.ok, true);
   assert.equal(applied.validation.checkedEventCount, 1);
-  assert.match(String(applied.result.fullDraft), /2026-07-19 · FOMC Press Release/);
-  assert.match(String(applied.result.fullDraft), /https:\/\/www\.federalreserve\.gov\/newsevents\/calendar\.htm/);
+  assert.match(String(applied.result.fullDraft), /7월 19일 일요일: FOMC Press Release/);
+  assert.doesNotMatch(String(applied.result.fullDraft), /https:\/\/www\.federalreserve\.gov\/newsevents\/calendar\.htm/);
+  assert.equal((applied.result.verifiedSchedule as { events: Array<{ url: string }> }).events[0]?.url, "https://www.federalreserve.gov/newsevents/calendar.htm");
   assert.doesNotMatch(String(applied.result.fullDraft), /2026-07-20 FOMC Press Release/);
 });
 
@@ -80,9 +81,29 @@ test("다음 주 글은 검증 범위 밖 일정을 제외하고 누락 시장�
 
   assert.equal(applied.validation.ok, true);
   assert.equal(applied.validation.checkedEventCount, 1);
-  assert.match(String(applied.result.fullDraft), /검증 범위: 2026-07-20~2026-07-26/);
-  assert.match(String(applied.result.fullDraft), /한국 일정은 검증된 upcoming 데이터에 없어 추가 확인 필요/);
+  assert.match(String(applied.result.fullDraft), /4\. 다음 주 핵심 일정/);
+  assert.match(String(applied.result.fullDraft), /7월 21일 화요일: US Employment/);
+  assert.doesNotMatch(String(applied.result.fullDraft), /검증 범위|upcoming|https:\/\//);
   assert.doesNotMatch(String(applied.result.fullDraft), /Later Event/);
+});
+
+test("Writer가 선택한 검증 일정만 원래 섹션 위치에 공개하고 URL은 메타데이터에만 둔다", () => {
+  const applied = applyVerifiedSchedule(writerResult([
+    { heading: "1. 지난주 시장은 어땠을까", body: "지난주 흐름입니다." },
+    { heading: "4. 다음 주 핵심 일정", body: "US Employment가 중요합니다." },
+    { heading: "함께 확인한 기사", body: "1. 기사 – 언론사, 발행일\nhttps://news.example.com/article" },
+  ]), snapshot({
+    upcoming: [
+      { date: "2026-07-21", event: "US Employment", market: "US", url: "https://official.example.com/jobs" },
+      { date: "2026-07-22", event: "Other Event", market: "US", url: "https://official.example.com/other" },
+    ],
+  }), { contentType: "NEXT_WEEK_MARKET_PREVIEW" });
+  const sections = applied.result.sections as Array<{ heading: string; body: string }>;
+
+  assert.deepEqual(sections.map((section) => section.heading), ["1. 지난주 시장은 어땠을까", "4. 다음 주 핵심 일정", "함께 확인한 기사"]);
+  assert.match(sections[1]?.body ?? "", /US Employment/);
+  assert.doesNotMatch(sections[1]?.body ?? "", /Other Event|https:\/\//);
+  assert.equal(applied.validation.checkedEventCount, 1);
 });
 
 test("혼합 강약 목록을 섹터가 아닌 시장 항목으로 명확히 표시한다", () => {
