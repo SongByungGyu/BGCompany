@@ -9,6 +9,8 @@ import {
   resolveEmployeeMovementPlans,
   type EmployeeMovementPlan,
 } from "./employeeMovement";
+import { OfficeGLBModel } from "./OfficeGLBModel";
+import { fallbackCharacterModel, officeCharacterModels } from "./officeAssetCatalog";
 import type { NavNode, OfficeEmployee, OfficeLayout, Vec3 } from "./types";
 
 const MOVEMENT_SPEED = 2.55;
@@ -298,55 +300,20 @@ function EmployeeAvatar3D({
 
       <ActionEffect actionKind={actionKind} isMoving={isMoving} pulseRef={pulseRef} />
 
-      <group ref={bodyRef}>
+      <group ref={bodyRef} userData={{ departmentColor: color }}>
         {employee.id === "local-publisher" ? (
           <LocalPublisherRobot statusColor={visibleStatusColor} selected={selected} />
         ) : (
-          <>
-        <mesh castShadow position={[0, 0.22, 0.08]} rotation={[0.2, 0, 0]}>
-          <cylinderGeometry args={[0.07, 0.08, 0.3, 10]} />
-          <meshStandardMaterial color="#6D7480" roughness={0.72} />
-        </mesh>
-        <mesh castShadow position={[0, 0.22, -0.08]} rotation={[-0.2, 0, 0]}>
-          <cylinderGeometry args={[0.07, 0.08, 0.3, 10]} />
-          <meshStandardMaterial color="#6D7480" roughness={0.72} />
-        </mesh>
-        <mesh castShadow position={[0, 0.48, 0]}>
-          <cylinderGeometry args={[0.24, 0.29, 0.6, 20]} />
-          <meshStandardMaterial color={color} roughness={0.68} />
-        </mesh>
-        <mesh castShadow position={[-0.26, 0.5, 0]} rotation={[0, 0, 0.18]}>
-          <cylinderGeometry args={[0.055, 0.065, 0.42, 10]} />
-          <meshStandardMaterial color={color} roughness={0.72} />
-        </mesh>
-        <mesh castShadow position={[0.26, 0.5, 0]} rotation={[0, 0, -0.18]}>
-          <cylinderGeometry args={[0.055, 0.065, 0.42, 10]} />
-          <meshStandardMaterial color={color} roughness={0.72} />
-        </mesh>
-        <mesh castShadow position={[0, 0.9, 0]}>
-          <sphereGeometry args={[0.24, 20, 14]} />
-          <meshStandardMaterial color="#F2C7A5" roughness={0.62} />
-        </mesh>
-        <mesh castShadow position={[0.17, 1.05, 0.02]}>
-          <sphereGeometry args={[0.09, 14, 10]} />
-          <meshStandardMaterial
-            color={visibleStatusColor}
-            emissive={selected || isMoving ? visibleStatusColor : "#000000"}
-            emissiveIntensity={selected || isMoving ? 0.26 : 0}
-            roughness={0.55}
+          <OfficeGLBModel
+            animation={isMoving ? "walk" : actionKind === "rest" ? "sit" : "idle"}
+            animationSpeed={isMoving ? 1.25 : 0.82}
+            fit={[0.68, 1.14, 0.68]}
+            url={officeCharacterModels[employee.id] ?? fallbackCharacterModel}
           />
-        </mesh>
-          </>
         )}
       </group>
 
-      {employee.id !== "local-publisher" ? (
-        <Html center position={[0, 0.91, 0.24]} occlude={false} zIndexRange={[9, 0]}>
-          <div className="office-employee-portrait" data-employee={employee.id} />
-        </Html>
-      ) : null}
-
-      <Html center position={[0, 1.28, 0]} occlude={false} zIndexRange={[10, 0]}>
+      <Html center position={[0, 1.42, 0]} occlude={false} zIndexRange={[10, 0]}>
         <div className={`office-employee-label ${selected ? "office-employee-label-selected" : ""}`}>
           <span>{employee.name}</span>
           {isMoving ? <em>{labelStatus}</em> : null}

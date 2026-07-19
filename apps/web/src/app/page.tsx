@@ -76,12 +76,13 @@ function formatEmployeeCost(value: string | null, fallback: string) {
 
 function mergeEmployeeRecords(currentEmployees: Employee[], records: EmployeeRecord[]) {
   const recordsById = new Map(records.map((record) => [record.id, record]));
-  return currentEmployees.map((employee) => {
+  let changed = false;
+  const mergedEmployees = currentEmployees.map((employee) => {
     const record = recordsById.get(employee.id);
     if (!record) return employee;
     const profileOverride = employeeProfileOverrides[employee.id];
     const status = isEmployeeStatus(record.status) ? record.status : employee.status;
-    return {
+    const nextEmployee = {
       ...employee,
       name: profileOverride?.name ?? (record.displayName || employee.name),
       initial: profileOverride?.initial ?? (record.initial || employee.initial),
@@ -92,7 +93,22 @@ function mergeEmployeeRecords(currentEmployees: Employee[], records: EmployeeRec
       model: record.model ?? employee.model,
       cost: formatEmployeeCost(record.currentCost, employee.cost),
     };
+    if (
+      nextEmployee.name === employee.name
+      && nextEmployee.initial === employee.initial
+      && nextEmployee.role === employee.role
+      && nextEmployee.department === employee.department
+      && nextEmployee.status === employee.status
+      && nextEmployee.group === employee.group
+      && nextEmployee.model === employee.model
+      && nextEmployee.cost === employee.cost
+    ) {
+      return employee;
+    }
+    changed = true;
+    return nextEmployee;
   });
+  return changed ? mergedEmployees : currentEmployees;
 }
 
 const statusGroupMap: Record<EmployeeStatus, Group> = {
@@ -125,6 +141,7 @@ export default function Home() {
   const [timelineByEmployeeId,setTimelineByEmployeeId] = useState<Record<string, BGTimelineEntry[]>>({});
   const eventBusRef = useRef(createBGCompanyEventBus());
   const scenarioTimerIdsRef = useRef<number[]>([]);
+  const employeeRefreshWarningRef = useRef(false);
   const [devEmployeeId,setDevEmployeeId] = useState(initialEmployees[0].id);
   const [devStatus,setDevStatus] = useState<EmployeeStatus>("회의 중");
   const refreshDashboardSummary = useCallback(async () => {
@@ -176,10 +193,14 @@ export default function Home() {
   const refreshEmployeesFromDb = useCallback(async () => {
     try {
       const records = await fetchEmployees();
+      employeeRefreshWarningRef.current = false;
       if (records.length > 0) setEmployees((currentEmployees) => mergeEmployeeRecords(currentEmployees, records));
       return records;
     } catch (error: unknown) {
-      console.warn("[BG Company] failed to refresh employees from DB", error);
+      if (!employeeRefreshWarningRef.current) {
+        employeeRefreshWarningRef.current = true;
+        console.warn("[BG Company] failed to refresh employees from DB", error);
+      }
       return [];
     }
   }, []);
@@ -199,11 +220,11 @@ export default function Home() {
   }, [activeNav, refreshEmployeesFromDb]);
   const current=employees[selected], approvals=employees.filter(e=>e.status==="승인 대기").length, errors=employees.filter(e=>e.group==="error").length, working=employees.filter(e=>["working","meeting"].includes(e.group)).length;
   const kpis=useMemo(()=>[["업무 중",String(working),""],["진행 중 업무","12",""],["승인 대기",String(approvals),"waiting"],["오류",String(errors),"error"],["오늘 AI 비용","$4.20",""],["이번 달","$86.40",""]],[approvals,errors,working]);
-  const choose=(i:number)=>{ if(selected===i&&view!=="unselected"){setView("unselected");return} setSelected(i);setTab("summary");setView(employees[i].status==="승인 대기"?"approval":employees[i].group==="error"?"error":"selected"); };
-  const chooseEmployeeById = (employeeId: string) => {
+  const choose=useCallback((i:number)=>{ if(selected===i&&view!=="unselected"){setView("unselected");return} setSelected(i);setTab("summary");setView(employees[i].status==="승인 대기"?"approval":employees[i].group==="error"?"error":"selected"); },[employees,selected,view]);
+  const chooseEmployeeById = useCallback((employeeId: string) => {
     const index = employees.findIndex((employee) => employee.id === employeeId);
     if (index >= 0) choose(index);
-  };
+  }, [choose, employees]);
   const focusEmployeeByEvent = useCallback((employeeId: string, status: EmployeeStatus) => {
     const index = employees.findIndex((employee) => employee.id === employeeId);
     if (index < 0) return;

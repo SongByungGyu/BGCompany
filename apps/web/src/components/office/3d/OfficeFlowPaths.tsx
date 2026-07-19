@@ -45,16 +45,16 @@ export function OfficeFlowPaths() {
             <Line
               points={path.points}
               color={path.color}
-              lineWidth={1.4}
+              lineWidth={1.05}
               dashed
-              dashSize={0.22}
-              gapSize={0.12}
+              dashSize={0.18}
+              gapSize={0.14}
               transparent
-              opacity={0.72}
+              opacity={0.48}
             />
             <mesh position={endpoint} rotation={[Math.PI / 2, 0, 0]}>
               <coneGeometry args={[0.12, 0.28, 4]} />
-              <meshStandardMaterial color={path.color} emissive={path.color} emissiveIntensity={0.45} />
+              <meshStandardMaterial color={path.color} emissive={path.color} emissiveIntensity={0.28} />
             </mesh>
           </group>
         );

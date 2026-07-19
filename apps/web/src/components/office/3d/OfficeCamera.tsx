@@ -27,12 +27,17 @@ export function OfficeCamera({ layout }: { layout: OfficeLayout }) {
     const [officeWidth, officeDepth] = layout.office.size;
     const halfWidth = officeWidth / 2;
     const halfDepth = officeDepth / 2;
-    const corners = [
-      new Vector3(-halfWidth, 0, -halfDepth),
-      new Vector3(halfWidth, 0, -halfDepth),
-      new Vector3(-halfWidth, 0, halfDepth),
-      new Vector3(halfWidth, 0, halfDepth),
-    ].map((corner) => corner.applyMatrix4(camera.matrixWorldInverse));
+    const maxHeight = Math.max(
+      layout.dimensions.outerWallHeight,
+      layout.dimensions.innerWallHeight,
+      layout.dimensions.glassWallHeight,
+    ) + 0.35;
+    const corners = [0, maxHeight].flatMap((y) => [
+      new Vector3(-halfWidth, y, -halfDepth),
+      new Vector3(halfWidth, y, -halfDepth),
+      new Vector3(-halfWidth, y, halfDepth),
+      new Vector3(halfWidth, y, halfDepth),
+    ]).map((corner) => corner.applyMatrix4(camera.matrixWorldInverse));
 
     const projectedWidth =
       Math.max(...corners.map((corner) => corner.x)) -
@@ -41,9 +46,8 @@ export function OfficeCamera({ layout }: { layout: OfficeLayout }) {
       Math.max(...corners.map((corner) => corner.y)) -
       Math.min(...corners.map((corner) => corner.y));
 
-    // Start from a bounds fit, then add controlled bleed. The aligned,
-    // near-top-down camera keeps the floor rectangular while the bleed removes
-    // the distant full-model-preview feeling without sacrificing whole rooms.
+    // Fit the full dollhouse silhouette, including wall height. This keeps the
+    // isometric depth without clipping the front lounge or the top-room signs.
     const fittedZoom =
       Math.min(width / projectedWidth, height / projectedHeight) *
       layout.camera.coverage;

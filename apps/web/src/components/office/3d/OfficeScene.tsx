@@ -1,5 +1,6 @@
-import { ContactShadows, Environment, Lightformer } from "@react-three/drei";
+import { Environment, Lightformer } from "@react-three/drei";
 import { OfficeCamera } from "./OfficeCamera";
+import { OfficeArchitecture } from "./OfficeArchitecture";
 import { ConceptOfficeFurniture } from "./ConceptOfficeFurniture";
 import { OfficeEmployees } from "./OfficeEmployees";
 import { OfficeFloor } from "./OfficeFloor";
@@ -25,30 +26,31 @@ export function OfficeScene({
 }) {
   return (
     <>
-      <color attach="background" args={["#071426"]} />
-      <fog attach="fog" args={["#071426", 76, 138]} />
-      <ambientLight intensity={0.92} />
-      <hemisphereLight args={["#DCEBFF", "#14253D", 1.12]} />
+      <color attach="background" args={["#030B16"]} />
+      <fog attach="fog" args={["#030B16", 82, 148]} />
+      <ambientLight intensity={0.72} />
+      <hemisphereLight args={["#E2F1FF", "#091522", 1.04]} />
       <directionalLight
         castShadow
-        intensity={2.9}
-        position={[10, 22, 14]}
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+        intensity={2.48}
+        position={[-12, 24, 14]}
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
         shadow-camera-left={-18}
         shadow-camera-right={18}
         shadow-camera-top={16}
         shadow-camera-bottom={-16}
       />
       <Environment resolution={128} background={false}>
-        <Lightformer form="rect" intensity={2.4} color="#DDEBFF" position={[0, 18, 2]} scale={[18, 5, 1]} rotation-x={Math.PI / 2} />
-        <Lightformer form="rect" intensity={1.3} color="#44D9D0" position={[-18, 7, 3]} scale={[3, 12, 1]} rotation-y={Math.PI / 2} />
-        <Lightformer form="rect" intensity={1.1} color="#F0B75D" position={[18, 5, -2]} scale={[3, 9, 1]} rotation-y={-Math.PI / 2} />
+        <Lightformer form="rect" intensity={2.7} color="#E3F0FF" position={[-2, 20, 3]} scale={[20, 6, 1]} rotation-x={Math.PI / 2} />
+        <Lightformer form="rect" intensity={1.45} color="#42E2D1" position={[-19, 8, 1]} scale={[3, 13, 1]} rotation-y={Math.PI / 2} />
+        <Lightformer form="rect" intensity={1.25} color="#E9B75B" position={[19, 7, -3]} scale={[3, 11, 1]} rotation-y={-Math.PI / 2} />
       </Environment>
       <OfficeCamera layout={layout} />
       <group>
         <OfficeFloor layout={layout} />
         <OfficeRooms layout={layout} />
+        <OfficeArchitecture layout={layout} />
         <OfficeWalls layout={layout} />
         <ConceptOfficeFurniture />
         <OfficeFlowPaths />
@@ -61,15 +63,6 @@ export function OfficeScene({
         <OfficeNavigationDebug layout={layout} />
         <OfficeLabels layout={layout} enabled={showLabels} />
       </group>
-      <ContactShadows
-        position={[0, 0.035, 0]}
-        scale={38}
-        opacity={0.42}
-        blur={2.3}
-        far={10}
-        resolution={512}
-        color="#010817"
-      />
     </>
   );
 }

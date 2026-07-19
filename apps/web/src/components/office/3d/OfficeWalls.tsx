@@ -2,24 +2,21 @@ import { Html } from "@react-three/drei";
 import type { OfficeLayout, OfficeWall } from "./types";
 
 function wallHeight(wall: OfficeWall, layout: OfficeLayout) {
-  const dimensions = layout.dimensions;
   return {
-    outer: dimensions.outerWallHeight,
-    inner: dimensions.innerWallHeight,
-    glass: dimensions.glassWallHeight,
-    front: dimensions.frontWallHeight,
+    outer: layout.dimensions.outerWallHeight,
+    inner: layout.dimensions.innerWallHeight,
+    glass: layout.dimensions.glassWallHeight,
+    front: layout.dimensions.frontWallHeight,
   }[wall.heightType];
 }
 
-function wallMaterial(wall: OfficeWall) {
-  if (wall.material === "glass") {
-    return { color: "#86AFCB", metalness: 0.08, opacity: 0.2, roughness: 0.14 };
-  }
-  if (wall.heightType === "outer") {
-    return { color: "#667789", metalness: 0.22, opacity: 0.96, roughness: 0.5 };
-  }
-
-  return { color: "#63788B", metalness: 0.16, opacity: 0.88, roughness: 0.54 };
+function Frame({ position, size }: { position: [number, number, number]; size: [number, number, number] }) {
+  return (
+    <mesh castShadow receiveShadow position={position}>
+      <boxGeometry args={size} />
+      <meshPhysicalMaterial color="#8293A3" clearcoat={0.35} clearcoatRoughness={0.26} metalness={0.74} roughness={0.27} />
+    </mesh>
+  );
 }
 
 export function OfficeWalls({ layout }: { layout: OfficeLayout }) {
@@ -29,67 +26,76 @@ export function OfficeWalls({ layout }: { layout: OfficeLayout }) {
         const height = wallHeight(wall, layout);
         const [width, depth] = wall.size;
         const [x, y, z] = wall.position;
-        const material = wallMaterial(wall);
+        const isGlass = wall.material === "glass";
+        const horizontal = width >= depth;
+        const endpoints: Array<[number, number, number]> = horizontal
+          ? [[x - width / 2, y + height / 2, z], [x + width / 2, y + height / 2, z]]
+          : [[x, y + height / 2, z - depth / 2], [x, y + height / 2, z + depth / 2]];
         return (
           <group key={wall.id}>
-            <mesh
-              castShadow={wall.heightType !== "glass"}
-              receiveShadow
-              position={[x, y + height / 2, z]}
-            >
+            <mesh castShadow={!isGlass} receiveShadow position={[x, y + height / 2, z]}>
               <boxGeometry args={[width, height, depth]} />
-              <meshStandardMaterial
-                color={material.color}
-                depthWrite={wall.heightType !== "glass"}
-                metalness={material.metalness}
-                opacity={material.opacity}
-                roughness={material.roughness}
-                transparent={material.opacity < 1}
+              {isGlass ? (
+                <meshPhysicalMaterial
+                  color="#9BC7D8"
+                  depthWrite={false}
+                  ior={1.46}
+                  metalness={0.04}
+                  opacity={0.38}
+                  roughness={0.08}
+                  thickness={0.16}
+                  transmission={0.48}
+                  transparent
+                />
+              ) : (
+                <meshPhysicalMaterial
+                  clearcoat={0.15}
+                  clearcoatRoughness={0.42}
+                  color={wall.heightType === "front" ? "#40586B" : "#30485B"}
+                  metalness={0.28}
+                  roughness={0.42}
+                />
+              )}
+            </mesh>
+            <Frame position={[x, y + 0.06, z]} size={[width + 0.06, 0.12, depth + 0.06]} />
+            <Frame position={[x, y + height - 0.045, z]} size={[width + 0.085, 0.09, depth + 0.085]} />
+            {endpoints.map((position, index) => (
+              <Frame key={index} position={position} size={[0.1, height, 0.1]} />
+            ))}
+            {isGlass && height > 1 ? (
+              <Frame
+                position={[x, y + height * 0.52, z]}
+                size={horizontal ? [width, 0.055, depth + 0.035] : [width + 0.035, 0.055, depth]}
               />
-            </mesh>
-            <mesh castShadow position={[x, y + 0.055, z]}>
-              <boxGeometry args={[width + 0.05, 0.11, depth + 0.05]} />
-              <meshStandardMaterial color="#33485C" metalness={0.38} roughness={0.42} />
-            </mesh>
-            <mesh castShadow position={[x, y + height - 0.045, z]}>
-              <boxGeometry args={[width + 0.07, 0.09, depth + 0.07]} />
-              <meshStandardMaterial color="#AAB7C3" metalness={0.42} roughness={0.34} />
-            </mesh>
+            ) : null}
           </group>
         );
       })}
+
       {layout.doors.map((door) => {
         const [width, depth] = door.size;
         const [x, y, z] = door.position;
         const isLoungeEntrance = door.id === "passage-lobby-break";
         return (
           <group key={door.id}>
-            <mesh position={[x, y + 0.016, z]}>
-              <boxGeometry args={[width, 0.032, depth]} />
+            <mesh position={[x, y + 0.018, z]}>
+              <boxGeometry args={[width, 0.036, depth]} />
               <meshStandardMaterial
-                color={isLoungeEntrance ? "#58D5C6" : "#77A8D7"}
-                depthWrite={false}
+                color={isLoungeEntrance ? "#58D5C6" : "#67A8D5"}
                 emissive={isLoungeEntrance ? "#1A8077" : "#234C75"}
-                emissiveIntensity={isLoungeEntrance ? 0.34 : 0.16}
-                opacity={isLoungeEntrance ? 0.78 : 0.42}
-                roughness={0.62}
+                emissiveIntensity={isLoungeEntrance ? 0.5 : 0.3}
+                opacity={0.75}
+                roughness={0.48}
                 transparent
               />
             </mesh>
+            <Frame position={[x - width / 2 + 0.075, 0.68, z]} size={[0.11, 1.36, 0.11]} />
+            <Frame position={[x + width / 2 - 0.075, 0.68, z]} size={[0.11, 1.36, 0.11]} />
+            <Frame position={[x, 1.33, z]} size={[width, 0.11, 0.11]} />
             {isLoungeEntrance ? (
-              <>
-                <mesh position={[x - width / 2 + 0.08, 0.65, z]}>
-                  <boxGeometry args={[0.12, 1.3, 0.12]} />
-                  <meshStandardMaterial color="#5AD6C7" emissive="#1C6F69" emissiveIntensity={0.34} />
-                </mesh>
-                <mesh position={[x + width / 2 - 0.08, 0.65, z]}>
-                  <boxGeometry args={[0.12, 1.3, 0.12]} />
-                  <meshStandardMaterial color="#5AD6C7" emissive="#1C6F69" emissiveIntensity={0.34} />
-                </mesh>
-                <Html center position={[x, 1.48, z]} occlude={false} zIndexRange={[12, 0]}>
-                  <div className="office-door-label">라운지 입구</div>
-                </Html>
-              </>
+              <Html center position={[x, 1.56, z]} occlude={false} zIndexRange={[12, 0]}>
+                <div className="office-door-label">라운지 입구</div>
+              </Html>
             ) : null}
           </group>
         );

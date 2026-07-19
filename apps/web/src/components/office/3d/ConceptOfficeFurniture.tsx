@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { OfficeGLBModel } from "./OfficeGLBModel";
+import { officeFurnitureModels } from "./officeAssetCatalog";
 
 type Vec3 = [number, number, number];
 
@@ -64,27 +66,42 @@ function Monitor({
 }) {
   return (
     <group position={position} rotation={[0, rotation, 0]} scale={scale}>
-      <Box color="#1B2734" metalness={0.3} position={[0, 0, 0]} roughness={0.34} size={[0.64, 0.4, 0.07]} />
-      <Box color={COLORS.screen} emissive="#123D5C" emissiveIntensity={0.55} position={[0, 0.015, 0.041]} roughness={0.24} size={[0.54, 0.31, 0.012]} />
-      <Box color={accent} emissive={accent} emissiveIntensity={0.65} position={[-0.12, 0.04, 0.05]} size={[0.22, 0.025, 0.01]} />
-      <Box color="#6B7C8D" metalness={0.4} position={[0, -0.28, 0]} size={[0.055, 0.18, 0.055]} />
-      <Box color="#6B7C8D" metalness={0.4} position={[0, -0.37, 0.01]} size={[0.28, 0.035, 0.2]} />
+      <OfficeGLBModel fit={[0.68, 0.52, 0.28]} url={officeFurnitureModels.computerScreen} />
+      <Box color={COLORS.screen} emissive="#123D5C" emissiveIntensity={0.7} position={[0, 0.29, 0.126]} roughness={0.24} size={[0.49, 0.27, 0.009]} />
+      <Box color={accent} emissive={accent} emissiveIntensity={0.75} position={[-0.12, 0.33, 0.133]} size={[0.22, 0.022, 0.008]} />
+      {[-0.17, -0.05, 0.07, 0.19].map((x, index) => (
+        <Box
+          key={x}
+          color={index % 2 ? "#78B8E3" : accent}
+          emissive={index % 2 ? "#2C6C9B" : accent}
+          emissiveIntensity={0.6}
+          position={[x, 0.22 + index * 0.025, 0.134]}
+          size={[0.025, 0.08 + index * 0.025, 0.008]}
+        />
+      ))}
+    </group>
+  );
+}
+
+function DeskAccessories({ accent = COLORS.accent, executive = false }: { accent?: string; executive?: boolean }) {
+  return (
+    <group>
+      <OfficeGLBModel fit={[0.52, 0.05, 0.2]} position={[0, 0.54, 0.2]} url={officeFurnitureModels.computerKeyboard} />
+      <OfficeGLBModel fit={[0.12, 0.08, 0.16]} position={[0.35, 0.54, 0.2]} url={officeFurnitureModels.computerMouse} />
+      <mesh castShadow position={[-0.45, 0.61, 0.18]}>
+        <cylinderGeometry args={[0.075, 0.065, 0.16, 16]} />
+        <meshStandardMaterial color={executive ? "#D1B07A" : accent} metalness={0.12} roughness={0.46} />
+      </mesh>
+      <Box color="#E7E2D6" position={[-0.52, 0.555, -0.02]} size={[0.35, 0.018, 0.25]} />
+      <Box color={executive ? "#9B6A47" : "#36566D"} position={[-0.48, 0.568, -0.015]} size={[0.26, 0.012, 0.02]} />
     </group>
   );
 }
 
 function OfficeChair({ color = "#46596C", position, rotation = 0 }: { color?: string; position: Vec3; rotation?: number }) {
   return (
-    <group position={position} rotation={[0, rotation, 0]}>
-      <Box color={color} position={[0, 0.26, 0]} size={[0.48, 0.16, 0.46]} />
-      <Box color={color} position={[0, 0.58, 0.18]} size={[0.5, 0.52, 0.1]} />
-      <Box color="#303C48" metalness={0.32} position={[0, 0.1, 0]} size={[0.08, 0.2, 0.08]} />
-      {[[-0.24, -0.22], [0.24, -0.22], [-0.24, 0.22], [0.24, 0.22]].map(([x, z], index) => (
-        <mesh key={index} position={[x, 0.03, z]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.045, 0.045, 0.05, 10]} />
-          <meshStandardMaterial color="#1C2732" metalness={0.35} roughness={0.45} />
-        </mesh>
-      ))}
+    <group position={position} rotation={[0, rotation, 0]} userData={{ accentColor: color }}>
+      <OfficeGLBModel fit={[0.58, 0.74, 0.62]} url={officeFurnitureModels.chair} />
     </group>
   );
 }
@@ -106,18 +123,13 @@ function Workstation({
 }) {
   const monitorOffsets = monitors === 3 ? [-0.58, 0, 0.58] : monitors === 2 ? [-0.34, 0.34] : [0];
   const depth = executive ? 1.05 : 0.86;
-  const surfaceColor = executive ? COLORS.wood : COLORS.desk;
   return (
     <group position={position} rotation={[0, rotation, 0]}>
-      <Box color={surfaceColor} metalness={executive ? 0.04 : 0.18} position={[0, 0.43, 0]} roughness={0.52} size={[width, 0.16, depth]} />
-      <Box color={executive ? "#493329" : COLORS.darkMetal} position={[0, 0.24, -depth / 2 + 0.08]} size={[width * 0.92, 0.38, 0.1]} />
-      {[-1, 1].map((side) => (
-        <Box key={side} color="#34424F" metalness={0.28} position={[side * (width / 2 - 0.1), 0.2, 0]} size={[0.09, 0.4, depth * 0.82]} />
-      ))}
+      <OfficeGLBModel fit={[width, 0.62, depth]} fitMode="stretch" url={officeFurnitureModels.desk} />
       {monitorOffsets.map((offset, index) => (
-        <Monitor key={offset} accent={accent} position={[offset, 0.92, -0.15]} rotation={(index - (monitorOffsets.length - 1) / 2) * -0.12} scale={monitors === 3 ? 0.88 : 1} />
+        <Monitor key={offset} accent={accent} position={[offset, 0.6, -0.18]} rotation={(index - (monitorOffsets.length - 1) / 2) * -0.12} scale={monitors === 3 ? 0.88 : 1} />
       ))}
-      <Box color="#C8D2DC" position={[0, 0.54, 0.17]} size={[0.54, 0.035, 0.18]} />
+      <DeskAccessories accent={accent} executive={executive} />
       <Box color={accent} emissive={accent} emissiveIntensity={0.5} position={[width / 2 - 0.18, 0.53, 0.2]} size={[0.14, 0.025, 0.14]} />
       <OfficeChair color={executive ? "#4A5360" : "#40566B"} position={[0, 0, depth / 2 + 0.48]} />
     </group>
@@ -139,13 +151,16 @@ function WallDashboard({ accent = COLORS.accent, position, rotation = 0, width =
 
 function Cabinet({ color = "#50606E", position, width = 1.7 }: { color?: string; position: Vec3; width?: number }) {
   return (
-    <group position={position}>
-      <Box color={color} position={[0, 0.48, 0]} size={[width, 0.96, 0.46]} />
-      {[-0.25, 0, 0.25].map((offset) => (
-        <Box key={offset} color="#23313E" position={[offset * width * 1.1, 0.5, 0.235]} size={[0.03, 0.82, 0.018]} />
-      ))}
-      <Box color="#C8A76B" position={[-0.04, 0.5, 0.25]} size={[0.04, 0.09, 0.025]} />
-      <Box color="#C8A76B" position={[0.04, 0.5, 0.25]} size={[0.04, 0.09, 0.025]} />
+    <group position={position} userData={{ accentColor: color }}>
+      <OfficeGLBModel fit={[width, 1.08, 0.58]} fitMode="stretch" url={officeFurnitureModels.cabinet} />
+    </group>
+  );
+}
+
+function Bookcase({ position, rotation = 0, width = 2.2 }: { position: Vec3; rotation?: number; width?: number }) {
+  return (
+    <group position={position} rotation={[0, rotation, 0]}>
+      <OfficeGLBModel fit={[width, 1.86, 0.58]} fitMode="stretch" url={officeFurnitureModels.bookcaseOpen} />
     </group>
   );
 }
@@ -169,17 +184,8 @@ function ServerRack({ position }: { position: Vec3 }) {
 
 function Plant({ position, scale = 1 }: { position: Vec3; scale?: number }) {
   return (
-    <group position={position} scale={scale}>
-      <mesh castShadow position={[0, 0.17, 0]}>
-        <cylinderGeometry args={[0.17, 0.14, 0.34, 14]} />
-        <meshStandardMaterial color="#475766" roughness={0.66} />
-      </mesh>
-      {[[-0.12, 0.48, 0], [0.12, 0.52, 0.03], [0, 0.68, 0], [-0.08, 0.61, 0.08]].map(([x, y, z], index) => (
-        <mesh key={index} castShadow position={[x, y, z]} rotation={[0.25 * index, 0.4 * index, 0.18 * (index - 1)]}>
-          <sphereGeometry args={[0.2, 12, 8]} />
-          <meshStandardMaterial color={index % 2 ? "#3A8665" : "#4A9A73"} roughness={0.78} />
-        </mesh>
-      ))}
+    <group position={position}>
+      <OfficeGLBModel fit={[0.66 * scale, 1.08 * scale, 0.66 * scale]} url={officeFurnitureModels.plant} />
     </group>
   );
 }
@@ -187,13 +193,7 @@ function Plant({ position, scale = 1 }: { position: Vec3; scale?: number }) {
 function Sofa({ position, rotation = 0, width = 2.5 }: { position: Vec3; rotation?: number; width?: number }) {
   return (
     <group position={position} rotation={[0, rotation, 0]}>
-      <Box color="#596470" position={[0, 0.25, 0]} size={[width, 0.35, 0.86]} />
-      <Box color="#626D79" position={[0, 0.61, -0.34]} size={[width, 0.55, 0.16]} />
-      <Box color="#4A5560" position={[-width / 2 + 0.12, 0.43, 0]} size={[0.24, 0.4, 0.86]} />
-      <Box color="#4A5560" position={[width / 2 - 0.12, 0.43, 0]} size={[0.24, 0.4, 0.86]} />
-      {[-0.28, 0.28].map((offset, index) => (
-        <Box key={offset} color={index ? "#788490" : "#3D4D5D"} position={[offset * width, 0.55, -0.18]} size={[0.42, 0.38, 0.18]} />
-      ))}
+      <OfficeGLBModel fit={[width, 0.86, 1.05]} fitMode="stretch" url={officeFurnitureModels.loungeSofa} />
     </group>
   );
 }
@@ -247,7 +247,9 @@ export function ConceptOfficeFurniture() {
     <group>
       {/* 1. CEO Office */}
       <Workstation executive monitors={1} position={[-11.5, 0, -6.15]} width={2.55} />
-      <Cabinet color="#594131" position={[-12.45, 0, -7.55]} width={1.75} />
+      <Bookcase position={[-12.25, 0, -7.68]} width={2.45} />
+      <OfficeGLBModel fit={[0.62, 0.48, 0.5]} position={[-10.72, 0.6, -6.05]} rotation={[0, -0.18, 0]} url={officeFurnitureModels.laptop} />
+      <OfficeGLBModel fit={[0.58, 1.65, 0.58]} position={[-13.05, 0, -6.25]} url={officeFurnitureModels.floorLamp} />
       <Box color="#D1A64A" emissive="#6C4A15" emissiveIntensity={0.35} position={[-13.3, 0.72, -4.7]} size={[0.12, 1.42, 0.12]} />
       <OfficeChair color="#5B4638" position={[-12.2, 0, -4.65]} rotation={Math.PI} />
       <OfficeChair color="#5B4638" position={[-10.8, 0, -4.65]} rotation={Math.PI} />
@@ -288,12 +290,12 @@ export function ConceptOfficeFurniture() {
       <ServerRack position={[10.35, 0, -1.05]} />
       <ServerRack position={[11.15, 0, -1.05]} />
       <WallDashboard accent="#F26B55" position={[7.6, 0.82, -2.75]} width={3.4} />
-      <pointLight color="#F26B55" intensity={2.2} position={[10.75, 2.2, -0.5]} distance={3.8} />
+      <pointLight color="#F26B55" intensity={1.05} position={[10.75, 2.2, -0.5]} distance={3.8} />
 
       {/* 8. Publishing station */}
       <group position={[-10.8, 0, 5.45]}>
-        <Box color="#344657" metalness={0.24} position={[0, 0.42, 0]} size={[3.8, 0.2, 1.05]} />
-        {[-1.1, 0, 1.1].map((offset) => <Monitor key={offset} position={[offset, 0.92, -0.08]} scale={0.88} />)}
+        <OfficeGLBModel fit={[3.8, 0.62, 1.05]} fitMode="stretch" url={officeFurnitureModels.desk} />
+        {[-1.1, 0, 1.1].map((offset) => <Monitor key={offset} position={[offset, 0.6, -0.08]} scale={0.88} />)}
         <Box color={COLORS.accent} emissive={COLORS.accent} emissiveIntensity={0.55} position={[0, 0.55, 0.51]} size={[2.7, 0.035, 0.02]} />
       </group>
       <WallDashboard position={[-10.8, 0.82, 7.25]} rotation={Math.PI} width={3.6} />
@@ -302,27 +304,19 @@ export function ConceptOfficeFurniture() {
       <ApprovalGate />
 
       {/* 11. Lounge */}
-      <Box color="#344656" position={[6.2, 0.025, 5.45]} roughness={0.92} size={[7.6, 0.05, 3.4]} />
+      <OfficeGLBModel fit={[7.2, 0.05, 3.15]} fitMode="stretch" position={[6.2, 0.07, 5.45]} url={officeFurnitureModels.rug} />
       <Sofa position={[6.0, 0, 4.7]} width={3.15} />
       <Sofa position={[3.5, 0, 5.8]} rotation={Math.PI / 2} width={2.05} />
-      <group position={[6.0, 0, 6.15]}>
-        <mesh castShadow position={[0, 0.32, 0]}>
-          <cylinderGeometry args={[0.85, 0.85, 0.18, 28]} />
-          <meshStandardMaterial color="#76543E" roughness={0.48} />
-        </mesh>
-        <mesh position={[0, 0.44, 0]}>
-          <cylinderGeometry args={[0.24, 0.24, 0.08, 20]} />
-          <meshStandardMaterial color="#D0B58E" roughness={0.72} />
-        </mesh>
-      </group>
+      <OfficeGLBModel fit={[1.65, 0.48, 1.15]} position={[6.0, 0, 6.15]} url={officeFurnitureModels.tableCoffee} />
+      <OfficeGLBModel fit={[0.82, 0.9, 0.9]} position={[8.35, 0, 5.55]} rotation={[0, -Math.PI / 2, 0]} url={officeFurnitureModels.loungeChair} />
       <Cabinet color="#705B47" position={[10.2, 0, 6.45]} width={2.1} />
-      <Box color="#CBD4DA" metalness={0.32} position={[10.2, 1.12, 6.38]} size={[0.62, 0.82, 0.48]} />
+      <OfficeGLBModel fit={[0.65, 0.82, 0.55]} position={[10.2, 1.08, 6.38]} url={officeFurnitureModels.coffeeMachine} />
       <Plant position={[10.9, 0, 4.45]} />
       <Plant position={[1.25, 0, 6.85]} scale={0.9} />
 
       {/* Architectural ambient fixtures */}
       {[[-11.5, -6.0], [-6.8, -6.0], [-2.6, -6.0], [6.2, -6.0], [-11.0, -0.55], [-4.4, -0.55], [2.6, -0.55], [8.2, -0.55], [-10.8, 5.25], [-4.2, 5.25], [6.2, 5.25]].map(([x, z], index) => (
-        <pointLight key={index} color={index === 9 ? "#D1A64A" : "#A8DDF4"} distance={5.4} intensity={1.4} position={[x, 3.0, z]} />
+        <pointLight key={index} color={index === 9 ? "#D1A64A" : "#A8DDF4"} distance={5.4} intensity={0.62} position={[x, 3.0, z]} />
       ))}
     </group>
   );
