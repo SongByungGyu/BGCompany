@@ -26,12 +26,14 @@ const NEXT_WEEK_NEWS_DRIVER_PATTERN = /다음\s*주|전망|금리|국채|환율|
 const NEXT_WEEK_NEWS_EXCLUDED_TITLE_PATTERN = /뉴스브리핑|코인|가상자산|암호화폐|비트코인|BONK|금시세|금값|금가격/i;
 const NEXT_WEEK_NEWS_EXCLUDED_PUBLISHERS = new Set(["tokenpost.kr"]);
 
-export function isRelevantNextWeekNews(item: Pick<ReferenceItem, "title" | "summary" | "publisher">) {
+export function isRelevantNextWeekNews(item: Pick<ReferenceItem, "title" | "summary" | "publisher" | "publishedAt">, nowMs = Date.now()) {
   const title = stripHtml(item.title || "");
   const summary = stripHtml(item.summary || "");
   const publisher = (item.publisher || "").toLowerCase();
   if (NEXT_WEEK_NEWS_EXCLUDED_PUBLISHERS.has(publisher)) return false;
   if (NEXT_WEEK_NEWS_EXCLUDED_TITLE_PATTERN.test(title)) return false;
+  const publishedAt = Date.parse(item.publishedAt || "");
+  if (!Number.isFinite(publishedAt) || nowMs - publishedAt > 14 * 24 * 60 * 60 * 1000 || publishedAt - nowMs > 24 * 60 * 60 * 1000) return false;
   const searchable = `${title}\n${summary}`;
   return NEXT_WEEK_NEWS_CORE_PATTERN.test(searchable) && NEXT_WEEK_NEWS_DRIVER_PATTERN.test(searchable);
 }
@@ -49,8 +51,8 @@ function nextWeekNewsScore(item: ReferenceItem) {
   return signals * 10 + (item.relevanceScore || 0);
 }
 
-export function selectDiverseNextWeekNews(items: ReferenceItem[], limit: number) {
-  const sorted = items.filter(isRelevantNextWeekNews).sort((left, right) => nextWeekNewsScore(right) - nextWeekNewsScore(left));
+export function selectDiverseNextWeekNews(items: ReferenceItem[], limit: number, nowMs = Date.now()) {
+  const sorted = items.filter((item) => isRelevantNextWeekNews(item, nowMs)).sort((left, right) => nextWeekNewsScore(right) - nextWeekNewsScore(left));
   const selected: ReferenceItem[] = [];
   const publisherCounts = new Map<string, number>();
   for (const maxPerPublisher of [1, 2]) {
