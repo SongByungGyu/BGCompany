@@ -199,8 +199,9 @@ function countDuplicateSentences(body: string) {
 function countSectionHeadings(body: string) {
   const circled = (body.match(/[①②③④⑤⑥⑦⑧⑨]/g) ?? []).length;
   const markdown = body.split("\n").filter((line) => /^#{2,4}\s+/.test(line.trim())).length;
+  const numbered = body.split("\n").filter((line) => /^\d+\.\s+\S+/.test(line.trim())).length;
   const colonLike = body.split("\n").filter((line) => /^[가-힣A-Za-z0-9·/\s]{3,28}$/.test(line.trim()) && !line.trim().startsWith("-")).length;
-  return Math.max(circled, markdown + colonLike);
+  return Math.max(circled, markdown + numbered + colonLike);
 }
 
 function diagnostics(input: {
