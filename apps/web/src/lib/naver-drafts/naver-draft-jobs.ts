@@ -374,6 +374,23 @@ function buildPlainBody(pipeline: ContentPipelineRun, template: StockBriefingTem
   return sanitizeByTemplate(renderNaverBody(blocks), template);
 }
 
+function buildNextWeekEditorialBody(pipeline: ContentPipelineRun) {
+  const writer = pipeline.writerResult;
+  if (!writer) return "";
+  const sections = writer.sections?.map((section) => {
+    const heading = clean(section.heading);
+    const body = clean(section.body);
+    return [heading, body].filter(Boolean).join("\n");
+  }).filter(Boolean) ?? [];
+  return normalizeNaverBody([
+    clean(writer.introduction),
+    ...sections,
+    "마무리",
+    clean(writer.conclusion),
+    clean(writer.cta) || INVESTMENT_DISCLAIMER,
+  ].filter(Boolean).join("\n\n"), "NEXT_WEEK_MARKET_PREVIEW");
+}
+
 function buildMarkdownBody(title: string, body: string) {
   return `# ${title}\n\n${body}`;
 }
@@ -417,7 +434,9 @@ function buildDraftFromPipeline(pipeline: ContentPipelineRun): DraftBuildResult 
   const thumbnailText = clean(thumbnail.thumbnailTitle) || clean(thumbnail.thumbnailPrimaryText) || `${title} 핵심 정리`;
   const thumbnailPrompt = clean(thumbnail.thumbnailPrompt) || `네이버 블로그 썸네일, 깔끔한 금융 리포트 스타일, 제목: ${title}, 핵심 문구: ${thumbnailText}`;
   const refs = collectReferences(pipeline);
-  const body = buildPlainBody(pipeline, template, title, refs);
+  const body = template === "NEXT_WEEK_MARKET_PREVIEW"
+    ? buildNextWeekEditorialBody(pipeline)
+    : buildPlainBody(pipeline, template, title, refs);
   const quality = buildDraftQualityCheck(template, body, refs, pipeline);
   if (!quality.ok) {
     throw new Error(`${quality.code ?? "NAVER_DRAFT_QUALITY_FAILED"}: ${quality.reasons.join(" · ")}`);
