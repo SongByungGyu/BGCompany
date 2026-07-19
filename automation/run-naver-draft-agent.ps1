@@ -7,12 +7,12 @@ if (-not (Test-Path -LiteralPath $agentDir)) {
 
 $npm = (Get-Command npm.cmd -ErrorAction Stop).Source
 $logDir = Join-Path $agentDir "logs"
-$logFile = Join-Path $logDir "naver-draft-agent.log"
+$logFile = Join-Path $logDir "naver-draft-agent-utf8.log"
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 Set-Location -LiteralPath $agentDir
 
-"[$(Get-Date -Format o)] regular agent started" | Add-Content -LiteralPath $logFile
-& $npm run start *>> $logFile
+"[$(Get-Date -Format o)] regular agent started" | Out-File -LiteralPath $logFile -Append -Encoding utf8
+& $npm run start 2>&1 | Out-File -LiteralPath $logFile -Append -Encoding utf8
 $exitCode = $LASTEXITCODE
-"[$(Get-Date -Format o)] regular agent exited with code $exitCode" | Add-Content -LiteralPath $logFile
+"[$(Get-Date -Format o)] regular agent exited with code $exitCode" | Out-File -LiteralPath $logFile -Append -Encoding utf8
 exit $exitCode
