@@ -143,6 +143,21 @@ function normalizeEditorText(value: string) {
     .trim();
 }
 
+export type EditorInputStep =
+  | { type: "text"; value: string }
+  | { type: "enter" };
+
+export function buildMultilineEditorInputSteps(value: string): EditorInputStep[] {
+  const normalized = normalizeEditorText(value);
+  if (!normalized) return [];
+  const steps: EditorInputStep[] = [];
+  normalized.split("\n").forEach((line, index) => {
+    if (index > 0) steps.push({ type: "enter" });
+    if (line) steps.push({ type: "text", value: line });
+  });
+  return steps;
+}
+
 function readabilityMetrics(value: string) {
   const normalized = value.replace(/\r\n/g, "\n").trim();
   return {
@@ -316,6 +331,46 @@ async function pasteTextWithClipboard(page: import("playwright").Page, value: st
   return true;
 }
 
+async function insertMultilineEditorSteps(page: import("playwright").Page, steps: EditorInputStep[]) {
+  if (steps.length === 0) return false;
+  for (const [index, step] of steps.entries()) {
+    const inserted = step.type === "enter"
+      ? await page.keyboard.press("Enter").then(() => true, () => false)
+      : await page.keyboard.insertText(step.value).then(() => true, () => false);
+    if (!inserted) return false;
+    if (index > 0 && index % 12 === 0) await page.waitForTimeout(50);
+  }
+  return true;
+}
+
+async function fillMultilineEditorTarget(
+  page: import("playwright").Page,
+  selectors: string[],
+  value: string,
+  label: string,
+) {
+  const scopes = [page, ...page.frames()];
+  const steps = buildMultilineEditorInputSteps(value);
+  if (steps.length === 0) return false;
+
+  for (const scope of scopes) {
+    for (const selector of selectors) {
+      const target = scope.locator(selector).first();
+      if (!(await target.count().catch(() => 0))) continue;
+      if (!(await target.click({ timeout: 10000 }).then(() => true, () => false))) continue;
+      if (!(await insertMultilineEditorSteps(page, steps))) {
+        console.warn(`[naver-agent] failed while inserting ${label} via ${selector}; refusing a second target to avoid duplicate text.`);
+        return false;
+      }
+      console.log(`[naver-agent] filled ${label} via ${selector} (${steps.length} line-aware steps)`);
+      return true;
+    }
+  }
+
+  console.warn(`[naver-agent] could not find or fill ${label} input target.`);
+  return false;
+}
+
 
 async function fillFirstEditorTarget(
   page: import("playwright").Page,
@@ -333,18 +388,17 @@ async function fillFirstEditorTarget(
       await target.click({ timeout: 10000 }).catch(() => undefined);
 
       const normalizedValue = normalizeEditorText(value);
-      const pasted = await pasteTextWithClipboard(page, normalizedValue).then(
-        () => true,
-        () => false,
-      );
-      const filled = pasted || await target.fill(normalizedValue, { timeout: 10000 }).then(
+      const pasted = await pasteTextWithClipboard(page, normalizedValue).catch(() => false);
+      let filled = pasted || await target.fill(normalizedValue, { timeout: 10000 }).then(
         () => true,
         () => false,
       );
 
       if (!filled) {
-        await page.keyboard.insertText(normalizedValue).catch(() => undefined);
+        filled = await page.keyboard.insertText(normalizedValue).then(() => true, () => false);
       }
+
+      if (!filled) continue;
 
       console.log(`[naver-agent] filled ${label} via ${selector}${pasted ? " (clipboard paste)" : ""}`);
       return true;
@@ -637,7 +691,7 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
     ];
 
     const titleFilled = await fillFirstEditorTarget(page, titleSelectors, job.title, "title");
-    const bodyFilled = await fillFirstEditorTarget(page, bodySelectors, job.body, "body");
+    const bodyFilled = await fillMultilineEditorTarget(page, bodySelectors, job.body, "body");
 
     if (!titleFilled || !bodyFilled) {
       return {

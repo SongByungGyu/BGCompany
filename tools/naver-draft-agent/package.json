@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit",
+    "test": "tsx --test src/*.test.ts",
     "start": "tsx src/index.ts",
     "browser:test": "tsx src/index.ts --browser-test",
     "login:setup": "tsx src/naver-login-setup.ts",
