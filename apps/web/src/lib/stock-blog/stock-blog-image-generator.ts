@@ -258,7 +258,7 @@ function horizontalComparisonSvg(input: {
     const valueX = positive ? zeroX + width + 18 : zeroX - width - 18;
     const anchor = positive ? "start" : "end";
     return `<g>
-      <text x="210" y="${y + 9}" text-anchor="end" fill="#E9F2FA" font-size="20" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${xmlEscape(row.label)}</text>
+      <text x="170" y="${y + 9}" text-anchor="end" fill="#E9F2FA" font-size="20" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${xmlEscape(row.label)}</text>
       <rect x="${x}" y="${y - 19}" width="${width}" height="38" rx="9" fill="${color}" opacity="0.9"/>
       <text x="${valueX}" y="${y + 9}" text-anchor="${anchor}" fill="#FFFFFF" font-size="19" font-weight="800" font-family="Arial,'Noto Sans KR',sans-serif">${xmlEscape(row.display)}</text>
     </g>`;
