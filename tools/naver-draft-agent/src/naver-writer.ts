@@ -530,27 +530,31 @@ async function fillMultilineEditorTarget(
   if (steps.length === 0) return false;
   const deadline = Date.now() + 20_000;
   do {
-    const scopes = [page, ...page.frames()];
+    const scopes = [page, ...page.frames().filter((frame) => frame !== page.mainFrame())];
     for (const scope of scopes) {
       for (const selector of selectors) {
         const target = scope.locator(selector).first();
         if (!(await target.count().catch(() => 0))) continue;
-        const clickAttempt = await target.click({ timeout: 3000 }).then(
+        const visible = await target.isVisible().catch(() => false);
+        const box = await target.boundingBox().catch(() => null);
+        if (!visible || !box || box.width <= 0 || box.height <= 0 || box.x < -1000) continue;
+        const clickAttempt = await target.click({ timeout: 1500 }).then(
           () => ({ ok: true, reason: "normal" }),
           (error) => ({ ok: false, reason: error instanceof Error ? error.message.split("\n")[0] : String(error) }),
         );
-        let clicked = clickAttempt.ok;
-        if (!clicked) {
-          const visible = await target.isVisible().catch(() => false);
-          const box = await target.boundingBox().catch(() => null);
+        if (!clickAttempt.ok) {
           console.warn(`[naver-agent] ${label} click blocked via ${selector}: visible=${visible}, box=${box ? `${Math.round(box.x)},${Math.round(box.y)},${Math.round(box.width)},${Math.round(box.height)}` : "none"}, reason=${clickAttempt.reason}`);
-          if (visible && box && box.width > 0 && box.height > 0 && box.x > -1000) {
-            await target.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => undefined);
-            clicked = await target.click({ force: true, timeout: 3000 }).then(() => true, () => false);
-            if (clicked) console.log(`[naver-agent] focused ${label} via safe forced click on ${selector}`);
-          }
+          continue;
         }
-        if (!clicked) continue;
+        const editorFocused = await target.evaluate((element) => {
+          const section = element.closest(".se-section-text");
+          const anchor = window.getSelection()?.anchorNode ?? null;
+          return Boolean(section?.classList.contains("se-is-focused") && anchor && section.contains(anchor));
+        }).catch(() => selector !== ".se-section-text p" && selector !== ".se-section-text");
+        if (!editorFocused) {
+          console.warn(`[naver-agent] ${label} click did not establish editor selection via ${selector}; waiting for editor readiness.`);
+          continue;
+        }
         if (!(await insertMultilineEditorSteps(page, steps))) {
           console.warn(`[naver-agent] failed while inserting ${label} via ${selector}; refusing a second target to avoid duplicate text.`);
           return false;
@@ -920,6 +924,7 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
     }
 
     const titleFilled = await fillFirstEditorTarget(page, titleSelectors, job.title, "title");
+    if (titleFilled) await page.waitForTimeout(1200);
     const bodyFilled = await fillMultilineEditorTarget(page, bodySelectors, job.body, "body");
 
     if (!titleFilled || !bodyFilled) {
