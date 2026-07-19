@@ -516,25 +516,28 @@ async function fillMultilineEditorTarget(
   value: string,
   label: string,
 ) {
-  const scopes = [page, ...page.frames()];
   const steps = buildMultilineEditorInputSteps(value);
   if (steps.length === 0) return false;
-
-  for (const scope of scopes) {
-    for (const selector of selectors) {
-      const target = scope.locator(selector).first();
-      if (!(await target.count().catch(() => 0))) continue;
-      if (!(await target.click({ timeout: 10000 }).then(() => true, () => false))) continue;
-      if (!(await insertMultilineEditorSteps(page, steps))) {
-        console.warn(`[naver-agent] failed while inserting ${label} via ${selector}; refusing a second target to avoid duplicate text.`);
-        return false;
+  const deadline = Date.now() + 20_000;
+  do {
+    const scopes = [page, ...page.frames()];
+    for (const scope of scopes) {
+      for (const selector of selectors) {
+        const target = scope.locator(selector).first();
+        if (!(await target.count().catch(() => 0))) continue;
+        if (!(await target.click({ timeout: 3000 }).then(() => true, () => false))) continue;
+        if (!(await insertMultilineEditorSteps(page, steps))) {
+          console.warn(`[naver-agent] failed while inserting ${label} via ${selector}; refusing a second target to avoid duplicate text.`);
+          return false;
+        }
+        console.log(`[naver-agent] filled ${label} via ${selector} (${steps.length} line-aware steps)`);
+        return true;
       }
-      console.log(`[naver-agent] filled ${label} via ${selector} (${steps.length} line-aware steps)`);
-      return true;
     }
-  }
+    if (Date.now() < deadline) await page.waitForTimeout(300);
+  } while (Date.now() < deadline);
 
-  console.warn(`[naver-agent] could not find or fill ${label} input target.`);
+  console.warn(`[naver-agent] could not find or fill ${label} input target after 20 seconds.`);
   return false;
 }
 
@@ -895,7 +898,7 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
 
     if (!titleFilled || !bodyFilled) {
       return {
-        status: "user_publish_required",
+        status: allowPublish ? "readability_failed" : "user_publish_required",
         externalUrl: page.url(),
         errorCode: "NAVER_EDITOR_INPUT_NOT_FOUND",
         errorMessage: `Naver editor input target was not found. titleFilled=${titleFilled}, bodyFilled=${bodyFilled}. Please paste manually in the opened browser.`,
