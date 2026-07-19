@@ -773,6 +773,9 @@ async function clickNaverPublish(page: import("playwright").Page, writeUrl: stri
   }
   if (!(await fillNaverTags(page, tags))) throw new Error("NAVER_TAG_INPUT_NOT_FOUND");
   const confirmationSelectors = [
+    'div[class*="layer_publish"] button[class*="confirm_btn"]',
+    'button[class*="confirm_btn"]',
+    'div[class*="layer_publish"] button:has-text("발행")',
     '.se-popup button:has-text("발행")',
     '[role="dialog"] button:has-text("발행")',
     'button:has-text("발행하기")',
