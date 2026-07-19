@@ -382,13 +382,16 @@ function buildNextWeekEditorialBody(pipeline: ContentPipelineRun) {
     const body = clean(section.body);
     return [heading, body].filter(Boolean).join("\n");
   }).filter(Boolean) ?? [];
-  return normalizeNaverBody([
+  const body = [
     clean(writer.introduction),
     ...sections,
     "마무리",
     clean(writer.conclusion),
     clean(writer.cta) || INVESTMENT_DISCLAIMER,
-  ].filter(Boolean).join("\n\n"), "NEXT_WEEK_MARKET_PREVIEW");
+  ].filter(Boolean).join("\n\n");
+  return sanitizeByTemplate(stripMarkdownSyntax(body)
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n"), "NEXT_WEEK_MARKET_PREVIEW");
 }
 
 function buildMarkdownBody(title: string, body: string) {
