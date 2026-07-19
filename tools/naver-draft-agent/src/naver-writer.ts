@@ -25,6 +25,25 @@ export type NaverDraftJob = {
   thumbnailKeywords?: string[];
   inlineImageUrls?: string[];
   imageStatus?: string | null;
+  contentImages?: Array<{
+    id: string;
+    role: "thumbnail" | "body";
+    type: "thumbnail" | "chart" | "related-image";
+    title: string;
+    placementAfterHeading: string;
+    imageUrl: string;
+    caption: string;
+    sourceLabel: string;
+    licenseType: string;
+    usageAllowed: boolean;
+    dataKeys: string[];
+    width: number;
+    height: number;
+    fileFormat: string;
+    uploadFormat: string;
+    fileVerified: boolean;
+  }>;
+  imageQuality?: { status: "passed" | "blocked"; issues?: Array<{ code: string; message: string }> } | null;
   references?: Array<{ title?: string; sourceName?: string; originalUrl?: string; url?: string }>;
   competitorBlogReferences?: Array<{ title?: string; blogName?: string; url?: string }>;
   allowImageUpload?: boolean;
@@ -37,7 +56,7 @@ export type NaverDraftJob = {
 };
 
 export type WriterResult = {
-  status: "draft_saved" | "publish_ready" | "published" | "user_publish_required" | "failed" | "login_required" | "captcha_required" | "security_check_required" | "readability_failed" | "image_upload_failed" | "draft_save_failed" | "publish_blocked" | "publish_failed" | "duplicate_blocked";
+  status: "draft_saved" | "publish_ready" | "published" | "user_publish_required" | "failed" | "login_required" | "captcha_required" | "security_check_required" | "readability_failed" | "image_upload_failed" | "image_quality_failed" | "draft_save_failed" | "publish_blocked" | "publish_failed" | "duplicate_blocked";
   externalUrl?: string;
   publishedUrl?: string;
   naverPostId?: string;
@@ -227,6 +246,23 @@ function safeFileSegment(value: string) {
   return value.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 100) || "naver-draft";
 }
 
+export function validateJobImageManifest(job: NaverDraftJob) {
+  const images = job.contentImages ?? [];
+  const thumbnail = images.filter((image) => image.role === "thumbnail");
+  const bodyImages = images.filter((image) => image.role === "body");
+  const issues: string[] = [];
+  if (job.imageQuality?.status !== "passed") issues.push("IMAGE_QUALITY_NOT_PASSED");
+  if (thumbnail.length !== 1 || thumbnail[0]?.imageUrl !== job.thumbnailImageUrl) issues.push("IMAGE_THUMBNAIL_MANIFEST_INVALID");
+  if (bodyImages.length < 2 || bodyImages.length > 4) issues.push("IMAGE_BODY_COUNT_INVALID");
+  if (new Set(images.map((image) => image.imageUrl)).size !== images.length) issues.push("IMAGE_DUPLICATE_URL");
+  if (bodyImages.map((image) => image.imageUrl).join("\n") !== (job.inlineImageUrls ?? []).join("\n")) issues.push("IMAGE_INLINE_ORDER_MISMATCH");
+  if (bodyImages.some((image) => !image.placementAfterHeading || !job.body.includes(image.placementAfterHeading))) issues.push("IMAGE_PLACEMENT_HEADING_MISSING");
+  if (images.some((image) => !image.usageAllowed || !image.fileVerified || !image.caption || !image.sourceLabel)) issues.push("IMAGE_METADATA_INCOMPLETE");
+  if (images.some((image) => image.fileFormat === "image/svg+xml" && image.uploadFormat !== "image/png")) issues.push("IMAGE_UPLOAD_FORMAT_INVALID");
+  if (bodyImages.every((image) => image.type !== "chart" || image.dataKeys.length === 0)) issues.push("IMAGE_VERIFIED_CHART_REQUIRED");
+  return { ok: issues.length === 0, issues, thumbnail: thumbnail[0], bodyImages };
+}
+
 function resolveTrustedAssetUrl(value: string, assetBaseUrl: string) {
   const base = new URL(assetBaseUrl);
   const url = new URL(value, base);
@@ -305,14 +341,12 @@ async function focusEditorStart(page: import("playwright").Page, selectors: stri
   }
 }
 
-async function uploadNaverThumbnail(page: import("playwright").Page, bodySelectors: string[], imageFile: string) {
-  await dismissNaverDraftModal(page).catch(() => undefined);
-  await focusEditorStart(page, bodySelectors);
+async function attachNaverImage(page: import("playwright").Page, imageFile: string, label: string) {
   const before = await countNaverImages(page);
   const fileInputs = page.locator('input[type="file"][accept*="image"], input[type="file"][multiple]');
   if (await fileInputs.count().catch(() => 0)) {
     await fileInputs.first().setInputFiles(imageFile, { timeout: 10000 });
-    console.log("[naver-agent] thumbnail selected through Naver image input.");
+    console.log(`[naver-agent] ${label} selected through Naver image input.`);
   } else {
     const selectors = [
       'button:has-text("사진")',
@@ -330,7 +364,7 @@ async function uploadNaverThumbnail(page: import("playwright").Page, bodySelecto
       const fileChooser = await chooser.catch(() => null);
       if (!fileChooser) continue;
       await fileChooser.setFiles(imageFile);
-      console.log(`[naver-agent] thumbnail selected via ${selector}.`);
+      console.log(`[naver-agent] ${label} selected via ${selector}.`);
       selected = true;
       break;
     }
@@ -340,7 +374,75 @@ async function uploadNaverThumbnail(page: import("playwright").Page, bodySelecto
   await page.waitForTimeout(8000);
   const after = await countNaverImages(page);
   if (after <= before) throw new Error(`NAVER_IMAGE_ATTACH_NOT_CONFIRMED_${before}_${after}`);
-  console.log(`[naver-agent] thumbnail attachment confirmed: images=${before}->${after}`);
+  if (after !== before + 1) throw new Error(`NAVER_IMAGE_ATTACH_COUNT_UNEXPECTED_${before}_${after}`);
+  console.log(`[naver-agent] ${label} attachment confirmed: images=${before}->${after}`);
+}
+
+async function uploadNaverThumbnail(page: import("playwright").Page, bodySelectors: string[], imageFile: string) {
+  await dismissNaverDraftModal(page).catch(() => undefined);
+  await focusEditorStart(page, bodySelectors);
+  await attachNaverImage(page, imageFile, "thumbnail");
+}
+
+async function focusAfterNaverHeading(page: import("playwright").Page, heading: string) {
+  const selectors = [".se-text-paragraph", ".se-component-content p", '[contenteditable="true"] p'];
+  const expected = heading.replace(/\s+/g, " ").trim();
+  for (const scope of [page, ...page.frames()]) {
+    for (const selector of selectors) {
+      const targets = scope.locator(selector);
+      const count = await targets.count().catch(() => 0);
+      for (let index = 0; index < count; index += 1) {
+        const target = targets.nth(index);
+        const text = (await target.innerText({ timeout: 3000 }).catch(() => "")).replace(/\s+/g, " ").trim();
+        if (text !== expected) continue;
+        await target.click({ timeout: 5000 });
+        await page.keyboard.press("End");
+        await page.keyboard.press("Enter");
+        console.log(`[naver-agent] image placement heading focused: ${heading}`);
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+async function insertImageCaption(page: import("playwright").Page, caption: string, sourceLabel: string) {
+  await page.keyboard.press("ArrowDown").catch(() => undefined);
+  await page.keyboard.press("Enter").catch(() => undefined);
+  if (!(await page.keyboard.insertText(caption).then(() => true, () => false))) return false;
+  await page.keyboard.press("Enter");
+  return page.keyboard.insertText(sourceLabel).then(() => true, () => false);
+}
+
+async function verifyNaverImagePlacements(page: import("playwright").Page, bodyImages: NonNullable<NaverDraftJob["contentImages"]>) {
+  for (const image of bodyImages) {
+    let matched = false;
+    for (const scope of [page, ...page.frames()]) {
+      matched = await scope.evaluate(({ heading, caption, sourceLabel }) => {
+        const normalize = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
+        const root = document.querySelector(".se-main-container") ?? document.body;
+        const paragraphs = Array.from(new Set(Array.from(root.querySelectorAll<HTMLElement>(
+          ".se-text-paragraph, .se-component-content p, [contenteditable='true'] p",
+        ))));
+        const headingNode = paragraphs.find((node) => normalize(node.innerText) === normalize(heading));
+        if (!headingNode) return false;
+        const follows = (before: Node, after: Node) => Boolean(before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING);
+        const nextHeading = paragraphs.find((node) => follows(headingNode, node) && /^\d+\.\s+/.test(normalize(node.innerText)));
+        const imageBetween = Array.from(root.querySelectorAll<HTMLImageElement>("img")).some((node) => (
+          follows(headingNode, node) && (!nextHeading || follows(node, nextHeading))
+        ));
+        const editorText = normalize((root as HTMLElement).innerText);
+        return imageBetween && editorText.includes(normalize(caption)) && editorText.includes(normalize(sourceLabel));
+      }, {
+        heading: image.placementAfterHeading,
+        caption: image.caption,
+        sourceLabel: image.sourceLabel,
+      }).catch(() => false);
+      if (matched) break;
+    }
+    if (!matched) return { ok: false, imageId: image.id };
+  }
+  return { ok: true };
 }
 
 async function pasteTextWithClipboard(page: import("playwright").Page, value: string) {
@@ -739,6 +841,16 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
       "textarea",
     ];
 
+    const imageManifest = validateJobImageManifest(job);
+    if ((allowPublish || allowImageUpload) && !imageManifest.ok) {
+      return {
+        status: "image_quality_failed",
+        externalUrl: page.url(),
+        errorCode: "NAVER_IMAGE_QUALITY_FAILED",
+        errorMessage: imageManifest.issues.join(" | "),
+      };
+    }
+
     const titleFilled = await fillFirstEditorTarget(page, titleSelectors, job.title, "title");
     const bodyFilled = await fillMultilineEditorTarget(page, bodySelectors, job.body, "body");
 
@@ -764,7 +876,8 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
     if ((job.thumbnailImageUrl || (job.inlineImageUrls?.length ?? 0) > 0) && allowImageUpload) {
       try {
         await context.reportProgress?.({ status: "image_uploading" });
-        if (!job.thumbnailImageUrl) throw new Error("NAVER_THUMBNAIL_REQUIRED");
+        if (!imageManifest.thumbnail || !job.thumbnailImageUrl) throw new Error("NAVER_THUMBNAIL_REQUIRED");
+        const beforeImages = await countNaverImages(page);
         const thumbnailFile = await downloadTrustedThumbnail({
           page,
           jobId: job.id,
@@ -772,22 +885,38 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
           assetBaseUrl: context.assetBaseUrl,
         });
         await uploadNaverThumbnail(page, bodySelectors, thumbnailFile);
-        for (const [index, imageUrl] of (job.inlineImageUrls ?? []).entries()) {
+        for (const [index, image] of imageManifest.bodyImages.entries()) {
+          if (!(await focusAfterNaverHeading(page, image.placementAfterHeading))) {
+            throw new Error(`NAVER_IMAGE_PLACEMENT_HEADING_NOT_FOUND_${image.id}`);
+          }
           const inlineFile = await downloadTrustedThumbnail({
             page,
             jobId: job.id,
-            imageUrl,
+            imageUrl: image.imageUrl,
             assetBaseUrl: context.assetBaseUrl,
             fileStem: `inline-${index + 1}`,
           });
-          await uploadNaverThumbnail(page, bodySelectors, inlineFile);
+          await attachNaverImage(page, inlineFile, `inline-${index + 1}`);
+          if (!(await insertImageCaption(page, image.caption, image.sourceLabel))) {
+            throw new Error(`NAVER_IMAGE_CAPTION_INSERT_FAILED_${image.id}`);
+          }
         }
+        const afterImages = await countNaverImages(page);
+        if (afterImages !== beforeImages + 1 + imageManifest.bodyImages.length) {
+          throw new Error(`NAVER_IMAGE_TOTAL_COUNT_MISMATCH_${beforeImages}_${afterImages}`);
+        }
+        const placement = await verifyNaverImagePlacements(page, imageManifest.bodyImages);
+        if (!placement.ok) throw new Error(`NAVER_IMAGE_PLACEMENT_VERIFY_FAILED_${placement.imageId}`);
+        const postImageReadability = await verifyNaverEditorReadability(page, job.body);
+        if (!postImageReadability.ok) throw new Error("NAVER_IMAGE_BODY_READABILITY_FAILED");
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const qualityFailure = message.includes("PLACEMENT") || message.includes("CAPTION") || message.includes("TOTAL_COUNT") || message.includes("READABILITY");
         return {
-          status: "image_upload_failed",
+          status: qualityFailure ? "image_quality_failed" : "image_upload_failed",
           externalUrl: page.url(),
-          errorCode: "NAVER_IMAGE_UPLOAD_FAILED",
-          errorMessage: error instanceof Error ? error.message : String(error),
+          errorCode: qualityFailure ? "NAVER_IMAGE_QUALITY_FAILED" : "NAVER_IMAGE_UPLOAD_FAILED",
+          errorMessage: message,
         };
       }
     } else if (allowPublish) {

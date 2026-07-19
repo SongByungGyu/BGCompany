@@ -14,6 +14,7 @@ import { generateStockBlogImages, type GeneratedStockBlogImages } from "@/lib/st
 import { applyVerifiedSchedule, type VerifiedSchedule, type VerifiedScheduleValidation } from "@/lib/stock-blog/verified-schedule";
 import type { HermesRunTelemetry, NormalizedHermesRunResult } from "@/lib/hermes/hermes-types";
 import type { BlogImagePrompt, ReferenceBundle, StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
+import type { StockBlogContentImage, StockBlogImageQualityAudit } from "@/lib/stock-blog/stock-blog-image-types";
 import type { ContentChannel, ContentPipelineDetail, ContentPipelineRun, ContentPipelineStatus } from "@/features/content-pipeline/content-pipeline-types";
 
 type ContentPipelineInput = {
@@ -411,6 +412,8 @@ function pipelineMetadata(input: {
     qualityGate: input.qualityGate,
     thumbnailImageUrl: input.generatedImages?.thumbnailImageUrl,
     inlineImageUrls: input.generatedImages?.inlineImageUrls,
+    contentImages: input.generatedImages?.contentImages,
+    imageQuality: input.generatedImages?.imageQuality,
     imageStatus: input.generatedImages?.imageStatus,
     imageGeneratedAt: input.generatedImages?.imageGeneratedAt,
     imageErrorMessage: input.generatedImages?.imageErrorMessage,
@@ -1201,6 +1204,12 @@ function runFromEvent(event: {
   const qaResult = asRecord(payload.qaResult);
   const referenceBundle = asReferenceBundle(payload.referenceBundle);
   const blogImagePrompts = asBlogImagePrompts(payload.blogImagePrompts);
+  const contentImages = Array.isArray(payload.contentImages)
+    ? payload.contentImages as unknown as StockBlogContentImage[]
+    : undefined;
+  const imageQuality = payload.imageQuality && typeof payload.imageQuality === "object" && !Array.isArray(payload.imageQuality)
+    ? payload.imageQuality as unknown as StockBlogImageQualityAudit
+    : undefined;
   const qualityGate = asRecord(payload.qualityGate) as ContentPipelineRun["qualityGate"] | undefined;
   const qualityBlocked = qualityGate?.ok === false;
   return {
@@ -1317,6 +1326,8 @@ function runFromEvent(event: {
     qualityGate,
     thumbnailImageUrl: typeof payload.thumbnailImageUrl === "string" ? payload.thumbnailImageUrl : undefined,
     inlineImageUrls: asStringArray(payload.inlineImageUrls),
+    contentImages,
+    imageQuality,
     imageStatus: payload.imageStatus === "generated" || payload.imageStatus === "failed" ? payload.imageStatus : undefined,
     imageGeneratedAt: typeof payload.imageGeneratedAt === "string" ? payload.imageGeneratedAt : undefined,
     imageErrorMessage: typeof payload.imageErrorMessage === "string" ? payload.imageErrorMessage : undefined,
@@ -1486,6 +1497,61 @@ export async function getContentPipelineDetail(pipelineId: string): Promise<Cont
   };
 }
 
+export async function regenerateContentPipelineImages(pipelineId: string) {
+  const startedEvents = await prisma.eventLog.findMany({
+    where: { type: "ContentPipelineStarted" },
+    orderBy: { timestamp: "desc" },
+    take: 100,
+  });
+  const event = startedEvents.find((candidate) => pipelineIdFromPayload(candidate.payload, candidate.id) === pipelineId);
+  if (!event) throw new Error("CONTENT_PIPELINE_NOT_FOUND");
+  const pipeline = runFromEvent(event);
+  if (!pipeline) throw new Error("CONTENT_PIPELINE_PAYLOAD_INVALID");
+  const bundle = pipeline.referenceBundle;
+  if (!bundle?.marketSnapshot) throw new Error("MARKET_SNAPSHOT_REQUIRED_FOR_IMAGES");
+  const generatedImages = await generateStockBlogImages({
+    pipelineId,
+    template: bundle.contentType,
+    title: pipeline.writerResult?.finalTitle ?? pipeline.outputTitle ?? pipeline.title,
+    topic: pipeline.topic,
+    marketDate: bundle.marketDate,
+    marketSnapshot: bundle.marketSnapshot,
+  });
+  const payload = event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
+    ? event.payload as Record<string, unknown>
+    : {};
+  await prisma.eventLog.update({
+    where: { id: event.id },
+    data: {
+      payload: toJsonObject({
+        ...payload,
+        thumbnailImageUrl: generatedImages.thumbnailImageUrl,
+        inlineImageUrls: generatedImages.inlineImageUrls,
+        contentImages: generatedImages.contentImages,
+        imageQuality: generatedImages.imageQuality,
+        imageStatus: generatedImages.imageStatus,
+        imageGeneratedAt: generatedImages.imageGeneratedAt,
+        imageErrorMessage: generatedImages.imageErrorMessage,
+      }),
+    },
+  });
+  await createEvent({
+    type: "ContentPipelineImagesRegenerated",
+    payload: {
+      contentPipelineId: pipelineId,
+      imageStatus: generatedImages.imageStatus,
+      imageQualityStatus: generatedImages.imageQuality.status,
+      bodyImageCount: generatedImages.imageQuality.bodyImageCount,
+      chartImageCount: generatedImages.imageQuality.chartImageCount,
+      issueCodes: generatedImages.imageQuality.issues.map((issue) => issue.code),
+    },
+    summary: generatedImages.imageQuality.status === "passed"
+      ? "검증된 MarketSnapshot 기반 본문 차트 재생성 완료"
+      : "본문 이미지 품질 검사 차단",
+  });
+  return generatedImages;
+}
+
 export async function startContentPipeline(input: unknown): Promise<ContentPipelineRun> {
   const baseData = assertValidInput(input);
   const runnerMode = baseData.runnerMode ?? "mock";
@@ -1531,6 +1597,7 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     title: outputTitle,
     topic: data.topic,
     marketDate: data.referenceBundle?.marketDate,
+    marketSnapshot: data.referenceBundle?.marketSnapshot,
   });
   const metadata = pipelineMetadata({
     pipelineId,
@@ -1745,6 +1812,8 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     blogImagePrompts: data.blogImagePrompts,
     thumbnailImageUrl: generatedImages.thumbnailImageUrl,
     inlineImageUrls: generatedImages.inlineImageUrls,
+    contentImages: generatedImages.contentImages,
+    imageQuality: generatedImages.imageQuality,
     imageStatus: generatedImages.imageStatus,
     imageGeneratedAt: generatedImages.imageGeneratedAt,
     imageErrorMessage: generatedImages.imageErrorMessage,

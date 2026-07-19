@@ -5,7 +5,7 @@ const statuses = new Set([
   "created", "queued", "claimed", "in_progress", "image_uploading", "draft_saving", "draft_saved",
   "publish_ready", "publishing", "published", "user_publish_required", "completed", "failed",
   "login_required", "captcha_required", "security_check_required", "readability_failed",
-  "image_upload_failed", "draft_save_failed", "publish_blocked", "publish_failed", "duplicate_blocked",
+  "image_upload_failed", "image_quality_failed", "draft_save_failed", "publish_blocked", "publish_failed", "duplicate_blocked",
   "quality_failed", "reference_failed", "market_data_failed", "cancelled",
 ]);
 

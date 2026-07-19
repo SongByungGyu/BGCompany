@@ -9,6 +9,7 @@ import { evaluateStockBlogPublishQuality, getRealStockReferences } from "@/lib/s
 import { FRED_DEGRADED_DISCLOSURE, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import { renderNaverBody, type NaverBodyBlock } from "@/lib/stock-blog/naver-body";
 import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
+import type { StockBlogContentImage, StockBlogImageQualityAudit } from "@/lib/stock-blog/stock-blog-image-types";
 
 export type NaverDraftJobStatus =
   | "created"
@@ -29,6 +30,7 @@ export type NaverDraftJobStatus =
   | "security_check_required"
   | "readability_failed"
   | "image_upload_failed"
+  | "image_quality_failed"
   | "draft_save_failed"
   | "publish_blocked"
   | "publish_failed"
@@ -63,6 +65,8 @@ export type SerializedNaverDraftJob = {
   thumbnailKeywords: string[];
   inlineImageUrls: string[];
   imageStatus: string | null;
+  contentImages: StockBlogContentImage[];
+  imageQuality: StockBlogImageQualityAudit | null;
   references: ReferenceItem[];
   competitorBlogReferences: CompetitorBlogReference[];
   allowImageUpload: boolean;
@@ -123,6 +127,7 @@ const publishFailureStatuses: NaverDraftJobStatus[] = [
   "captcha_required",
   "readability_failed",
   "image_upload_failed",
+  "image_quality_failed",
   "draft_save_failed",
   "publish_failed",
   "quality_failed",
@@ -494,6 +499,8 @@ export function serializeNaverDraftJob(job: NaverDraftJob): SerializedNaverDraft
     thumbnailKeywords: job.thumbnailText ? [job.thumbnailText] : [],
     inlineImageUrls: [],
     imageStatus: null,
+    contentImages: [],
+    imageQuality: null,
     references: [],
     competitorBlogReferences: [],
     allowImageUpload: false,
@@ -542,6 +549,8 @@ async function serializeNaverDraftJobWithPipeline(job: NaverDraftJob, knownPipel
     thumbnailKeywords: prep?.thumbnailKeywords ?? (job.thumbnailText ? [job.thumbnailText] : []),
     inlineImageUrls: pipeline.inlineImageUrls ?? [],
     imageStatus: pipeline.imageStatus ?? null,
+    contentImages: pipeline.contentImages ?? [],
+    imageQuality: pipeline.imageQuality ?? null,
     references: getRealStockReferences(bundle).slice(0, 10),
     competitorBlogReferences: (bundle?.competitorBlogReferences ?? []).slice(0, 5),
     allowImageUpload: process.env.NAVER_ALLOW_IMAGE_UPLOAD === "true",
@@ -582,6 +591,14 @@ function automaticPublishBlockReasons(pipeline: ContentPipelineRun, body: string
   if (pipeline.imageStatus !== "generated") reasons.push("imageStatus=generated 필요");
   if (!clean(pipeline.thumbnailImageUrl ?? pipeline.naverBlogPublishPrep?.thumbnailImageUrl)) reasons.push("thumbnailImageUrl 필요");
   if ((pipeline.inlineImageUrls ?? pipeline.naverBlogPublishPrep?.inlineImageUrls ?? []).length < 1) reasons.push("inlineImageUrls 1개 이상 필요");
+  const contentImages = pipeline.contentImages ?? [];
+  const bodyImages = contentImages.filter((image) => image.role === "body");
+  if (pipeline.imageQuality?.status !== "passed") reasons.push("imageQuality=passed 필요");
+  if (bodyImages.length < 2 || bodyImages.length > 4) reasons.push("본문 이미지 2~4장 필요");
+  if (bodyImages.some((image) => !image.fileVerified || !image.usageAllowed || !image.placementAfterHeading || !image.caption || !image.sourceLabel)) {
+    reasons.push("본문 이미지 파일·라이선스·섹션 연결 검증 필요");
+  }
+  if (bodyImages.every((image) => image.type !== "chart")) reasons.push("검증 수치 기반 본문 차트 1장 이상 필요");
   return Array.from(new Set(reasons));
 }
 
@@ -760,6 +777,27 @@ function isAllowedPublishedUrl(value?: string) {
 }
 
 async function beginNaverPublish(jobId: string, claimedBy?: string) {
+  const current = await prisma.naverDraftJob.findUnique({ where: { id: jobId } });
+  if (!current) throw new Error("NAVER_DRAFT_JOB_NOT_FOUND");
+  if (current.status === "publish_ready" && current.allowPublish) {
+    const detail = current.contentPipelineId ? await getContentPipelineDetail(current.contentPipelineId) : null;
+    const reasons = detail?.pipeline
+      ? automaticPublishBlockReasons(detail.pipeline, current.body)
+      : ["ContentPipeline 최신 상태 확인 필요"];
+    if (reasons.length > 0) {
+      const blocked = await prisma.naverDraftJob.update({
+        where: { id: jobId },
+        data: {
+          status: "publish_blocked",
+          completedAt: new Date(),
+          errorCode: "NAVER_FINAL_QUALITY_GATE_BLOCKED",
+          errorMessage: reasons.join("; ").slice(0, 1800),
+        },
+      });
+      await activatePublishCircuitBreaker(blocked, "publish_blocked", blocked.errorMessage ?? undefined);
+      return blocked;
+    }
+  }
   return prisma.$transaction(async (tx) => {
     const job = await tx.naverDraftJob.findUnique({ where: { id: jobId } });
     if (!job) throw new Error("NAVER_DRAFT_JOB_NOT_FOUND");
@@ -855,7 +893,7 @@ export async function reportNaverDraftJobStatus(jobId: string, input: StatusRepo
     data.naverPostId = input.naverPostId;
     data.publishMethod = "local-agent";
   }
-  if (["draft_saved", "published", "user_publish_required", "completed", "failed", "login_required", "captcha_required", "security_check_required", "readability_failed", "image_upload_failed", "draft_save_failed", "publish_blocked", "publish_failed", "duplicate_blocked", "quality_failed", "reference_failed", "market_data_failed", "cancelled"].includes(input.status)) data.completedAt = now;
+  if (["draft_saved", "published", "user_publish_required", "completed", "failed", "login_required", "captcha_required", "security_check_required", "readability_failed", "image_upload_failed", "image_quality_failed", "draft_save_failed", "publish_blocked", "publish_failed", "duplicate_blocked", "quality_failed", "reference_failed", "market_data_failed", "cancelled"].includes(input.status)) data.completedAt = now;
   const job = await prisma.naverDraftJob.update({ where: { id: jobId }, data });
   await activatePublishCircuitBreaker(job, input.status, input.errorMessage ?? input.errorCode);
   return serializeNaverDraftJobWithPipeline(job);

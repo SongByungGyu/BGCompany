@@ -1,6 +1,7 @@
 import type { TimelineRecord } from "@/features/timelines/api";
 import type { HermesRunTelemetry } from "@/lib/hermes/hermes-types";
 import type { BlogImagePrompt, ReferenceBundle } from "@/lib/stock-blog/references/reference-types";
+import type { StockBlogContentImage, StockBlogImageQualityAudit } from "@/lib/stock-blog/stock-blog-image-types";
 import type { VerifiedSchedule, VerifiedScheduleValidation } from "@/lib/stock-blog/verified-schedule";
 
 export type ContentChannel = "blog" | "instagram" | "youtube" | "newsletter";
@@ -168,6 +169,8 @@ export type ThumbnailAutomationResult = {
   thumbnailStatus: ThumbnailAutomationStatus;
   thumbnailImageUrl?: string;
   inlineImageUrls?: string[];
+  contentImages?: StockBlogContentImage[];
+  imageQuality?: StockBlogImageQualityAudit;
   imageStatus?: "generated" | "failed";
   imageGeneratedAt?: string;
   imageErrorMessage?: string;
@@ -263,6 +266,8 @@ export type ContentPipelineRun = {
   blogImagePrompts?: BlogImagePrompt[];
   thumbnailImageUrl?: string;
   inlineImageUrls?: string[];
+  contentImages?: StockBlogContentImage[];
+  imageQuality?: StockBlogImageQualityAudit;
   imageStatus?: "generated" | "failed";
   imageGeneratedAt?: string;
   imageErrorMessage?: string;
