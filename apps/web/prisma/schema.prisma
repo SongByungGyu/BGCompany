@@ -165,6 +165,15 @@ model NaverDraftJob {
   thumbnailPrompt    String?
   disclaimer         String?
   externalUrl        String?
+  allowPublish       Boolean   @default(false)
+  publishKey         String?   @unique
+  marketDate         String?
+  scheduleSlot       String?
+  publishedAt        DateTime?
+  publishedUrl       String?
+  naverPostId        String?
+  publishAttemptCount Int      @default(0)
+  publishMethod      String?
   errorCode          String?
   errorMessage       String?
   claimedBy          String?
@@ -176,6 +185,7 @@ model NaverDraftJob {
 
   @@index([status])
   @@index([contentPipelineId])
+  @@index([publishedAt])
   @@index([approvalId])
   @@index([claimedBy])
   @@index([createdAt])

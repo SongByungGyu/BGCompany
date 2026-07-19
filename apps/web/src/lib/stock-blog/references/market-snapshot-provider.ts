@@ -102,6 +102,7 @@ export function buildAutomaticMarketSnapshot(kis: KisResult, fred: FredResult, c
     return {
       provider: "kis-fred",
       status: "ready",
+      fallbackUsed: false,
       marketDate: marketDate(),
       collectedAt,
       dataQuality: "partial",
@@ -128,6 +129,7 @@ export function buildAutomaticMarketSnapshot(kis: KisResult, fred: FredResult, c
   return {
     provider: "kis-fred",
     status,
+    fallbackUsed: false,
     marketDate: marketDate(),
     collectedAt,
     dataQuality: status === "ready" ? "verified" : sources.length ? "partial" : "missing",

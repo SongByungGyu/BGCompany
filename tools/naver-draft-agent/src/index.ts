@@ -86,7 +86,21 @@ async function processJob(cfg: AgentConfig, job: NaverDraftJob) {
   const claimed = await claimJob(cfg, job.id);
   await reportStatus(cfg, claimed.job.id, { status: "in_progress" });
   const draftFile = await saveLocalDraft(claimed.job);
-  const result = await runNaverWriter(claimed.job, { draftFile, assetBaseUrl: cfg.baseUrl });
+  const result = await runNaverWriter(claimed.job, {
+    draftFile,
+    assetBaseUrl: cfg.baseUrl,
+    reportProgress: async (body) => {
+      await reportStatus(cfg, claimed.job.id, body);
+    },
+    beginPublish: async () => {
+      const response = await reportStatus(cfg, claimed.job.id, { status: "publishing" });
+      return {
+        allowed: response.job.status === "publishing",
+        status: response.job.status ?? "publish_blocked",
+        errorCode: (response.job as NaverDraftJob & { errorCode?: string | null }).errorCode,
+      };
+    },
+  });
   await reportStatus(cfg, claimed.job.id, result);
   console.log(`[naver-agent] ${claimed.job.id} -> ${result.status}`);
 }
@@ -99,7 +113,7 @@ async function main() {
   }
   console.log(`[naver-agent] polling ${cfg.baseUrl} every ${cfg.pollIntervalMs}ms`);
   const dryRunSetting = process.env.NAVER_AGENT_DRY_RUN ?? process.env.NAVER_DRAFT_AGENT_DRY_RUN;
-  console.log(`[naver-agent] dry-run=${dryRunSetting !== "false"}, save=${process.env.NAVER_ALLOW_DRAFT_SAVE === "true"}`);
+  console.log(`[naver-agent] dry-run=${dryRunSetting !== "false"}, save=${process.env.NAVER_ALLOW_DRAFT_SAVE === "true"}, publish=${process.env.NAVER_ALLOW_PUBLISH === "true"}`);
   for (;;) {
     try {
       const { job } = await nextJob(cfg);

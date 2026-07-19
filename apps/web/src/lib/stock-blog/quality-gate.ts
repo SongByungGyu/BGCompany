@@ -21,6 +21,8 @@ export type StockBlogQualityDiagnostics = {
   distinctUrlCount: number;
   publisherCount: number;
   competitorReferenceCount: number;
+  competitorAnalyzedCount: number;
+  competitorAnalysisFailedCount: number;
   writerInputReferenceCount: number;
   writerNewlineCount: number;
   pasteReadyNewlineCount: number;
@@ -124,8 +126,14 @@ export function getRealStockReferences(bundle?: ReferenceBundle) {
   return real;
 }
 
+const REFERENCE_METADATA_LINE = /^-\s*(출처|발행일|시장 영향|원문):/;
+
 function countDuplicateSentences(body: string) {
-  const sentences = body
+  const proseBody = body
+    .split("\n")
+    .filter((line) => !REFERENCE_METADATA_LINE.test(line.trim()))
+    .join("\n");
+  const sentences = proseBody
     .split(/[.!?。]|\n/)
     .map((sentence) => sentence.replace(/\s+/g, " ").trim())
     .filter((sentence) => sentence.length >= 28);
@@ -169,6 +177,8 @@ function diagnostics(input: {
     distinctUrlCount: new Set(realUrls).size,
     publisherCount: publishers.size,
     competitorReferenceCount: input.bundle?.competitorBlogReferences?.filter((item) => isValidHttpUrl(item.url)).length ?? 0,
+    competitorAnalyzedCount: input.bundle?.competitorAnalysis?.analyzedCount ?? 0,
+    competitorAnalysisFailedCount: input.bundle?.competitorAnalysis?.failedCount ?? 0,
     writerInputReferenceCount: refs.length,
     writerNewlineCount: (writerText.match(/\n/g) ?? []).length,
     pasteReadyNewlineCount: (body.match(/\n/g) ?? []).length,
@@ -214,6 +224,7 @@ export function evaluateStockBlogReferences(bundle?: ReferenceBundle, requireRea
     if (d.newsReferenceCount < 3) reasons.push("실제 뉴스 참고자료 3개 이상 필요");
     if (d.marketDataReferenceCount + d.officialReferenceCount < 1 && d.marketSnapshotDataQuality !== "verified") reasons.push("시장 데이터 또는 공식/신뢰 참고자료 1개 이상 필요");
     if (d.competitorReferenceCount < 3) reasons.push("경쟁 블로그 참고자료 3개 이상 필요");
+    if (process.env.COMPETITOR_BLOG_DEEP_ANALYSIS_REQUIRED === "true" && d.competitorAnalyzedCount < 1) reasons.push("경쟁 블로그 심층 구조 분석 1개 이상 필요");
     if (d.marketSnapshotStatus !== "ready" || d.marketSnapshotDataQuality !== "verified") reasons.push("검증된 MarketSnapshot 필요");
     if (d.marketSnapshotFreshnessStatus !== "fresh") reasons.push("최신성 검증을 통과한 MarketSnapshot 필요");
     if (d.staleMarketDataItems.length > 0) reasons.push(`오래되거나 유효하지 않은 시장 데이터: ${d.staleMarketDataItems.join(", ")}`);
@@ -259,6 +270,7 @@ export function evaluateStockBlogPublishQuality(input: {
     if (d.newsReferenceCount < 3) reasons.push("실제 뉴스 참고자료 3개 이상 필요");
     if (d.marketDataReferenceCount + d.officialReferenceCount < 1 && d.marketSnapshotDataQuality !== "verified") reasons.push("시장 데이터 또는 공식/신뢰 참고자료 1개 이상 필요");
     if (d.competitorReferenceCount < 3) reasons.push("경쟁 블로그 참고자료 3개 이상 필요");
+    if (process.env.COMPETITOR_BLOG_DEEP_ANALYSIS_REQUIRED === "true" && d.competitorAnalyzedCount < 1) reasons.push("경쟁 블로그 심층 구조 분석 1개 이상 필요");
     if (d.marketSnapshotStatus !== "ready" || d.marketSnapshotDataQuality !== "verified") reasons.push("검증된 MarketSnapshot 필요");
     if (d.marketSnapshotFreshnessStatus !== "fresh") reasons.push("최신성 검증을 통과한 MarketSnapshot 필요");
     if (d.staleMarketDataItems.length > 0) reasons.push(`오래되거나 유효하지 않은 시장 데이터: ${d.staleMarketDataItems.join(", ")}`);

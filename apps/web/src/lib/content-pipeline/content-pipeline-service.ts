@@ -20,6 +20,7 @@ type ContentPipelineInput = {
   channel: ContentChannel;
   title: string;
   runnerMode?: "mock" | "hermes-dry-run" | "hermes";
+  contentType?: StockReferenceBriefingTemplate;
   referenceBundle?: ReferenceBundle;
   blogImagePrompts?: BlogImagePrompt[];
 };
@@ -66,6 +67,12 @@ type QaExecution = MarketingExecution;
 type NormalizedPipelineResult = NormalizedHermesRunResult & Record<string, unknown>;
 
 const channels = new Set(["blog", "instagram", "youtube", "newsletter"]);
+const stockContentTypes = new Set<StockReferenceBriefingTemplate>([
+  "KOREA_DAILY_PREVIEW",
+  "KOREA_MARKET_CLOSE_US_PREVIEW",
+  "WEEKLY_MARKET_REVIEW",
+  "NEXT_WEEK_MARKET_PREVIEW",
+]);
 const HERMES_PIPELINE_REQUIRED_RUNS = 4;
 
 function withFredDegradedDisclosure(writer: WriterExecution, referenceBundle?: ReferenceBundle): WriterExecution {
@@ -93,11 +100,14 @@ function assertValidInput(input: unknown): ContentPipelineInput {
   const title = typeof body.title === "string" ? body.title.trim() : "";
   const channel = typeof body.channel === "string" ? body.channel : "";
   const runnerMode = typeof body.runnerMode === "string" ? body.runnerMode : "mock";
+  const contentType = typeof body.contentType === "string" && stockContentTypes.has(body.contentType as StockReferenceBriefingTemplate)
+    ? body.contentType as StockReferenceBriefingTemplate
+    : undefined;
   if (!topic) throw new Error("topic is required");
   if (!title) throw new Error("title is required");
   if (!channels.has(channel)) throw new Error("channel must be blog/instagram/youtube/newsletter");
   if (!["mock", "hermes-dry-run", "hermes"].includes(runnerMode)) throw new Error("runnerMode must be mock/hermes-dry-run/hermes");
-  return { topic, title, channel: channel as ContentChannel, runnerMode: runnerMode as ContentPipelineInput["runnerMode"] };
+  return { topic, title, channel: channel as ContentChannel, runnerMode: runnerMode as ContentPipelineInput["runnerMode"], contentType };
 }
 
 function channelLabel(channel: ContentChannel) {
@@ -123,7 +133,8 @@ function asBlogImagePrompts(value: unknown): BlogImagePrompt[] | undefined {
   return Array.isArray(value) ? value as BlogImagePrompt[] : undefined;
 }
 
-function inferReferenceTemplate(input: { topic: string; title: string }): StockReferenceBriefingTemplate {
+function inferReferenceTemplate(input: { topic: string; title: string; contentType?: StockReferenceBriefingTemplate }): StockReferenceBriefingTemplate {
+  if (input.contentType) return input.contentType;
   const text = `${input.topic} ${input.title}`;
   if (/다음\s*주|next\s*week/i.test(text)) return "NEXT_WEEK_MARKET_PREVIEW";
   if (/주간|이번\s*주|weekly/i.test(text)) return "WEEKLY_MARKET_REVIEW";

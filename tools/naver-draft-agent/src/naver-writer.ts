@@ -5,6 +5,7 @@ import path from "node:path";
 
 export type NaverDraftJob = {
   id: string;
+  status?: string;
   title: string;
   body: string;
   markdownBody: string | null;
@@ -27,14 +28,28 @@ export type NaverDraftJob = {
   references?: Array<{ title?: string; sourceName?: string; originalUrl?: string; url?: string }>;
   competitorBlogReferences?: Array<{ title?: string; blogName?: string; url?: string }>;
   allowImageUpload?: boolean;
+  allowPublish?: boolean;
+  publishKey?: string | null;
+  marketDate?: string | null;
+  scheduleSlot?: string | null;
+  errorCode?: string | null;
   disclaimer: string | null;
 };
 
-type WriterResult = {
-  status: "draft_saved" | "user_publish_required" | "failed" | "login_required" | "captcha_required" | "security_check_required" | "readability_failed";
+export type WriterResult = {
+  status: "draft_saved" | "publish_ready" | "published" | "user_publish_required" | "failed" | "login_required" | "captcha_required" | "security_check_required" | "readability_failed" | "image_upload_failed" | "draft_save_failed" | "publish_blocked" | "publish_failed" | "duplicate_blocked";
   externalUrl?: string;
+  publishedUrl?: string;
+  naverPostId?: string;
   errorCode?: string;
   errorMessage?: string;
+};
+
+type WriterContext = {
+  draftFile: string;
+  assetBaseUrl: string;
+  reportProgress?: (body: Record<string, unknown>) => Promise<void>;
+  beginPublish?: () => Promise<{ allowed: boolean; status: string; errorCode?: string | null }>;
 };
 
 const openBrowserContexts = new Set<unknown>();
@@ -185,6 +200,7 @@ async function downloadTrustedThumbnail(input: {
   jobId: string;
   imageUrl: string;
   assetBaseUrl: string;
+  fileStem?: string;
 }) {
   const url = resolveTrustedAssetUrl(input.imageUrl, input.assetBaseUrl);
   const response = await fetch(url, { redirect: "error" });
@@ -198,18 +214,19 @@ async function downloadTrustedThumbnail(input: {
 
   const outputDir = path.resolve("drafts", "assets", safeFileSegment(input.jobId));
   await mkdir(outputDir, { recursive: true });
+  const fileStem = safeFileSegment(input.fileStem ?? "thumbnail");
   if (contentType !== "image/svg+xml") {
     const extension = contentType === "image/jpeg" ? "jpg" : contentType === "image/webp" ? "webp" : "png";
-    const outputFile = path.join(outputDir, `thumbnail.${extension}`);
+    const outputFile = path.join(outputDir, `${fileStem}.${extension}`);
     await writeFile(outputFile, buffer);
-    console.log(`[naver-agent] thumbnail downloaded: ${url.pathname}`);
+    console.log(`[naver-agent] trusted image downloaded: ${url.pathname}`);
     return outputFile;
   }
 
   const svg = buffer.toString("utf8");
   if (!svg.includes("<svg")) throw new Error("NAVER_SVG_INVALID");
   const renderPage = await input.page.context().newPage();
-  const outputFile = path.join(outputDir, "thumbnail.png");
+  const outputFile = path.join(outputDir, `${fileStem}.png`);
   try {
     await renderPage.setViewportSize({ width: 1200, height: 675 });
     const encoded = buffer.toString("base64");
@@ -222,7 +239,7 @@ async function downloadTrustedThumbnail(input: {
   } finally {
     await renderPage.close().catch(() => undefined);
   }
-  console.log(`[naver-agent] thumbnail converted to PNG: ${url.pathname}`);
+  console.log(`[naver-agent] trusted SVG converted to PNG: ${url.pathname}`);
   return outputFile;
 }
 
@@ -403,6 +420,106 @@ async function waitForNaverAutosave(page: import("playwright").Page) {
   console.log("[naver-agent] autosave wait completed.");
 }
 
+async function fillNaverTags(page: import("playwright").Page, tags: string[]) {
+  if (tags.length === 0) return true;
+  const selectors = [
+    'input[placeholder*="태그"]',
+    'input[aria-label*="태그"]',
+    'input[class*="tag"]',
+  ];
+  for (const selector of selectors) {
+    const input = page.locator(selector).first();
+    if (!(await input.count().catch(() => 0))) continue;
+    await input.fill(tags.map((tag) => tag.replace(/^#/, "")).join(","), { timeout: 10000 });
+    await page.keyboard.press("Enter").catch(() => undefined);
+    console.log(`[naver-agent] filled ${tags.length} tags.`);
+    return true;
+  }
+  console.warn("[naver-agent] tag input was not found.");
+  return false;
+}
+
+async function verifyDraftSave(page: import("playwright").Page) {
+  await page.waitForTimeout(3000);
+  const blocked = await detectBlockedStatus(page);
+  if (blocked) return { ok: false, blocked };
+  const bodyText = await page.locator("body").innerText({ timeout: 5000 }).catch(() => "");
+  const hasSaveSignal = ["임시저장", "저장되었습니다", "저장 완료"].some((token) => bodyText.includes(token));
+  return { ok: hasSaveSignal, blocked: null };
+}
+
+function naverPostIdFromUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.searchParams.get("logNo") || url.pathname.split("/").filter(Boolean).at(-1) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isPublishedNaverUrl(value: string, writeUrl: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:"
+      && (url.hostname === "blog.naver.com" || url.hostname.endsWith(".blog.naver.com"))
+      && !value.startsWith(writeUrl)
+      && !url.pathname.includes("PostWriteForm");
+  } catch {
+    return false;
+  }
+}
+
+async function clickNaverPublish(page: import("playwright").Page, writeUrl: string, tags: string[]) {
+  const publishSelectors = [
+    'button:has-text("발행")',
+    '[role="button"]:has-text("발행")',
+    'button[class*="publish"]',
+    'a[class*="publish"]',
+  ];
+  let clicked = false;
+  for (const selector of publishSelectors) {
+    const button = page.locator(selector).first();
+    if (!(await button.count().catch(() => 0))) continue;
+    if (!(await button.isVisible().catch(() => false))) continue;
+    await button.click({ timeout: 10000 });
+    clicked = true;
+    console.log(`[naver-agent] opened publish confirmation via ${selector}.`);
+    break;
+  }
+  if (!clicked) throw new Error("NAVER_PUBLISH_BUTTON_NOT_FOUND");
+
+  await page.waitForTimeout(1500);
+  if (isPublishedNaverUrl(page.url(), writeUrl)) {
+    return { publishedUrl: page.url(), naverPostId: naverPostIdFromUrl(page.url()) };
+  }
+  if (!(await fillNaverTags(page, tags))) throw new Error("NAVER_TAG_INPUT_NOT_FOUND");
+  const confirmationSelectors = [
+    '.se-popup button:has-text("발행")',
+    '[role="dialog"] button:has-text("발행")',
+    'button:has-text("발행하기")',
+  ];
+  let confirmed = false;
+  for (const selector of confirmationSelectors) {
+    const confirm = page.locator(selector).last();
+    if (!(await confirm.count().catch(() => 0))) continue;
+    if (!(await confirm.isVisible().catch(() => false))) continue;
+    await confirm.click({ timeout: 10000 });
+    console.log(`[naver-agent] confirmed publish via ${selector}.`);
+    confirmed = true;
+    break;
+  }
+  if (!confirmed) throw new Error("NAVER_PUBLISH_CONFIRMATION_NOT_FOUND");
+
+  await page.waitForTimeout(5000);
+  let publishedUrl = page.url();
+  if (!isPublishedNaverUrl(publishedUrl, writeUrl)) {
+    const link = page.locator('a[href*="blog.naver.com"][href*="logNo"], a[href*="PostView.naver"]').first();
+    publishedUrl = await link.getAttribute("href", { timeout: 5000 }).catch(() => null) ?? publishedUrl;
+  }
+  if (!isPublishedNaverUrl(publishedUrl, writeUrl)) throw new Error("NAVER_PUBLISHED_URL_NOT_CONFIRMED");
+  return { publishedUrl, naverPostId: naverPostIdFromUrl(publishedUrl) };
+}
+
 export async function testNaverBrowser() {
   const testUrl = process.env.NAVER_BROWSER_TEST_URL?.trim() || "https://naver.com";
   const profileDir = process.env.NAVER_BROWSER_PROFILE_DIR?.trim() || "./.naver-profile";
@@ -444,9 +561,11 @@ export async function testNaverBrowser() {
   await contextBrowser.close().catch(() => undefined);
 }
 
-export async function runNaverWriter(job: NaverDraftJob, context: { draftFile: string; assetBaseUrl: string }): Promise<WriterResult> {
+export async function runNaverWriter(job: NaverDraftJob, context: WriterContext): Promise<WriterResult> {
   const dryRun = !isExplicitLiveMode();
   const allowDraftSave = process.env.NAVER_ALLOW_DRAFT_SAVE === "true";
+  const allowImageUpload = process.env.NAVER_ALLOW_IMAGE_UPLOAD === "true" && job.allowImageUpload === true;
+  const allowPublish = process.env.NAVER_ALLOW_PUBLISH === "true" && job.allowPublish === true;
   if (dryRun) {
     return {
       status: "draft_saved",
@@ -539,8 +658,10 @@ export async function runNaverWriter(job: NaverDraftJob, context: { draftFile: s
       };
     }
 
-    if (job.allowImageUpload && job.thumbnailImageUrl) {
+    if ((job.thumbnailImageUrl || (job.inlineImageUrls?.length ?? 0) > 0) && allowImageUpload) {
       try {
+        await context.reportProgress?.({ status: "image_uploading" });
+        if (!job.thumbnailImageUrl) throw new Error("NAVER_THUMBNAIL_REQUIRED");
         const thumbnailFile = await downloadTrustedThumbnail({
           page,
           jobId: job.id,
@@ -548,31 +669,79 @@ export async function runNaverWriter(job: NaverDraftJob, context: { draftFile: s
           assetBaseUrl: context.assetBaseUrl,
         });
         await uploadNaverThumbnail(page, bodySelectors, thumbnailFile);
+        for (const [index, imageUrl] of (job.inlineImageUrls ?? []).entries()) {
+          const inlineFile = await downloadTrustedThumbnail({
+            page,
+            jobId: job.id,
+            imageUrl,
+            assetBaseUrl: context.assetBaseUrl,
+            fileStem: `inline-${index + 1}`,
+          });
+          await uploadNaverThumbnail(page, bodySelectors, inlineFile);
+        }
       } catch (error) {
         return {
-          status: "failed",
+          status: "image_upload_failed",
           externalUrl: page.url(),
-          errorCode: "NAVER_THUMBNAIL_UPLOAD_FAILED",
+          errorCode: "NAVER_IMAGE_UPLOAD_FAILED",
+          errorMessage: error instanceof Error ? error.message : String(error),
+        };
+      }
+    } else if (allowPublish) {
+      return {
+        status: "image_upload_failed",
+        externalUrl: page.url(),
+        errorCode: "NAVER_IMAGE_UPLOAD_NOT_ALLOWED",
+        errorMessage: "Automatic publish requires both server and local image upload permission.",
+      };
+    }
+
+    if (allowDraftSave) {
+      await context.reportProgress?.({ status: "draft_saving" });
+      if (!(await clickNaverEditorSave(page))) {
+        await waitForNaverAutosave(page);
+        return {
+          status: "draft_save_failed",
+          externalUrl: page.url(),
+          errorCode: "NAVER_SAVE_BUTTON_NOT_FOUND",
+          errorMessage: "Draft content was entered, but the Naver editor save button was not found.",
+        };
+      }
+      const saveCheck = await verifyDraftSave(page);
+      if (saveCheck.blocked) {
+        return { status: saveCheck.blocked, externalUrl: page.url(), errorCode: "NAVER_SECURITY_AFTER_DRAFT_SAVE", errorMessage: "Naver security check appeared after draft save." };
+      }
+      if (!saveCheck.ok) {
+        return { status: "draft_save_failed", externalUrl: page.url(), errorCode: "NAVER_DRAFT_SAVE_NOT_CONFIRMED", errorMessage: "Naver draft save completion was not confirmed." };
+      }
+      if (!allowPublish) return { status: "draft_saved", externalUrl: page.url() };
+
+      await context.reportProgress?.({ status: "publish_ready", externalUrl: page.url() });
+      const publishGate = await context.beginPublish?.();
+      if (!publishGate?.allowed) {
+        return {
+          status: publishGate?.status === "duplicate_blocked" ? "duplicate_blocked" : "publish_blocked",
+          externalUrl: page.url(),
+          errorCode: publishGate?.errorCode ?? "NAVER_SERVER_PUBLISH_BLOCKED",
+          errorMessage: "Server-side final duplicate/canary check blocked publishing.",
+        };
+      }
+      try {
+        const published = await clickNaverPublish(page, writeUrl, job.tags);
+        return { status: "published", externalUrl: published.publishedUrl, ...published };
+      } catch (error) {
+        return {
+          status: "publish_failed",
+          externalUrl: page.url(),
+          errorCode: "NAVER_PUBLISH_FAILED",
           errorMessage: error instanceof Error ? error.message : String(error),
         };
       }
     }
-
-    if (allowDraftSave) {
-      if (await clickNaverEditorSave(page)) {
-        return { status: "draft_saved", externalUrl: page.url() };
-      }
-
-      await waitForNaverAutosave(page);
-      return {
-        status: "user_publish_required",
-        externalUrl: page.url(),
-        errorCode: "NAVER_SAVE_BUTTON_NOT_FOUND",
-        errorMessage: "Draft content was entered, but the Naver editor save button was not found. Please click 저장 manually.",
-      };
-    }
     return { status: "user_publish_required", externalUrl: page.url() };
   } catch (error) {
     return { status: "failed", errorCode: "NAVER_WRITER_FAILED", errorMessage: error instanceof Error ? error.message : String(error) };
+  } finally {
+    await contextBrowser.close().catch(() => undefined);
   }
 }

@@ -1,4 +1,4 @@
-import type { BlogImagePrompt, CompetitorBlogReference, MarketSnapshot, ReferenceBundle, ReferenceItem, StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
+import type { BlogImagePrompt, CompetitorBlogAnalysisSummary, CompetitorBlogReference, MarketSnapshot, ReferenceBundle, ReferenceItem, StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 
 export type ContentPlannerHermesInput = {
   topic: string;
@@ -68,6 +68,7 @@ export type HermesMarketingReviewPayload = {
     language: "ko" | "en";
     plannerResult?: Record<string, unknown>;
     competitorBlogReferences?: CompetitorBlogReference[];
+    competitorAnalysis?: CompetitorBlogAnalysisSummary;
     searchKeywords?: string[];
     differentiationPoints?: string[];
     prohibitedPhrases?: string[];

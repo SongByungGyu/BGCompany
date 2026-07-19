@@ -209,6 +209,7 @@ export function buildMarketingReviewHermesPayload(input: MarketingReviewHermesIn
       language: input.language ?? "ko",
       plannerResult: input.plannerResult,
       competitorBlogReferences: input.competitorBlogReferences,
+      competitorAnalysis: input.referenceBundle?.competitorAnalysis,
       searchKeywords: input.referenceBundle?.queries,
       differentiationPoints: input.referenceBundle?.differentiationPoints,
       prohibitedPhrases: input.prohibitedPhrases,

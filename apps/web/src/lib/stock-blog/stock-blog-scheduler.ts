@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { startContentPipeline } from "@/lib/content-pipeline/content-pipeline-service";
 import { HermesDailyLimitExceededError, getHermesUsageSummary } from "@/lib/hermes/hermes-usage";
-import { createNaverDraftJobFromPipeline } from "@/lib/naver-drafts/naver-draft-jobs";
+import { createNaverDraftJobFromPipeline, getPublishCircuitBreaker } from "@/lib/naver-drafts/naver-draft-jobs";
 import type { StockBlogQualityGateResult } from "@/features/content-pipeline/content-pipeline-types";
 import { evaluateStockBlogPublishQuality } from "@/lib/stock-blog/quality-gate";
 import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
@@ -30,6 +30,10 @@ export type StockBlogSchedulerConfig = {
   runnerMode: StockBlogSchedulerRunnerMode;
   autoApprove: boolean;
   autoCreateDraftJob: boolean;
+  autoPublish: boolean;
+  firstAutoPublishAt: string | null;
+  autoPublishCanaryLimit: number;
+  autoPublishRetryLimit: number;
   lookbackMinutes: number;
   maxRetries: number;
   retryDelayMinutes: number;
@@ -74,6 +78,11 @@ export type StockBlogSchedulerStatus = {
   runnerMode: StockBlogSchedulerRunnerMode;
   autoApprove: boolean;
   autoCreateDraftJob: boolean;
+  autoPublish: boolean;
+  firstAutoPublishAt: string | null;
+  autoPublishCanaryLimit: number;
+  autoPublishRetryLimit: number;
+  publishCircuitBreaker: { active: boolean; message: string | null; updatedAt: string | null };
   lookbackMinutes: number;
   maxRetries: number;
   retryDelayMinutes: number;
@@ -93,6 +102,7 @@ const DEFAULT_LOOKBACK_MINUTES = 180;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MINUTES = 10;
 const EVENT_TYPE = "StockBlogScheduledRun";
+const PUBLISH_CIRCUIT_BREAKER_EVENT_ID = "event-stock-auto-publish-circuit-breaker";
 
 type StockBlogSchedulerDefinition = StockBlogScheduleItem & {
   scheduleId: string;
@@ -185,6 +195,17 @@ function parsePositiveInt(value: string | undefined, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function parseNonNegativeInt(value: string | undefined, fallback: number) {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function parseOptionalDate(value: string | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  return Number.isFinite(Date.parse(trimmed)) ? new Date(trimmed).toISOString() : null;
+}
+
 function getConfiguredTimezone() {
   const timezone = process.env.STOCK_BLOG_SCHEDULER_TZ?.trim() || DEFAULT_TIMEZONE;
   try {
@@ -208,6 +229,10 @@ export function getStockBlogSchedulerConfig(): StockBlogSchedulerConfig {
     runnerMode: getConfiguredRunnerMode(),
     autoApprove: parseBoolean(process.env.STOCK_BLOG_SCHEDULER_AUTO_APPROVE, false),
     autoCreateDraftJob: parseBoolean(process.env.STOCK_BLOG_SCHEDULER_AUTO_CREATE_DRAFT, false),
+    autoPublish: parseBoolean(process.env.STOCK_BLOG_SCHEDULER_AUTO_PUBLISH, false),
+    firstAutoPublishAt: parseOptionalDate(process.env.STOCK_BLOG_FIRST_AUTO_PUBLISH_AT),
+    autoPublishCanaryLimit: parsePositiveInt(process.env.STOCK_BLOG_AUTO_PUBLISH_CANARY_LIMIT, 1),
+    autoPublishRetryLimit: parseNonNegativeInt(process.env.STOCK_BLOG_AUTO_PUBLISH_RETRY_LIMIT, 0),
     lookbackMinutes: parsePositiveInt(process.env.STOCK_BLOG_SCHEDULER_LOOKBACK_MINUTES, DEFAULT_LOOKBACK_MINUTES),
     maxRetries: parsePositiveInt(process.env.STOCK_BLOG_SCHEDULER_MAX_RETRIES, DEFAULT_MAX_RETRIES),
     retryDelayMinutes: parsePositiveInt(process.env.STOCK_BLOG_SCHEDULER_RETRY_DELAY_MINUTES, DEFAULT_RETRY_DELAY_MINUTES),
@@ -315,6 +340,7 @@ function buildPipelineInput(definition: StockBlogSchedulerDefinition, runnerMode
     }),
     channel: "blog",
     runnerMode,
+    contentType: definition.contentType,
   };
 }
 
@@ -360,6 +386,24 @@ async function writeSchedulerEvent(input: {
   });
 }
 
+async function activateSchedulerPublishCircuitBreaker(input: { status: string; reason: string; scheduleKey: string }) {
+  await prisma.eventLog.upsert({
+    where: { id: PUBLISH_CIRCUIT_BREAKER_EVENT_ID },
+    create: {
+      id: PUBLISH_CIRCUIT_BREAKER_EVENT_ID,
+      type: "StockBlogPublishCircuitBreaker",
+      timestamp: new Date(),
+      summary: "첫 자동 발행이 실패해 자동 발행이 일시 중지되었습니다.",
+      payload: { active: true, ...input },
+    },
+    update: {
+      timestamp: new Date(),
+      summary: "첫 자동 발행이 실패해 자동 발행이 일시 중지되었습니다.",
+      payload: { active: true, ...input },
+    },
+  });
+}
+
 function eventPayload(value: Prisma.JsonValue): Record<string, Prisma.JsonValue> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, Prisma.JsonValue>
@@ -372,7 +416,8 @@ function retryState(existing: Awaited<ReturnType<typeof prisma.eventLog.findUniq
   const status = typeof payload.status === "string" ? payload.status : "";
   const previousAttempt = typeof payload.attempt === "number" ? payload.attempt : 1;
   if (status !== "failed") return { allowed: false, attempt: previousAttempt, reason: "이미 처리된 스케줄입니다." };
-  if (previousAttempt >= config.maxRetries) return { allowed: false, attempt: previousAttempt, reason: `실패 재시도 한도 ${config.maxRetries}회에 도달했습니다.` };
+  const maxAttempts = config.autoPublish ? 1 + config.autoPublishRetryLimit : config.maxRetries;
+  if (previousAttempt >= maxAttempts) return { allowed: false, attempt: previousAttempt, reason: `실패 재시도 한도 ${Math.max(0, maxAttempts - 1)}회에 도달했습니다.` };
   const elapsedMs = now.getTime() - existing.timestamp.getTime();
   const delayMs = config.retryDelayMinutes * 60 * 1000;
   if (elapsedMs < delayMs) {
@@ -399,6 +444,7 @@ export function buildStockBlogSchedulerPlan(now = new Date(), config = getStockB
 
 export async function getStockBlogSchedulerStatus(now = new Date()): Promise<StockBlogSchedulerStatus> {
   const config = getStockBlogSchedulerConfig();
+  const publishCircuitBreaker = await getPublishCircuitBreaker();
   const plan = buildStockBlogSchedulerPlan(now, config).sort((a, b) => new Date(a.nextRunAt).getTime() - new Date(b.nextRunAt).getTime());
   const recentRuns = await prisma.eventLog.findMany({
     where: { type: EVENT_TYPE },
@@ -413,6 +459,11 @@ export async function getStockBlogSchedulerStatus(now = new Date()): Promise<Sto
     runnerMode: config.runnerMode,
     autoApprove: config.autoApprove,
     autoCreateDraftJob: config.autoCreateDraftJob,
+    autoPublish: config.autoPublish,
+    firstAutoPublishAt: config.firstAutoPublishAt,
+    autoPublishCanaryLimit: config.autoPublishCanaryLimit,
+    autoPublishRetryLimit: config.autoPublishRetryLimit,
+    publishCircuitBreaker,
     lookbackMinutes: config.lookbackMinutes,
     maxRetries: config.maxRetries,
     retryDelayMinutes: config.retryDelayMinutes,
@@ -429,6 +480,19 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
   const key = scheduleKey(definition, scheduledAt);
   const id = schedulerEventId(key);
   const scheduledFor = scheduledAt.toISOString();
+  const scheduledParts = getZonedParts(scheduledAt, config.timezone);
+  const marketDate = `${scheduledParts.year}-${pad(scheduledParts.month)}-${pad(scheduledParts.day)}`;
+  const publishKey = `${contentType}:${marketDate}:${definition.scheduledTime}`;
+
+  if (config.autoPublish) {
+    const circuit = await getPublishCircuitBreaker();
+    if (circuit.active) {
+      return { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "skipped", reason: circuit.message ?? "자동 발행 circuit breaker 활성화" };
+    }
+    if (config.firstAutoPublishAt && now.getTime() < Date.parse(config.firstAutoPublishAt)) {
+      return { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "not_due", reason: "첫 자동 발행 예약 시각 이전" };
+    }
+  }
 
   const existing = await prisma.eventLog.findUnique({ where: { id } });
   const retry = retryState(existing, now, config);
@@ -480,10 +544,17 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
       pipeline,
       requireRealReferences: config.runnerMode === "hermes",
     });
-    const qualityBlocked = config.runnerMode === "hermes" && !qualityGate.ok;
+    const qaBlocked = pipeline.qaResult?.publishReadiness === "blocked"
+      || pipeline.qaResult?.finalRecommendation === "block";
+    const qualityBlocked = (config.runnerMode === "hermes" && !qualityGate.ok) || qaBlocked;
     if (qualityBlocked) {
       status = "partial_failed";
-      notes.push(`품질 게이트 차단: ${qualityGate.status} · ${qualityGate.reasons.join(" / ")}`);
+      notes.push(qaBlocked
+        ? `QA 자동 승인 차단: ${pipeline.qaResult?.reason ?? "QA가 게시 차단을 권고함"}`
+        : `품질 게이트 차단: ${qualityGate.status} · ${qualityGate.reasons.join(" / ")}`);
+      if (config.autoPublish) {
+        await activateSchedulerPublishCircuitBreaker({ status: "quality_failed", reason: notes.join(" · "), scheduleKey: key });
+      }
     }
 
     if (!qualityBlocked && config.autoApprove && approvalId && pipeline.status === "director_approval") {
@@ -498,11 +569,20 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
 
     if (!qualityBlocked && config.autoCreateDraftJob) {
       try {
-        const job = await createNaverDraftJobFromPipeline({ contentPipelineId: pipeline.id, approvalId });
+        const job = await createNaverDraftJobFromPipeline({
+          contentPipelineId: pipeline.id,
+          approvalId,
+          allowPublish: config.autoPublish,
+          publishKey: config.autoPublish ? publishKey : null,
+          marketDate: config.autoPublish ? marketDate : null,
+          scheduleSlot: config.autoPublish ? definition.scheduledTime : null,
+        });
         naverDraftJobId = job.id;
       } catch (error) {
         status = "partial_failed";
-        notes.push(error instanceof Error ? error.message : "네이버 임시저장 job 생성 실패");
+        const reason = error instanceof Error ? error.message : "네이버 임시저장 job 생성 실패";
+        notes.push(reason);
+        if (config.autoPublish) await activateSchedulerPublishCircuitBreaker({ status: "publish_blocked", reason, scheduleKey: key });
       }
     }
 
@@ -542,6 +622,7 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
       summary: `${contentType} 자동 실행 실패`,
       payload: result as unknown as Prisma.InputJsonObject,
     });
+    if (config.autoPublish) await activateSchedulerPublishCircuitBreaker({ status: "failed", reason, scheduleKey: key });
     return result;
   }
 }

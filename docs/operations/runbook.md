@@ -16,14 +16,17 @@ Keep these safety settings until a manual end-to-end review is complete:
 STOCK_BLOG_SCHEDULER_ENABLED=false
 STOCK_BLOG_SCHEDULER_AUTO_APPROVE=false
 STOCK_BLOG_SCHEDULER_AUTO_CREATE_DRAFT=false
+STOCK_BLOG_SCHEDULER_AUTO_PUBLISH=false
+NAVER_ALLOW_DRAFT_SAVE=false
 NAVER_ALLOW_IMAGE_UPLOAD=false
+NAVER_ALLOW_PUBLISH=false
 ```
 
 `needs_credentials`, `needs_reference`, and `needs_data` are expected safe-stop states. Do not bypass them by raising the Hermes limit or inserting fabricated references. Generated SVG assets are stored in the `bg_company_generated_stock_blog` Docker volume. A local Naver agent `readability_failed` result means the pasted editor text must be inspected before retrying.
 
 ## Naver thumbnail upload and Windows auto-start
 
-The Local Naver Draft Agent can attach the generated BG Market Note thumbnail before saving a draft. It never clicks Naver's publish button.
+The Local Naver Draft Agent can attach generated BG Market Note images and save a draft. Publishing is disabled by default and requires both `NAVER_ALLOW_PUBLISH=true` in the Windows agent and `allowPublish=true` in the claimed job.
 
 Safety boundaries:
 
@@ -32,6 +35,8 @@ Safety boundaries:
 - Allowed formats are SVG, PNG, JPEG, and WebP with a 12 MB limit.
 - SVG is rendered to a local `1200x675` PNG by Playwright before upload.
 - If download, conversion, editor attachment, or attachment verification fails, draft saving stops with `NAVER_THUMBNAIL_UPLOAD_FAILED`.
+- The server performs a final duplicate/canary check immediately before a publish click.
+- Login, security verification, CAPTCHA, image, draft-save, or publish failures activate the runtime publish circuit breaker for the first canary and are never retried automatically.
 
 After updating and browser-testing the Windows agent, enable image metadata on the VPS:
 
@@ -704,7 +709,7 @@ Hermes 주식 블로그 운영은 `STOCK_REFERENCE_PROVIDER=manual`을 권장한
 - mock/dry-run으로 UI만 확인하고 실제 Hermes 반복 실행은 금지
 # Automatic MarketSnapshot 점검
 
-운영 주식 브리핑은 KIS 조회 API와 FRED API가 모두 준비된 경우에만 실제 Hermes를 실행한다.
+운영 주식 브리핑은 KIS 조회 API를 필수로 사용한다. FRED가 정상이면 FRED 데이터를 우선 사용하고, FRED만 실패한 경우에는 아래 제한 운영 정책에 따라 공식 미국 데이터 제공처로 보완한다.
 
 ```bash
 docker compose exec -T web sh -lc '
@@ -713,6 +718,7 @@ for key in KIS_APP_KEY KIS_APP_SECRET FRED_API_KEY; do
 done
 echo "STOCK_MARKET_DATA_PROVIDER=$(printenv STOCK_MARKET_DATA_PROVIDER)"
 echo "STOCK_MARKET_DATA_ALLOW_MANUAL_FALLBACK=$(printenv STOCK_MARKET_DATA_ALLOW_MANUAL_FALLBACK)"
+echo "STOCK_MARKET_DATA_ALLOW_FRED_DEGRADED=$(printenv STOCK_MARKET_DATA_ALLOW_FRED_DEGRADED)"
 echo "STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES=$(printenv STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES)"
 '
 ```
@@ -722,6 +728,7 @@ secret 원문, 요청 header, provider 전체 응답은 출력하지 않는다. 
 ```text
 STOCK_MARKET_DATA_PROVIDER=kis-fred
 STOCK_MARKET_DATA_ALLOW_MANUAL_FALLBACK=false
+STOCK_MARKET_DATA_ALLOW_FRED_DEGRADED=true
 STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES=false
 ```
 
@@ -732,13 +739,14 @@ KIS 읽기 전용 조회의 일시적 `429`, `500`, `502`, `503`, `504` 응답�
 
 FRED 조회가 실패하면 먼저 기존 공식 미국 데이터 제공처(Treasury, BLS, BEA, Federal Reserve)로 보완합니다. 보완 후에도 미국 국채금리 또는 경제지표 일정이 일부 누락된 경우에는 아래 조건을 모두 만족할 때만 제한 운영을 허용할 수 있습니다.
 
-- `STOCK_MARKET_DATA_ALLOW_FRED_DEGRADED=true`
+- `STOCK_MARKET_DATA_ALLOW_FRED_DEGRADED`가 `false`가 아님(미설정 또는 `true`가 기본 허용)
 - KIS 조회 상태가 `ready`이고 freshness가 `fresh`
 - 오래되거나 누락된 KIS 항목이 없음
+- Treasury/BLS 등 공식 미국 보완 출처가 최소 1개 이상 확보됨
 - 실제 Naver 뉴스와 경쟁 블로그 참고자료 품질 게이트 통과
-- FRED 실패 원인이 timeout, network, rate limit, HTTP 5xx 또는 공식 제공처의 일시적 데이터 누락
+- FRED 실패 원인이 인증, timeout, network, rate limit, HTTP 5xx 또는 BLS 캘린더의 서버 요청 제한(HTTP 403)
 
-인증 실패, 파싱 오류, 잘못된 요청, 알 수 없는 오류는 제한 운영으로 우회하지 않습니다. 누락된 미국 수치는 추정하거나 mock으로 채우지 않고 본문에서 제외합니다. 제한 운영 본문과 네이버 임시저장 원고에는 다음 문구가 정확히 포함되어야 합니다.
+FRED 인증 실패는 공식 미국 보완 출처가 실제로 확보된 경우에만 제한 운영으로 전환합니다. 공식 보완 출처가 하나도 없거나 파싱 오류, 잘못된 요청, 알 수 없는 오류가 발생하면 계속 차단합니다. 누락된 미국 수치는 추정하거나 mock으로 채우지 않고 본문에서 제외합니다. 제한 운영 본문과 네이버 임시저장 원고에는 다음 문구가 정확히 포함되어야 합니다.
 
 ```text
 FRED 거시지표 조회 지연으로 미국 국채금리 또는 경제지표 일정 일부를 이번 브리핑에서 제외했습니다.

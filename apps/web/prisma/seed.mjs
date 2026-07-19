@@ -23,6 +23,7 @@ const prisma = new PrismaClient({ adapter });
 
 const employees = [
   { id: "content-planner", displayName: "미나", initial: "미", department: "콘텐츠팀", role: "AI 에이전트", status: "업무 중", currentTaskId: "task-content-draft", currentLocation: "content-seat-01", model: "Claude Opus 4.6", currentCost: "0.82" },
+  { id: "content-writer", displayName: "지아", initial: "지", department: "콘텐츠팀", role: "콘텐츠 작가", status: "업무 중", currentTaskId: null, currentLocation: "content-seat-03", model: "GPT-5.4 mini", currentCost: "0.34" },
   { id: "finance-manager", displayName: "도윤", initial: "도", department: "재정팀", role: "AI 에이전트", status: "업무 중", currentTaskId: "task-cost-review", currentLocation: "finance-seat-01", model: "GPT-5.1", currentCost: "0.58" },
   { id: "stock-monitor", displayName: "서준", initial: "서", department: "주식팀", role: "AI 에이전트", status: "조사 중", currentTaskId: "task-stock-watch", currentLocation: "stock-seat-01", model: "Claude Sonnet 4.6", currentCost: "0.37" },
   { id: "developer", displayName: "하늘", initial: "하", department: "개발팀", role: "AI 에이전트", status: "오류 대응 중", currentTaskId: "task-dev-pipeline", currentLocation: "error-response-point", model: "GPT-5.1 Codex", currentCost: "0.46" },

@@ -15,7 +15,12 @@ export type NaverDraftJobStatus =
   | "queued"
   | "claimed"
   | "in_progress"
+  | "image_uploading"
+  | "draft_saving"
   | "draft_saved"
+  | "publish_ready"
+  | "publishing"
+  | "published"
   | "user_publish_required"
   | "completed"
   | "failed"
@@ -23,6 +28,14 @@ export type NaverDraftJobStatus =
   | "captcha_required"
   | "security_check_required"
   | "readability_failed"
+  | "image_upload_failed"
+  | "draft_save_failed"
+  | "publish_blocked"
+  | "publish_failed"
+  | "duplicate_blocked"
+  | "quality_failed"
+  | "reference_failed"
+  | "market_data_failed"
   | "cancelled";
 
 export type SerializedNaverDraftJob = {
@@ -55,6 +68,15 @@ export type SerializedNaverDraftJob = {
   allowImageUpload: boolean;
   disclaimer: string | null;
   externalUrl: string | null;
+  allowPublish: boolean;
+  publishKey: string | null;
+  marketDate: string | null;
+  scheduleSlot: string | null;
+  publishedAt: string | null;
+  publishedUrl: string | null;
+  naverPostId: string | null;
+  publishAttemptCount: number;
+  publishMethod: string | null;
   errorCode: string | null;
   errorMessage: string | null;
   claimedBy: string | null;
@@ -69,6 +91,8 @@ type StatusReportInput = {
   status: NaverDraftJobStatus;
   claimedBy?: string;
   externalUrl?: string;
+  publishedUrl?: string;
+  naverPostId?: string;
   errorCode?: string;
   errorMessage?: string;
 };
@@ -91,7 +115,21 @@ type DraftBuildResult = {
   disclaimer: string;
 };
 
-const activeStatuses = ["queued", "claimed", "in_progress", "draft_saved", "user_publish_required"];
+const activeStatuses = ["queued", "claimed", "in_progress", "image_uploading", "draft_saving", "draft_saved", "publish_ready", "publishing", "user_publish_required"];
+const publishFailureStatuses: NaverDraftJobStatus[] = [
+  "failed",
+  "login_required",
+  "security_check_required",
+  "captcha_required",
+  "readability_failed",
+  "image_upload_failed",
+  "draft_save_failed",
+  "publish_failed",
+  "quality_failed",
+  "reference_failed",
+  "market_data_failed",
+];
+const PUBLISH_CIRCUIT_BREAKER_EVENT_ID = "event-stock-auto-publish-circuit-breaker";
 
 const INVESTMENT_DISCLAIMER = "본 글은 투자 참고용 정보이며, 특정 종목의 매수·매도 추천이 아닙니다. 모든 투자 판단과 책임은 투자자 본인에게 있습니다.";
 
@@ -222,15 +260,16 @@ function sanitizeByTemplate(value: string, template: StockBriefingTemplate) {
 function sectionsToText(pipeline: ContentPipelineRun) {
   const writer = pipeline.writerResult;
   if (!writer) return "";
-  if (clean(writer.fullDraft)) return clean(writer.fullDraft);
-  if (clean(writer.markdownDraft)) return clean(writer.markdownDraft);
   const sections = writer.sections?.map((section) => {
     const heading = clean(section.heading);
     const body = clean(section.body);
     if (heading && body) return `${heading}\n${body}`;
     return heading || body;
   }).filter(Boolean) ?? [];
-  return [writer.introduction, ...sections, writer.conclusion, writer.cta]
+  if (sections.length > 0) return sections.join("\n\n");
+  if (clean(writer.fullDraft)) return clean(writer.fullDraft);
+  if (clean(writer.markdownDraft)) return clean(writer.markdownDraft);
+  return [writer.introduction, writer.conclusion, writer.cta]
     .map(clean)
     .filter(Boolean)
     .join("\n\n");
@@ -435,6 +474,15 @@ export function serializeNaverDraftJob(job: NaverDraftJob): SerializedNaverDraft
     allowImageUpload: false,
     disclaimer: job.disclaimer,
     externalUrl: job.externalUrl,
+    allowPublish: job.allowPublish,
+    publishKey: job.publishKey,
+    marketDate: job.marketDate,
+    scheduleSlot: job.scheduleSlot,
+    publishedAt: job.publishedAt?.toISOString() ?? null,
+    publishedUrl: job.publishedUrl,
+    naverPostId: job.naverPostId,
+    publishAttemptCount: job.publishAttemptCount,
+    publishMethod: job.publishMethod,
     errorCode: job.errorCode,
     errorMessage: job.errorMessage,
     claimedBy: job.claimedBy,
@@ -482,6 +530,67 @@ export function getNaverDraftPolicy() {
   };
 }
 
+function automaticPublishBlockReasons(pipeline: ContentPipelineRun, body: string) {
+  const bundle = collectReferenceBundle(pipeline);
+  const snapshot = bundle?.marketSnapshot;
+  const quality = evaluateStockBlogPublishQuality({
+    pipeline,
+    referenceBundle: bundle,
+    pasteReadyBody: body,
+    writerText: sectionsToText(pipeline),
+    requireRealReferences: true,
+  });
+  const reasons = [...quality.reasons];
+  if (pipeline.runnerMode !== "hermes") reasons.push("Hermes 실운영 결과만 자동 발행 가능");
+  if (!pipeline.plannerResult?.ok) reasons.push("content-planner 실패");
+  if (!pipeline.marketingResult?.ok) reasons.push("marketing-manager 실패");
+  if (!pipeline.writerResult?.ok) reasons.push("content-writer 실패");
+  if (!pipeline.qaResult?.ok || pipeline.qaResult.publishReadiness !== "ready" || pipeline.qaResult.finalRecommendation !== "approve") {
+    reasons.push("qa-auditor 자동 발행 승인 실패");
+  }
+  if ((bundle?.missingItems?.length ?? 0) > 0) reasons.push("Reference missingItems 존재");
+  if ((bundle?.competitorAnalysis?.analyzedCount ?? 0) < 1) reasons.push("경쟁 블로그 심층 구조 분석 PASS 필요");
+  if (snapshot?.status !== "ready") reasons.push("MarketSnapshot status=ready 필요");
+  if (snapshot?.dataQuality !== "verified") reasons.push("MarketSnapshot dataQuality=verified 필요");
+  if (snapshot?.freshness?.status !== "fresh") reasons.push("MarketSnapshot freshness=fresh 필요");
+  if (snapshot?.fallbackUsed !== false) reasons.push("MarketSnapshot fallbackUsed=false 필요");
+  if (pipeline.imageStatus !== "generated") reasons.push("imageStatus=generated 필요");
+  if (!clean(pipeline.thumbnailImageUrl ?? pipeline.naverBlogPublishPrep?.thumbnailImageUrl)) reasons.push("thumbnailImageUrl 필요");
+  if ((pipeline.inlineImageUrls ?? pipeline.naverBlogPublishPrep?.inlineImageUrls ?? []).length < 1) reasons.push("inlineImageUrls 1개 이상 필요");
+  return Array.from(new Set(reasons));
+}
+
+async function activatePublishCircuitBreaker(job: NaverDraftJob, status: NaverDraftJobStatus, reason?: string) {
+  if (!job.allowPublish || !publishFailureStatuses.includes(status)) return;
+  await prisma.eventLog.upsert({
+    where: { id: PUBLISH_CIRCUIT_BREAKER_EVENT_ID },
+    create: {
+      id: PUBLISH_CIRCUIT_BREAKER_EVENT_ID,
+      type: "StockBlogPublishCircuitBreaker",
+      timestamp: new Date(),
+      summary: "첫 자동 발행이 실패해 자동 발행이 일시 중지되었습니다.",
+      payload: { active: true, jobId: job.id, status, reason: reason ?? null },
+    },
+    update: {
+      timestamp: new Date(),
+      summary: "첫 자동 발행이 실패해 자동 발행이 일시 중지되었습니다.",
+      payload: { active: true, jobId: job.id, status, reason: reason ?? null },
+    },
+  });
+}
+
+export async function getPublishCircuitBreaker() {
+  const event = await prisma.eventLog.findUnique({ where: { id: PUBLISH_CIRCUIT_BREAKER_EVENT_ID } });
+  const payload = event && typeof event.payload === "object" && !Array.isArray(event.payload)
+    ? event.payload as Record<string, Prisma.JsonValue>
+    : {};
+  return {
+    active: payload.active === true,
+    message: event?.summary ?? null,
+    updatedAt: event?.timestamp.toISOString() ?? null,
+  };
+}
+
 export async function listNaverDraftJobs(input: { contentPipelineId?: string | null } = {}) {
   const jobs = await prisma.naverDraftJob.findMany({
     where: input.contentPipelineId ? { contentPipelineId: input.contentPipelineId } : undefined,
@@ -496,7 +605,14 @@ export async function getNaverDraftJob(jobId: string) {
   return job ? serializeNaverDraftJobWithPipeline(job) : null;
 }
 
-export async function createNaverDraftJobFromPipeline(input: { contentPipelineId: string; approvalId?: string | null }) {
+export async function createNaverDraftJobFromPipeline(input: {
+  contentPipelineId: string;
+  approvalId?: string | null;
+  allowPublish?: boolean;
+  publishKey?: string | null;
+  marketDate?: string | null;
+  scheduleSlot?: string | null;
+}) {
   const detail = await getContentPipelineDetail(input.contentPipelineId);
   if (!detail) throw new Error("CONTENT_PIPELINE_NOT_FOUND");
 
@@ -513,15 +629,43 @@ export async function createNaverDraftJobFromPipeline(input: { contentPipelineId
     where: { contentPipelineId: detail.pipeline.id, status: { in: activeStatuses } },
     orderBy: { createdAt: "desc" },
   });
-  if (existing) return serializeNaverDraftJobWithPipeline(existing, detail.pipeline);
+  if (existing) {
+    if (input.allowPublish && (!existing.allowPublish || existing.publishKey !== clean(input.publishKey))) {
+      throw new Error("NAVER_EXISTING_DRAFT_NOT_PUBLISH_ENABLED");
+    }
+    return serializeNaverDraftJobWithPipeline(existing, detail.pipeline);
+  }
 
   const draft = buildDraftFromPipeline(detail.pipeline);
+  if (input.allowPublish) {
+    const circuitBreaker = await getPublishCircuitBreaker();
+    if (circuitBreaker.active) throw new Error("NAVER_PUBLISH_CIRCUIT_BREAKER_ACTIVE");
+    const reasons = automaticPublishBlockReasons(detail.pipeline, draft.body);
+    if (reasons.length > 0) throw new Error(`NAVER_AUTO_PUBLISH_PREFLIGHT_FAILED: ${reasons.join(" · ")}`);
+    if (!clean(input.publishKey) || !clean(input.marketDate) || !clean(input.scheduleSlot)) {
+      throw new Error("NAVER_AUTO_PUBLISH_IDEMPOTENCY_FIELDS_REQUIRED");
+    }
+    const duplicate = await prisma.naverDraftJob.findFirst({
+      where: {
+        OR: [
+          { publishKey: input.publishKey },
+          { contentPipelineId: detail.pipeline.id, status: "published" },
+          { title: draft.title, marketDate: input.marketDate, status: "published" },
+        ],
+      },
+    });
+    if (duplicate) throw new Error("NAVER_AUTO_PUBLISH_DUPLICATE_BLOCKED");
+  }
   const job = await prisma.naverDraftJob.create({
     data: {
       id: `naver-draft-${randomUUID()}`,
       contentPipelineId: detail.pipeline.id,
       approvalId,
       status: "queued",
+      allowPublish: input.allowPublish === true,
+      publishKey: clean(input.publishKey) || null,
+      marketDate: clean(input.marketDate) || null,
+      scheduleSlot: clean(input.scheduleSlot) || null,
       ...draft,
     },
   });
@@ -575,8 +719,102 @@ export async function claimNaverDraftJob(jobId: string, claimedBy: string) {
   return getNaverDraftJob(jobId);
 }
 
+function parseNonNegativeInt(value: string | undefined, fallback: number) {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function isAllowedPublishedUrl(value?: string) {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && (url.hostname === "blog.naver.com" || url.hostname.endsWith(".blog.naver.com"));
+  } catch {
+    return false;
+  }
+}
+
+async function beginNaverPublish(jobId: string, claimedBy?: string) {
+  return prisma.$transaction(async (tx) => {
+    const job = await tx.naverDraftJob.findUnique({ where: { id: jobId } });
+    if (!job) throw new Error("NAVER_DRAFT_JOB_NOT_FOUND");
+    if (job.status !== "publish_ready" || !job.allowPublish) {
+      return tx.naverDraftJob.update({
+        where: { id: jobId },
+        data: { status: "publish_blocked", completedAt: new Date(), errorCode: "NAVER_PUBLISH_NOT_ALLOWED", errorMessage: "Publish requires publish_ready and allowPublish=true." },
+      });
+    }
+    if (process.env.STOCK_BLOG_SCHEDULER_AUTO_PUBLISH !== "true") {
+      return tx.naverDraftJob.update({
+        where: { id: jobId },
+        data: { status: "publish_blocked", completedAt: new Date(), errorCode: "NAVER_SERVER_AUTO_PUBLISH_DISABLED", errorMessage: "Server auto publish is disabled." },
+      });
+    }
+    const firstPublishAt = Date.parse(process.env.STOCK_BLOG_FIRST_AUTO_PUBLISH_AT ?? "");
+    if (Number.isFinite(firstPublishAt) && Date.now() < firstPublishAt) {
+      return tx.naverDraftJob.update({
+        where: { id: jobId },
+        data: { status: "publish_blocked", completedAt: new Date(), errorCode: "NAVER_FIRST_PUBLISH_NOT_DUE", errorMessage: "The first automatic publish time has not arrived." },
+      });
+    }
+    const circuit = await tx.eventLog.findUnique({ where: { id: PUBLISH_CIRCUIT_BREAKER_EVENT_ID } });
+    const circuitPayload = circuit && typeof circuit.payload === "object" && !Array.isArray(circuit.payload)
+      ? circuit.payload as Record<string, Prisma.JsonValue>
+      : {};
+    if (circuitPayload.active === true) {
+      return tx.naverDraftJob.update({
+        where: { id: jobId },
+        data: { status: "publish_blocked", completedAt: new Date(), errorCode: "NAVER_PUBLISH_CIRCUIT_BREAKER_ACTIVE", errorMessage: "Automatic publish circuit breaker is active." },
+      });
+    }
+    const canaryLimit = Math.max(1, parseNonNegativeInt(process.env.STOCK_BLOG_AUTO_PUBLISH_CANARY_LIMIT, 1));
+    const publishedCount = await tx.naverDraftJob.count({ where: { allowPublish: true, status: "published" } });
+    if (publishedCount >= canaryLimit) {
+      return tx.naverDraftJob.update({
+        where: { id: jobId },
+        data: { status: "publish_blocked", completedAt: new Date(), errorCode: "NAVER_PUBLISH_CANARY_LIMIT_REACHED", errorMessage: "Automatic publish canary limit reached." },
+      });
+    }
+    const duplicate = await tx.naverDraftJob.findFirst({
+      where: {
+        id: { not: job.id },
+        status: "published",
+        OR: [
+          ...(job.publishKey ? [{ publishKey: job.publishKey }] : []),
+          ...(job.contentPipelineId ? [{ contentPipelineId: job.contentPipelineId }] : []),
+          ...(job.marketDate ? [{ title: job.title, marketDate: job.marketDate }] : []),
+        ],
+      },
+    });
+    if (duplicate || job.publishAttemptCount > parseNonNegativeInt(process.env.STOCK_BLOG_AUTO_PUBLISH_RETRY_LIMIT, 0)) {
+      return tx.naverDraftJob.update({
+        where: { id: jobId },
+        data: { status: "duplicate_blocked", completedAt: new Date(), errorCode: "NAVER_DUPLICATE_PUBLISH_BLOCKED", errorMessage: "Duplicate or repeated publish attempt was blocked." },
+      });
+    }
+    return tx.naverDraftJob.update({
+      where: { id: jobId },
+      data: {
+        status: "publishing",
+        claimedBy,
+        publishAttemptCount: { increment: 1 },
+        errorCode: null,
+        errorMessage: null,
+      },
+    });
+  }, { isolationLevel: "Serializable" });
+}
+
 export async function reportNaverDraftJobStatus(jobId: string, input: StatusReportInput) {
+  if (input.status === "publishing") {
+    return serializeNaverDraftJobWithPipeline(await beginNaverPublish(jobId, input.claimedBy));
+  }
   const now = new Date();
+  const current = await prisma.naverDraftJob.findUnique({ where: { id: jobId } });
+  if (!current) throw new Error("NAVER_DRAFT_JOB_NOT_FOUND");
+  if (input.status === "published" && (current.status !== "publishing" || !isAllowedPublishedUrl(input.publishedUrl))) {
+    throw new Error("NAVER_PUBLISHED_RESULT_INVALID");
+  }
   const data: Prisma.NaverDraftJobUpdateInput = {
     status: input.status,
     claimedBy: input.claimedBy,
@@ -585,8 +823,16 @@ export async function reportNaverDraftJobStatus(jobId: string, input: StatusRepo
     errorMessage: input.errorMessage,
   };
   if (input.status === "in_progress") data.startedAt = now;
-  if (["draft_saved", "user_publish_required", "completed", "failed", "login_required", "captcha_required", "security_check_required", "readability_failed", "cancelled"].includes(input.status)) data.completedAt = now;
+  if (input.status === "published") {
+    data.publishedAt = now;
+    data.publishedUrl = input.publishedUrl;
+    data.externalUrl = input.publishedUrl;
+    data.naverPostId = input.naverPostId;
+    data.publishMethod = "local-agent";
+  }
+  if (["draft_saved", "published", "user_publish_required", "completed", "failed", "login_required", "captcha_required", "security_check_required", "readability_failed", "image_upload_failed", "draft_save_failed", "publish_blocked", "publish_failed", "duplicate_blocked", "quality_failed", "reference_failed", "market_data_failed", "cancelled"].includes(input.status)) data.completedAt = now;
   const job = await prisma.naverDraftJob.update({ where: { id: jobId }, data });
+  await activatePublishCircuitBreaker(job, input.status, input.errorMessage ?? input.errorCode);
   return serializeNaverDraftJobWithPipeline(job);
 }
 

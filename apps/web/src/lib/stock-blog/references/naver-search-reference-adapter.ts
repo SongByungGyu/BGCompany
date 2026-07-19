@@ -1,4 +1,5 @@
 import { buildReferenceQueries } from "./reference-query-builder";
+import { analyzeCompetitorBlogReference, summarizeCompetitorStructures } from "./competitor-blog-structure-analyzer";
 import { isAllowedFredDegradedSnapshot } from "./fred-degraded-policy";
 import { collectMarketSnapshot } from "./market-snapshot-provider";
 import { dedupeReferenceItems, normalizeReferenceItem, sourceNameFromUrl, stripHtml, summarizeReferenceItems } from "./reference-normalizer";
@@ -102,9 +103,9 @@ export const naverSearchReferenceAdapter: ReferenceAdapter = {
 
     const competitorBlogReferences: CompetitorBlogReference[] = [];
     if (process.env.COMPETITOR_BLOG_SEARCH_ENABLED === "true") {
-      const seeds = (process.env.COMPETITOR_BLOG_SEEDS ?? "cpath").split(",").map((value) => value.trim()).filter(Boolean);
-      const blogQueries = Array.from(new Set([...seeds.map((seed) => `${input.topic} ${seed}`), ...queries.slice(0, 3)]));
-      for (const query of blogQueries.slice(0, 4)) {
+      const seeds = (process.env.COMPETITOR_BLOG_SEEDS ?? "주간증시,코스피전망,미국증시전망,다음주증시,장전브리핑").split(",").map((value) => value.trim()).filter(Boolean);
+      const blogQueries = Array.from(new Set([...seeds, ...queries.slice(0, 3)]));
+      for (const query of blogQueries.slice(0, 6)) {
         const found = await searchNaver<NaverBlogItem>("blog", query, clientId, clientSecret, 5);
         for (const item of found) {
           if (!item.link || !item.title || !item.postdate) continue;
@@ -115,18 +116,32 @@ export const naverSearchReferenceAdapter: ReferenceAdapter = {
             blogName: item.bloggername || sourceNameFromUrl(item.link),
             publishedAt: parseNaverDate(item.postdate),
             keywords: query.split(/\s+/).slice(0, 6),
-            observedStructure: ["검색 노출 제목 패턴", "짧은 도입 후 소제목 중심", "참고 링크와 체크리스트 배치"],
+            observedStructure: ["검색 결과 메타데이터 수집 완료"],
             differentiationPoint: "검색 설명을 복사하지 않고 공식 근거·시장 데이터·자체 체크리스트로 차별화",
           });
         }
       }
     }
     const uniqueCompetitors = Array.from(new Map(competitorBlogReferences.map((item) => [item.url, item])).values()).slice(0, 10);
+    const deepAnalysisEnabled = process.env.COMPETITOR_BLOG_DEEP_ANALYSIS_ENABLED === "true";
+    const deepAnalysisLimit = Math.max(1, Math.min(Number(process.env.COMPETITOR_BLOG_DEEP_ANALYSIS_LIMIT ?? "5") || 5, 5));
+    const deepAnalysisTimeoutMs = Math.max(1_000, Math.min(Number(process.env.COMPETITOR_BLOG_DEEP_ANALYSIS_TIMEOUT_MS ?? "10000") || 10_000, 30_000));
+    const deepAnalysisMaxBytes = Math.max(100_000, Math.min(Number(process.env.COMPETITOR_BLOG_DEEP_ANALYSIS_MAX_BYTES ?? "750000") || 750_000, 1_500_000));
+    const analyzedCompetitors = [...uniqueCompetitors];
+    if (deepAnalysisEnabled) {
+      for (let index = 0; index < Math.min(deepAnalysisLimit, analyzedCompetitors.length); index += 1) {
+        analyzedCompetitors[index] = await analyzeCompetitorBlogReference(analyzedCompetitors[index], {
+          maxBytes: deepAnalysisMaxBytes,
+          timeoutMs: deepAnalysisTimeoutMs,
+        });
+      }
+    }
+    const competitorAnalysis = summarizeCompetitorStructures(analyzedCompetitors);
     const marketSnapshot = await collectMarketSnapshot(input);
     const summary = summarizeReferenceItems(dedupedItems);
     const missingItems: string[] = [];
     if (dedupedItems.length < 5) missingItems.push("실제 뉴스 참고자료 5개");
-    if (uniqueCompetitors.length < 3) missingItems.push("경쟁 블로그 참고자료 3개");
+    if (analyzedCompetitors.length < 3) missingItems.push("경쟁 블로그 참고자료 3개");
     const usableMarketSnapshot = (
       marketSnapshot.status === "ready" && marketSnapshot.dataQuality === "verified"
     ) || isAllowedFredDegradedSnapshot(marketSnapshot);
@@ -142,13 +157,14 @@ export const naverSearchReferenceAdapter: ReferenceAdapter = {
       market: input.market,
       queries,
       items: dedupedItems,
-      competitorBlogReferences: uniqueCompetitors,
+      competitorBlogReferences: analyzedCompetitors,
+      competitorAnalysis,
       marketSnapshot,
       keyThemes: summary.keyThemes,
       repeatedKeywords: summary.repeatedKeywords,
-      differentiationPoints: summary.differentiationPoints,
-      cautionNotes: ["게시 전 원문 맥락과 최신성을 다시 확인합니다.", "기사 문장·사진·블로그 본문을 그대로 복사하지 않습니다."],
-      sourcePolicy: "검색 결과의 제목·짧은 설명·출처·발행일·링크만 사용하고 본문은 자체 문장으로 재구성합니다.",
+      differentiationPoints: Array.from(new Set([...summary.differentiationPoints, ...competitorAnalysis.differentiationOpportunities])),
+      cautionNotes: ["게시 전 원문 맥락과 최신성을 다시 확인합니다.", "기사 문장·사진·블로그 본문을 그대로 복사하지 않습니다.", competitorAnalysis.copyrightPolicy],
+      sourcePolicy: "뉴스는 제목·짧은 설명·출처·발행일·링크만 사용합니다. 경쟁 블로그는 본문 문장을 저장하지 않고 글자 수·문단·소제목·이미지·체크리스트·출처·유의문구 등 구조 지표만 사용합니다.",
       missingItems: Array.from(new Set(missingItems)),
     };
   },

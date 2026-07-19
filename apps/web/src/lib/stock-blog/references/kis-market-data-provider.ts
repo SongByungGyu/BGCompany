@@ -69,7 +69,12 @@ function wait(delayMs: number) {
 
 function freshnessMinutes() {
   const parsed = Number.parseInt(process.env.KIS_MARKET_MAX_AGE_MINUTES ?? "4320", 10);
-  return Number.isFinite(parsed) ? Math.max(60, parsed) : 4320;
+  const baseMinutes = Number.isFinite(parsed) ? Math.max(60, parsed) : 4320;
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", weekday: "short" }).format(new Date());
+  if (weekday !== "Sat" && weekday !== "Sun") return baseMinutes;
+  const weekendParsed = Number.parseInt(process.env.KIS_WEEKEND_MAX_AGE_MINUTES ?? "5760", 10);
+  const weekendMinutes = Number.isFinite(weekendParsed) ? Math.max(baseMinutes, weekendParsed) : 5760;
+  return weekendMinutes;
 }
 
 async function getAccessToken(credentials: { appKey: string; appSecret: string }) {
@@ -171,8 +176,11 @@ function investorMetrics(output: unknown, market: string, collectedAt: string, e
     ["개인", "prsn_ntby_tr_pbmn", "prsn_ntby_qty"],
   ];
   const metrics = definitions.map(([name, amountKey, quantityKey]) => {
-    const value = asNumber(row[amountKey]) ?? asNumber(row[quantityKey]);
-    return value === undefined ? undefined : metricFromSource({ label: `${market} ${name} 순매수`, value, direction: directionFromChange(value), source: dataSource });
+    const amount = asNumber(row[amountKey]);
+    const quantity = asNumber(row[quantityKey]);
+    const value = amount ?? quantity;
+    const unit = amount !== undefined ? "백만원" : quantity !== undefined ? "주" : undefined;
+    return value === undefined ? undefined : metricFromSource({ label: `${market} ${name} 순매수`, value, unit, direction: directionFromChange(value), source: dataSource });
   }).filter((metric): metric is MarketSnapshotMetric => Boolean(metric));
   return metrics.length ? { metrics, source: dataSource } : undefined;
 }

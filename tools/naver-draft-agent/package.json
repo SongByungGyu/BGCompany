@@ -6,7 +6,9 @@
   "scripts": {
     "build": "tsc --noEmit",
     "start": "tsx src/index.ts",
-    "browser:test": "tsx src/index.ts --browser-test"
+    "browser:test": "tsx src/index.ts --browser-test",
+    "login:setup": "tsx src/naver-login-setup.ts",
+    "session:setup": "npm run login:setup"
   },
   "dependencies": {
     "playwright": "^1.49.1"

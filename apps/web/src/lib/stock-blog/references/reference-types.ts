@@ -39,11 +39,54 @@ export type CompetitorBlogReference = {
   keywords: string[];
   observedStructure?: string[];
   differentiationPoint?: string;
+  structure?: CompetitorBlogStructureMetrics;
+};
+
+export type CompetitorBlogStructureMetrics = {
+  status: "analyzed" | "fetch_failed" | "metadata_only";
+  analyzedAt: string;
+  sourceUrl?: string;
+  errorCode?: string;
+  titleLength?: number;
+  bodyLength?: number;
+  introLength?: number;
+  paragraphCount?: number;
+  headingCount?: number;
+  imageCount?: number;
+  linkCount?: number;
+  listItemCount?: number;
+  tableCount?: number;
+  hasDateInTitle?: boolean;
+  hasChecklist?: boolean;
+  hasSourceSection?: boolean;
+  hasDisclaimer?: boolean;
+  hasCallToAction?: boolean;
+  observedStructure: string[];
+};
+
+export type CompetitorBlogAnalysisSummary = {
+  requestedCount: number;
+  analyzedCount: number;
+  failedCount: number;
+  averages: {
+    titleLength: number;
+    bodyLength: number;
+    introLength: number;
+    paragraphCount: number;
+    headingCount: number;
+    imageCount: number;
+    linkCount: number;
+  };
+  commonPatterns: string[];
+  differentiationOpportunities: string[];
+  recommendedStructure: string[];
+  copyrightPolicy: string;
 };
 
 export type MarketSnapshotMetric = {
   label: string;
   value?: number | string;
+  unit?: string;
   changePct?: number;
   direction?: "up" | "down" | "flat" | "mixed";
   asOf?: string;
@@ -123,6 +166,7 @@ export type ReferenceBundle = {
   queries: string[];
   items: ReferenceItem[];
   competitorBlogReferences?: CompetitorBlogReference[];
+  competitorAnalysis?: CompetitorBlogAnalysisSummary;
   marketSnapshot?: MarketSnapshot;
   keyThemes: string[];
   repeatedKeywords: string[];

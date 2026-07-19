@@ -80,10 +80,12 @@ export async function buildDashboardSummary(): Promise<DashboardSummary> {
       id: "stock-blog-scheduler",
       title: "주식 블로그 스케줄러",
       value: stockBlogScheduler.enabled ? "ON" : "OFF",
-      description: stockBlogScheduler.nextRun
+      description: stockBlogScheduler.publishCircuitBreaker.active
+        ? "첫 자동 발행이 실패해 자동 발행이 일시 중지되었습니다."
+        : stockBlogScheduler.nextRun
         ? `다음 자동 실행: ${stockBlogScheduler.nextRun.label} · ${stockBlogScheduler.nextRun.scheduledTimeKst} · ${stockBlogScheduler.runnerMode}`
         : "등록된 다음 자동 실행이 없습니다.",
-      severity: stockBlogScheduler.enabled ? "good" : "info",
+      severity: stockBlogScheduler.publishCircuitBreaker.active ? "warning" : stockBlogScheduler.enabled ? "good" : "info",
       actionLabel: "스케줄 확인",
     },
   ];
@@ -103,7 +105,11 @@ export async function buildDashboardSummary(): Promise<DashboardSummary> {
       waitingApprovals > 0 ? "승인함에서 Director 승인 대기 항목을 먼저 처리하세요." : "승인함은 안정적입니다.",
       naverDraftPending > 0 ? "로컬 Naver Draft Agent 상태와 네이버 로그인 상태를 확인하세요." : "새 주식 브리핑을 생성할 수 있습니다.",
       hermesUsage.remaining < 4 ? "오늘 Hermes 실제 실행은 신중하게 진행하세요." : "Hermes 4-Agent 실행 여유가 있습니다.",
-      stockBlogScheduler.enabled ? "주식 블로그 스케줄러가 켜져 있습니다. Local Naver Draft Agent 실행 상태를 유지하세요." : "자동 생성은 아직 꺼져 있습니다. 운영 준비 후 STOCK_BLOG_SCHEDULER_ENABLED=true로 전환하세요.",
+      stockBlogScheduler.publishCircuitBreaker.active
+        ? "첫 자동 발행 실패 원인을 해결하고 circuit breaker를 수동 점검하세요. 자동 재시도는 하지 않습니다."
+        : stockBlogScheduler.enabled
+          ? "주식 블로그 스케줄러가 켜져 있습니다. Local Naver Draft Agent 실행 상태를 유지하세요."
+          : "자동 생성은 아직 꺼져 있습니다. 운영 준비 후 STOCK_BLOG_SCHEDULER_ENABLED=true로 전환하세요.",
     ],
     metrics: {
       activeTasks,
