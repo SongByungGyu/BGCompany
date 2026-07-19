@@ -442,18 +442,20 @@ async function verifyNaverImagePlacements(page: import("playwright").Page, bodyI
   for (const image of bodyImages) {
     let matched = false;
     let diagnostic = "heading_not_found";
-    for (const scope of [page, ...page.frames()]) {
+    let bestScore = -1;
+    const scopes = [page, ...page.frames().filter((frame) => frame !== page.mainFrame())];
+    for (const scope of scopes) {
       const result = await scope.evaluate(({ heading, caption, sourceLabel }) => {
         const normalize = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
         const root = document.querySelector(".se-main-container") ?? document.body;
         const paragraphs = Array.from(new Set(Array.from(root.querySelectorAll<HTMLElement>(
           ".se-text-paragraph, .se-component-content p, [contenteditable='true'] p",
         ))));
+        const editorImages = Array.from(root.querySelectorAll<HTMLImageElement>("img"));
         const headingNode = paragraphs.find((node) => normalize(node.innerText) === normalize(heading));
-        if (!headingNode) return { matched: false, diagnostic: "heading_not_found" };
+        if (!headingNode) return { matched: false, diagnostic: "heading_not_found", imageCount: editorImages.length };
         const follows = (before: Node, after: Node) => Boolean(before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING);
         const nextHeading = paragraphs.find((node) => follows(headingNode, node) && /^\d+\.\s+/.test(normalize(node.innerText)));
-        const editorImages = Array.from(root.querySelectorAll<HTMLImageElement>("img"));
         const imageBetween = editorImages.some((node) => (
           follows(headingNode, node) && (!nextHeading || follows(node, nextHeading))
         ));
@@ -474,9 +476,17 @@ async function verifyNaverImagePlacements(page: import("playwright").Page, bodyI
         heading: image.placementAfterHeading,
         caption: image.caption,
         sourceLabel: image.sourceLabel,
-      }).catch(() => ({ matched: false, diagnostic: "placement_evaluation_failed", imageCount: 0 }));
+      }).catch((error) => ({
+        matched: false,
+        diagnostic: `placement_evaluation_failed_${error instanceof Error ? error.message.split("\n")[0] : String(error)}`,
+        imageCount: 0,
+      }));
       matched = result.matched;
-      diagnostic = `${result.diagnostic}_images_${result.imageCount}`;
+      const score = (result.imageCount * 100) + (result.diagnostic === "heading_not_found" ? 0 : 10) + (result.diagnostic.startsWith("placement_evaluation_failed") ? -1 : 0);
+      if (score > bestScore) {
+        bestScore = score;
+        diagnostic = `${result.diagnostic}_images_${result.imageCount}`;
+      }
       if (matched) break;
     }
     if (!matched) return { ok: false, imageId: image.id, diagnostic };
@@ -963,7 +973,12 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
         if (afterImages !== beforeImages + 1 + imageManifest.bodyImages.length) {
           throw new Error(`NAVER_IMAGE_TOTAL_COUNT_MISMATCH_${beforeImages}_${afterImages}`);
         }
-        const placement = await verifyNaverImagePlacements(page, imageManifest.bodyImages);
+        let placement = await verifyNaverImagePlacements(page, imageManifest.bodyImages);
+        for (let attempt = 1; !placement.ok && attempt <= 4; attempt += 1) {
+          console.warn(`[naver-agent] image placement verification pending (${attempt}/4): ${placement.imageId}_${placement.diagnostic}`);
+          await page.waitForTimeout(1000);
+          placement = await verifyNaverImagePlacements(page, imageManifest.bodyImages);
+        }
         if (!placement.ok) throw new Error(`NAVER_IMAGE_PLACEMENT_VERIFY_FAILED_${placement.imageId}_${placement.diagnostic}`);
         const postImageReadability = await verifyNaverEditorReadability(page, job.body);
         if (!postImageReadability.ok) throw new Error("NAVER_IMAGE_BODY_READABILITY_FAILED");
