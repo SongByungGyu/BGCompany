@@ -395,12 +395,18 @@ async function focusAfterNaverHeading(page: import("playwright").Page, heading: 
         const target = targets.nth(index);
         const text = (await target.innerText({ timeout: 3000 }).catch(() => "")).replace(/\s+/g, " ").trim();
         if (text !== expected) continue;
-        await target.click({ timeout: 5000 });
+        const box = await target.boundingBox().catch(() => null);
+        await target.click({
+          timeout: 5000,
+          ...(box ? { position: { x: Math.max(2, box.width - 4), y: Math.max(2, box.height / 2) } } : {}),
+        });
         const caretReady = await target.evaluate((element) => {
           const paragraph = element as HTMLElement;
-          const editor = paragraph.closest<HTMLElement>('[contenteditable="true"]');
-          if (!editor) return false;
-          editor.focus();
+          const editor = paragraph.matches('[contenteditable="true"]')
+            ? paragraph
+            : paragraph.querySelector<HTMLElement>('[contenteditable="true"]')
+              ?? paragraph.closest<HTMLElement>('[contenteditable="true"]');
+          editor?.focus();
           const range = document.createRange();
           range.selectNodeContents(paragraph);
           range.collapse(false);
@@ -410,7 +416,10 @@ async function focusAfterNaverHeading(page: import("playwright").Page, heading: 
           selection.addRange(range);
           return Boolean(selection.anchorNode && paragraph.contains(selection.anchorNode));
         }).catch(() => false);
-        if (!caretReady) continue;
+        if (!caretReady) {
+          console.warn(`[naver-agent] DOM caret selection fallback used: ${heading}`);
+          await page.keyboard.press("End");
+        }
         await page.keyboard.press("Enter");
         await page.waitForTimeout(100);
         console.log(`[naver-agent] image placement heading focused: ${heading}`);
