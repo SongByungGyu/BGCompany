@@ -446,22 +446,25 @@ async function verifyNaverImagePlacements(page: import("playwright").Page, bodyI
     const scopes = [page, ...page.frames().filter((frame) => frame !== page.mainFrame())];
     for (const scope of scopes) {
       const result = await scope.evaluate(({ heading, caption, sourceLabel }) => {
-        const normalize = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
         const root = document.querySelector(".se-main-container") ?? document.body;
         const paragraphs = Array.from(new Set(Array.from(root.querySelectorAll<HTMLElement>(
           ".se-text-paragraph, .se-component-content p, [contenteditable='true'] p",
         ))));
         const editorImages = Array.from(root.querySelectorAll<HTMLImageElement>("img"));
-        const headingNode = paragraphs.find((node) => normalize(node.innerText) === normalize(heading));
+        const normalizedHeading = (heading ?? "").replace(/\s+/g, " ").trim();
+        const headingNode = paragraphs.find((node) => (node.innerText ?? "").replace(/\s+/g, " ").trim() === normalizedHeading);
         if (!headingNode) return { matched: false, diagnostic: "heading_not_found", imageCount: editorImages.length };
-        const follows = (before: Node, after: Node) => Boolean(before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING);
-        const nextHeading = paragraphs.find((node) => follows(headingNode, node) && /^\d+\.\s+/.test(normalize(node.innerText)));
-        const imageBetween = editorImages.some((node) => (
-          follows(headingNode, node) && (!nextHeading || follows(node, nextHeading))
+        const nextHeading = paragraphs.find((node) => (
+          Boolean(headingNode.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)
+          && /^\d+\.\s+/.test((node.innerText ?? "").replace(/\s+/g, " ").trim())
         ));
-        const editorText = normalize((root as HTMLElement).innerText);
-        const captionFound = editorText.includes(normalize(caption));
-        const sourceFound = editorText.includes(normalize(sourceLabel));
+        const imageBetween = editorImages.some((node) => (
+          Boolean(headingNode.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)
+          && (!nextHeading || Boolean(node.compareDocumentPosition(nextHeading) & Node.DOCUMENT_POSITION_FOLLOWING))
+        ));
+        const editorText = ((root as HTMLElement).innerText ?? "").replace(/\s+/g, " ").trim();
+        const captionFound = editorText.includes((caption ?? "").replace(/\s+/g, " ").trim());
+        const sourceFound = editorText.includes((sourceLabel ?? "").replace(/\s+/g, " ").trim());
         const failures = [
           !imageBetween && "image_not_between_headings",
           !captionFound && "caption_not_found",
