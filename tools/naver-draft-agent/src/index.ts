@@ -113,13 +113,20 @@ async function main() {
   }
   console.log(`[naver-agent] polling ${cfg.baseUrl} every ${cfg.pollIntervalMs}ms`);
   const dryRunSetting = process.env.NAVER_AGENT_DRY_RUN ?? process.env.NAVER_DRAFT_AGENT_DRY_RUN;
+  const singleJob = process.env.NAVER_AGENT_SINGLE_JOB === "true";
   console.log(`[naver-agent] dry-run=${dryRunSetting !== "false"}, save=${process.env.NAVER_ALLOW_DRAFT_SAVE === "true"}, publish=${process.env.NAVER_ALLOW_PUBLISH === "true"}`);
   for (;;) {
+    let attemptedJob = false;
     try {
       const { job } = await nextJob(cfg);
-      if (job) await processJob(cfg, job);
+      if (job) {
+        attemptedJob = true;
+        await processJob(cfg, job);
+        if (singleJob) return;
+      }
     } catch (error) {
       console.error("[naver-agent]", error instanceof Error ? error.message : error);
+      if (singleJob && attemptedJob) return;
     }
     await new Promise((resolve) => setTimeout(resolve, cfg.pollIntervalMs));
   }
