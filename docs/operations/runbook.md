@@ -728,3 +728,20 @@ STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES=false
 `needs_credentials`, `needs_data`, `error`, stale/expired가 발생하면 mock 또는 Manual로 자동 대체하지 않는다. scheduler와 실제 Hermes를 중지한 상태에서 자격증명, provider 상태, 기준 시각을 확인한다. KIS 주문·잔고·계좌 API는 점검 목적으로도 호출하지 않는다.
 
 KIS 읽기 전용 조회의 일시적 `429`, `500`, `502`, `503`, `504` 응답은 `KIS_MAX_RETRIES`(기본 2회)와 `KIS_RETRY_BASE_DELAY_MS`(기본 500ms)에 따라 제한적으로 재시도한다. 재시도 횟수를 2보다 높이지 말고, 반복 실패 시 scheduler와 Hermes를 계속 중지한 채 provider 상태를 확인한다.
+## FRED 장애 시 주식 브리핑 제한 운영
+
+FRED 조회가 실패하면 먼저 기존 공식 미국 데이터 제공처(Treasury, BLS, BEA, Federal Reserve)로 보완합니다. 보완 후에도 미국 국채금리 또는 경제지표 일정이 일부 누락된 경우에는 아래 조건을 모두 만족할 때만 제한 운영을 허용할 수 있습니다.
+
+- `STOCK_MARKET_DATA_ALLOW_FRED_DEGRADED=true`
+- KIS 조회 상태가 `ready`이고 freshness가 `fresh`
+- 오래되거나 누락된 KIS 항목이 없음
+- 실제 Naver 뉴스와 경쟁 블로그 참고자료 품질 게이트 통과
+- FRED 실패 원인이 timeout, network, rate limit, HTTP 5xx 또는 공식 제공처의 일시적 데이터 누락
+
+인증 실패, 파싱 오류, 잘못된 요청, 알 수 없는 오류는 제한 운영으로 우회하지 않습니다. 누락된 미국 수치는 추정하거나 mock으로 채우지 않고 본문에서 제외합니다. 제한 운영 본문과 네이버 임시저장 원고에는 다음 문구가 정확히 포함되어야 합니다.
+
+```text
+FRED 거시지표 조회 지연으로 미국 국채금리 또는 경제지표 일정 일부를 이번 브리핑에서 제외했습니다.
+```
+
+QA 품질 게이트까지 통과한 경우에만 기존 스케줄러가 자동 승인과 Naver Draft Job 생성을 진행합니다. 로컬 Naver Draft Agent는 큐를 가져와 임시저장까지만 수행하며 최종 발행은 사용자가 직접 진행합니다.

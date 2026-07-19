@@ -1,4 +1,5 @@
 import { buildReferenceQueries } from "./reference-query-builder";
+import { isAllowedFredDegradedSnapshot } from "./fred-degraded-policy";
 import { collectMarketSnapshot } from "./market-snapshot-provider";
 import { dedupeReferenceItems, normalizeReferenceItem, sourceNameFromUrl, stripHtml, summarizeReferenceItems } from "./reference-normalizer";
 import type { CompetitorBlogReference, ReferenceAdapter, ReferenceBundle, ReferenceItem, ReferenceSearchInput } from "./reference-types";
@@ -126,7 +127,10 @@ export const naverSearchReferenceAdapter: ReferenceAdapter = {
     const missingItems: string[] = [];
     if (dedupedItems.length < 5) missingItems.push("실제 뉴스 참고자료 5개");
     if (uniqueCompetitors.length < 3) missingItems.push("경쟁 블로그 참고자료 3개");
-    if (marketSnapshot.status !== "ready" || marketSnapshot.dataQuality !== "verified") missingItems.push(...marketSnapshot.missingItems);
+    const usableMarketSnapshot = (
+      marketSnapshot.status === "ready" && marketSnapshot.dataQuality === "verified"
+    ) || isAllowedFredDegradedSnapshot(marketSnapshot);
+    if (!usableMarketSnapshot) missingItems.push(...marketSnapshot.missingItems);
 
     return {
       provider: "naver-search",

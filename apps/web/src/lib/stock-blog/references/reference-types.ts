@@ -81,6 +81,10 @@ export type MarketSnapshot = {
   collectedAt: string;
   dataQuality: "verified" | "partial" | "missing";
   fallbackUsed?: boolean;
+  degradedMode?: "fred_unavailable";
+  degradedProviders?: Array<"fred">;
+  degradedReason?: string;
+  disclosures?: string[];
   freshness?: MarketSnapshotFreshness;
   sources?: MarketSnapshotSource[];
   korea?: {

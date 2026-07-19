@@ -136,7 +136,14 @@ async function collectBlsCalendar(collectedAt: string) {
 
 function diagnostic(item: string, error: unknown): FredDiagnostic {
   const raw = error instanceof Error ? error.message : "OFFICIAL_US_UNKNOWN_ERROR";
-  const code = /^OFFICIAL_US_[A-Z0-9_]+$/.test(raw) ? raw : "OFFICIAL_US_UNKNOWN_ERROR";
+  const errorName = error instanceof Error ? error.name : "";
+  const code = /^OFFICIAL_US_[A-Z0-9_]+$/.test(raw)
+    ? raw
+    : errorName === "TimeoutError" || errorName === "AbortError"
+      ? "OFFICIAL_US_TIMEOUT"
+      : error instanceof TypeError
+        ? "OFFICIAL_US_NETWORK_FAILED"
+        : "OFFICIAL_US_UNKNOWN_ERROR";
   const match = code.match(/HTTP_(\d{3})$/);
   return { item, code, ...(match ? { httpStatus: Number(match[1]) } : {}) };
 }

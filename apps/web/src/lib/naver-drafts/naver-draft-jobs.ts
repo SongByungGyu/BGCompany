@@ -6,6 +6,7 @@ import type { ContentPipelineRun, StockBriefingTemplate } from "@/features/conte
 import type { CompetitorBlogReference, ReferenceBundle, ReferenceItem } from "@/lib/stock-blog/references/reference-types";
 import { buildStockBlogThumbnail, inferStockBriefingTemplateFromPipeline } from "@/lib/stock-blog/thumbnail-automation";
 import { evaluateStockBlogPublishQuality, getRealStockReferences } from "@/lib/stock-blog/quality-gate";
+import { FRED_DEGRADED_DISCLOSURE, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import { renderNaverBody, type NaverBodyBlock } from "@/lib/stock-blog/naver-body";
 import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
 
@@ -308,6 +309,9 @@ function buildChecklist(template: StockBriefingTemplate) {
 
 function buildPlainBody(pipeline: ContentPipelineRun, template: StockBriefingTemplate, title: string, refs: ReferenceItem[]) {
   const copy = STOCK_BRIEFING_COPY[template];
+  const fredDisclosureBlocks: NaverBodyBlock[] = isAllowedFredDegradedSnapshot(
+    collectReferenceBundle(pipeline)?.marketSnapshot,
+  ) ? [{ type: "paragraph", text: FRED_DEGRADED_DISCLOSURE }] : [];
   const blocks: NaverBodyBlock[] = [
     { type: "heading", text: title },
     { type: "heading", text: copy.introHeading },
@@ -325,6 +329,7 @@ function buildPlainBody(pipeline: ContentPipelineRun, template: StockBriefingTem
     ...refs.slice(0, 5).map<NaverBodyBlock>((item, index) => ({ type: "reference", item, index: index + 1 })),
     { type: "heading", text: "마무리" },
     { type: "paragraph", text: clean(pipeline.writerResult?.conclusion) || "시장은 매일 다른 신호를 주지만, 중요한 것은 방향을 단정하기보다 확인할 변수를 근거별로 줄여가는 것입니다." },
+    ...fredDisclosureBlocks,
     { type: "disclaimer", text: INVESTMENT_DISCLAIMER },
   ];
   return sanitizeByTemplate(renderNaverBody(blocks), template);

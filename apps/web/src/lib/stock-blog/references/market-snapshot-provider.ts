@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { collectFredMacroData, type FredResult } from "./fred-macro-provider";
 import { collectKisMarketData, type KisResult } from "./kis-market-data-provider";
+import { canUseFredDegradedMode, FRED_DEGRADED_DISCLOSURE, FRED_DEGRADED_MODE } from "./fred-degraded-policy";
 import { aggregateFreshness } from "./market-data-utils";
 import { supplementFredMacroData } from "./official-us-macro-provider";
 import type { MarketSnapshot, ReferenceSearchInput } from "./reference-types";
@@ -92,9 +93,31 @@ function requiredAutomaticItems(snapshot: Pick<MarketSnapshot, "korea" | "us" | 
 export function buildAutomaticMarketSnapshot(kis: KisResult, fred: FredResult, collectedAt = new Date().toISOString()): MarketSnapshot {
   const sources = [...kis.sources, ...fred.sources];
   const freshness = aggregateFreshness(sources, collectedAt);
+  const kisFreshness = aggregateFreshness(kis.sources, collectedAt);
   const us = { ...kis.us, treasuryYield: fred.macro?.us10Year };
   const requiredMissing = requiredAutomaticItems({ korea: kis.korea, us, macro: fred.macro, upcoming: fred.upcoming });
   const missingItems = Array.from(new Set([...kis.missingItems, ...fred.missingItems, ...requiredMissing, ...freshness.staleItems]));
+  const fredDegraded = canUseFredDegradedMode(kis, fred, kisFreshness);
+  if (fredDegraded) {
+    return {
+      provider: "kis-fred",
+      status: "ready",
+      marketDate: marketDate(),
+      collectedAt,
+      dataQuality: "partial",
+      degradedMode: FRED_DEGRADED_MODE,
+      degradedProviders: ["fred"],
+      degradedReason: fred.missingItems.join(", ") || "FRED/공식 미국 거시지표 조회 지연",
+      disclosures: [FRED_DEGRADED_DISCLOSURE],
+      freshness: kisFreshness,
+      sources,
+      korea: kis.korea,
+      us,
+      macro: fred.macro,
+      upcoming: fred.upcoming,
+      missingItems,
+    };
+  }
   const status: MarketSnapshot["status"] = kis.status === "needs_credentials" || fred.status === "needs_credentials"
     ? "needs_credentials"
     : kis.status === "error" || fred.status === "error"

@@ -1,4 +1,5 @@
 import type { ContentPipelineRun } from "@/features/content-pipeline/content-pipeline-types";
+import { FRED_DEGRADED_DISCLOSURE, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import type { ReferenceBundle, ReferenceItem } from "@/lib/stock-blog/references/reference-types";
 
 export type StockBlogQualityStatus =
@@ -38,8 +39,13 @@ export type StockBlogQualityDiagnostics = {
   newsReferenceCount: number;
   marketSnapshotStatus?: string;
   marketSnapshotDataQuality?: string;
+  marketSnapshotActualDataQuality?: string;
   marketSnapshotProvider?: string;
   marketSnapshotFreshnessStatus?: string;
+  marketSnapshotDegraded: boolean;
+  marketSnapshotDegradedMode?: string;
+  marketSnapshotDisclosures: string[];
+  hasFredDegradedDisclosure: boolean;
   staleMarketDataItems: string[];
   manualMarketSnapshot: boolean;
   repeatedPhraseWarnings: string[];
@@ -152,6 +158,8 @@ function diagnostics(input: {
   const newsReferenceCount = realRefs.filter((item) => item.sourceType === "news").length;
   const paragraphCount = body.split(/\n{2,}/).map((part) => part.trim()).filter((part) => part.length >= 20).length;
   const repeatedPhraseWarnings = REPEATED_PHRASES.filter((phrase) => body.split(phrase).length - 1 >= 3);
+  const marketSnapshot = input.bundle?.marketSnapshot;
+  const marketSnapshotDegraded = isAllowedFredDegradedSnapshot(marketSnapshot);
   return {
     referenceProvider: input.bundle?.provider,
     referenceMode: input.bundle?.mode,
@@ -177,12 +185,17 @@ function diagnostics(input: {
     marketDataReferenceCount,
     officialReferenceCount,
     newsReferenceCount,
-    marketSnapshotStatus: input.bundle?.marketSnapshot?.status,
-    marketSnapshotDataQuality: input.bundle?.marketSnapshot?.dataQuality,
-    marketSnapshotProvider: input.bundle?.marketSnapshot?.provider,
-    marketSnapshotFreshnessStatus: input.bundle?.marketSnapshot?.freshness?.status,
-    staleMarketDataItems: input.bundle?.marketSnapshot?.freshness?.staleItems ?? [],
-    manualMarketSnapshot: input.bundle?.marketSnapshot?.provider === "manual",
+    marketSnapshotStatus: marketSnapshot?.status,
+    marketSnapshotDataQuality: marketSnapshotDegraded ? "verified" : marketSnapshot?.dataQuality,
+    marketSnapshotActualDataQuality: marketSnapshot?.dataQuality,
+    marketSnapshotProvider: marketSnapshot?.provider,
+    marketSnapshotFreshnessStatus: marketSnapshot?.freshness?.status,
+    marketSnapshotDegraded,
+    marketSnapshotDegradedMode: marketSnapshot?.degradedMode,
+    marketSnapshotDisclosures: marketSnapshot?.disclosures ?? [],
+    hasFredDegradedDisclosure: body.includes(FRED_DEGRADED_DISCLOSURE),
+    staleMarketDataItems: marketSnapshot?.freshness?.staleItems ?? [],
+    manualMarketSnapshot: marketSnapshot?.provider === "manual",
     repeatedPhraseWarnings,
     missingReferenceItems: input.bundle?.missingItems ?? [],
   };
@@ -233,6 +246,8 @@ export function evaluateStockBlogPublishQuality(input: {
   const d = diagnostics({ bundle, pasteReadyBody: body, writerText });
   const reasons: string[] = [];
   const requireReal = input.requireRealReferences ?? input.pipeline.runnerMode === "hermes";
+
+  if (d.marketSnapshotDegraded && !d.hasFredDegradedDisclosure) reasons.push("FRED 제한 모드 고지 문구 누락");
 
   if (requireReal) {
     const minRefs = 5;

@@ -14,6 +14,7 @@ import type {
   NormalizedHermesRunResult,
 } from "./hermes-types";
 import { getRealStockReferences } from "@/lib/stock-blog/quality-gate";
+import { FRED_DEGRADED_DISCLOSURE } from "@/lib/stock-blog/references/fred-degraded-policy";
 
 function baseUrl(url: string) {
   return url.replace(/\/$/, "");
@@ -138,6 +139,8 @@ const STOCK_REFERENCE_POLICY = [
   "Do not invent index levels, percentages, dates, company events, or source names that are not present in referenceBundle.",
   "Rewrite in original wording; never copy article sentences or full paragraphs verbatim.",
   "If referenceBundle is missing, insufficient, mock, or real-disabled, explicitly return a blocked/needs_reference result instead of guessing.",
+  "If marketSnapshot.degradedMode is fred_unavailable, omit unavailable U.S. Treasury yield and economic-calendar values and never infer replacements.",
+  `When marketSnapshot.degradedMode is fred_unavailable, include this exact disclosure in the final body: ${FRED_DEGRADED_DISCLOSURE}`,
   "Avoid buy/sell recommendations, guaranteed returns, sensational claims, or unsupported forecasts.",
 ];
 
@@ -269,7 +272,8 @@ export function buildQaAuditHermesPayload(input: QaAuditHermesInput): HermesQaAu
         requiredRealReferences: 5,
         requiredDistinctPublishers: 3,
         requiredCompetitorReferences: 3,
-        requireVerifiedMarketSnapshot: true,
+        requireVerifiedOrAllowedFredDegradedMarketSnapshot: true,
+        requiredFredDegradedDisclosure: FRED_DEGRADED_DISCLOSURE,
       },
       finalPasteReadyBody: typeof input.writerResult?.fullDraft === "string" ? input.writerResult.fullDraft : undefined,
       prohibitedPhrases: input.prohibitedPhrases,

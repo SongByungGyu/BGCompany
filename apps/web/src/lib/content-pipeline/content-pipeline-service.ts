@@ -9,6 +9,7 @@ import { assertHermesDailyRunAvailable } from "@/lib/hermes/hermes-usage";
 import { collectStockBlogReferences } from "@/lib/stock-blog/references/reference-adapter";
 import { buildBlogImagePrompts } from "@/lib/stock-blog/references/reference-normalizer";
 import { evaluateStockBlogReferences } from "@/lib/stock-blog/quality-gate";
+import { FRED_DEGRADED_DISCLOSURE, ensureFredDegradedDisclosure, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import { generateStockBlogImages, type GeneratedStockBlogImages } from "@/lib/stock-blog/stock-blog-image-generator";
 import type { NormalizedHermesRunResult } from "@/lib/hermes/hermes-types";
 import type { BlogImagePrompt, ReferenceBundle, StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
@@ -66,6 +67,22 @@ type NormalizedPipelineResult = NormalizedHermesRunResult & Record<string, unkno
 
 const channels = new Set(["blog", "instagram", "youtube", "newsletter"]);
 const HERMES_PIPELINE_REQUIRED_RUNS = 4;
+
+function withFredDegradedDisclosure(writer: WriterExecution, referenceBundle?: ReferenceBundle): WriterExecution {
+  const snapshot = referenceBundle?.marketSnapshot;
+  if (!isAllowedFredDegradedSnapshot(snapshot)) return writer;
+
+  const result = { ...writer.result };
+  for (const key of ["fullDraft", "markdownDraft"] as const) {
+    const value = result[key];
+    if (typeof value === "string") result[key] = ensureFredDegradedDisclosure(value, snapshot);
+  }
+  const htmlDraft = result.htmlDraft;
+  if (typeof htmlDraft === "string" && !htmlDraft.includes(FRED_DEGRADED_DISCLOSURE)) {
+    result.htmlDraft = `${htmlDraft.trimEnd()}\n<p>${FRED_DEGRADED_DISCLOSURE}</p>`;
+  }
+  return { ...writer, result };
+}
 
 function assertValidInput(input: unknown): ContentPipelineInput {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
@@ -1378,7 +1395,10 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
   const taskIds = [contentTaskId, marketingTaskId, writerTaskId, qaTaskId];
   const planner = await executePlanner(data);
   const marketing = await executeMarketing(data, planner);
-  const writer = await executeWriter(data, planner, marketing);
+  const writer = withFredDegradedDisclosure(
+    await executeWriter(data, planner, marketing),
+    data.referenceBundle,
+  );
   const qa = await executeQa(data, planner, marketing, writer);
   const qualityGate = preflightQualityGate;
   const qualityBlocked = runnerMode === "hermes" && !qualityGate.ok;
