@@ -23,11 +23,11 @@ const templateQueries: Record<StockReferenceBriefingTemplate, string[]> = {
     "이번 주 강세 약세 업종 주요 경제 뉴스",
   ],
   NEXT_WEEK_MARKET_PREVIEW: [
-    "다음 주 경제 일정",
-    "다음 주 미국 경제지표",
-    "다음 주 주요 실적 발표",
-    "다음 주 한국 증시 전망",
-    "다음 주 FOMC CPI 고용지표",
+    "다음 주 한국 증시 전망 코스피 외국인 환율",
+    "다음 주 미국 증시 전망 실적 시즌 국채금리",
+    "다음 주 증시 경제 일정 ECB 기업 실적",
+    "코스피 코스닥 다음 주 수급 전망",
+    "S&P500 나스닥 다음 주 실적 전망",
   ],
 };
 

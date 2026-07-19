@@ -21,6 +21,52 @@ type NaverBlogItem = {
   postdate?: string;
 };
 
+const NEXT_WEEK_NEWS_CORE_PATTERN = /증시|주식시장|코스피|코스닥|S&P\s*500|나스닥|기업\s*실적|실적\s*시즌/i;
+const NEXT_WEEK_NEWS_DRIVER_PATTERN = /다음\s*주|전망|금리|국채|환율|외국인|기관|수급|경제\s*지표|ECB|연준|변동성/i;
+const NEXT_WEEK_NEWS_EXCLUDED_TITLE_PATTERN = /뉴스브리핑|코인|가상자산|암호화폐|비트코인|BONK|금시세|금값|금가격/i;
+const NEXT_WEEK_NEWS_EXCLUDED_PUBLISHERS = new Set(["tokenpost.kr"]);
+
+export function isRelevantNextWeekNews(item: Pick<ReferenceItem, "title" | "summary" | "publisher">) {
+  const title = stripHtml(item.title || "");
+  const summary = stripHtml(item.summary || "");
+  const publisher = (item.publisher || "").toLowerCase();
+  if (NEXT_WEEK_NEWS_EXCLUDED_PUBLISHERS.has(publisher)) return false;
+  if (NEXT_WEEK_NEWS_EXCLUDED_TITLE_PATTERN.test(title)) return false;
+  const searchable = `${title}\n${summary}`;
+  return NEXT_WEEK_NEWS_CORE_PATTERN.test(searchable) && NEXT_WEEK_NEWS_DRIVER_PATTERN.test(searchable);
+}
+
+function nextWeekNewsScore(item: ReferenceItem) {
+  const searchable = `${item.title}\n${item.summary || ""}`;
+  const signals = [
+    /다음\s*주/i,
+    /증시|주식시장/i,
+    /코스피|코스닥/i,
+    /S&P\s*500|나스닥/i,
+    /실적\s*시즌|기업\s*실적/i,
+    /금리|국채|환율|수급|ECB|연준/i,
+  ].filter((pattern) => pattern.test(searchable)).length;
+  return signals * 10 + (item.relevanceScore || 0);
+}
+
+export function selectDiverseNextWeekNews(items: ReferenceItem[], limit: number) {
+  const sorted = items.filter(isRelevantNextWeekNews).sort((left, right) => nextWeekNewsScore(right) - nextWeekNewsScore(left));
+  const selected: ReferenceItem[] = [];
+  const publisherCounts = new Map<string, number>();
+  for (const maxPerPublisher of [1, 2]) {
+    for (const item of sorted) {
+      if (selected.length >= limit) break;
+      if (selected.includes(item)) continue;
+      const publisher = (item.publisher || item.sourceName || "unknown").toLowerCase();
+      const count = publisherCounts.get(publisher) || 0;
+      if (count >= maxPerPublisher) continue;
+      publisherCounts.set(publisher, count + 1);
+      selected.push(item);
+    }
+  }
+  return selected;
+}
+
 function parseNaverDate(value?: string) {
   if (!value) return undefined;
   if (/^\d{8}$/.test(value)) return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T00:00:00.000Z`;
@@ -99,7 +145,10 @@ export const naverSearchReferenceAdapter: ReferenceAdapter = {
         }));
       }
     }
-    const dedupedItems = dedupeReferenceItems(items).slice(0, maxResults);
+    const deduped = dedupeReferenceItems(items);
+    const dedupedItems = input.contentType === "NEXT_WEEK_MARKET_PREVIEW"
+      ? selectDiverseNextWeekNews(deduped, maxResults)
+      : deduped.slice(0, maxResults);
 
     const competitorBlogReferences: CompetitorBlogReference[] = [];
     if (process.env.COMPETITOR_BLOG_SEARCH_ENABLED === "true") {
