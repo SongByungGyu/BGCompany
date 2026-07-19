@@ -177,6 +177,37 @@ export function buildMultilineEditorInputSteps(value: string): EditorInputStep[]
   return steps;
 }
 
+export function selectNaverArticleUrls(value: string) {
+  return normalizeEditorText(value)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /^https?:\/\/\S+$/.test(line));
+}
+
+export function prepareNaverPublicationBody(value: string) {
+  return normalizeEditorText(value)
+    .replace(
+      "확인되지 않은 국내 일정은 별도로 넣지 않았습니다. 새 일정은 날짜와 공식 내용을 확인한 뒤 시장 반응을 판단할 필요가 있습니다.",
+      "추가 일정은 공식 발표 여부를 확인한 뒤 시장 반응과 함께 살펴볼 필요가 있습니다.",
+    )
+    .replace("5. 이번 주에 눈여겨볼 기회와 위험", "5.\u00a0이번 주 기회와 위험")
+    .split("\n")
+    .map((line) => {
+      if (/^https?:\/\/\S+$/.test(line.trim())) return "원문 보기";
+      if (/^[1-6]\.\s+/.test(line)) return line.replace(/^([1-6]\.)\s+/, "$1\u00a0");
+      return line;
+    })
+    .join("\n");
+}
+
+export function selectNaverEmphasisParagraphs(value: string) {
+  const candidates = new Set(["기회 요인", "위험 요인"]);
+  return normalizeEditorText(value)
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter((line) => candidates.has(line));
+}
+
 export function selectNaverSectionHeadings(value: string) {
   const headings: string[] = [];
   let reachedArticleSection = false;
@@ -455,8 +486,27 @@ async function focusAfterNaverHeading(page: import("playwright").Page, heading: 
   return false;
 }
 
-async function insertImageCaption(page: import("playwright").Page, caption: string, sourceLabel: string) {
-  const value = `${caption} · ${sourceLabel}`;
+async function findNaverExactParagraph(page: import("playwright").Page, expected: string) {
+  const normalizedExpected = expected.replace(/\s+/g, " ").trim();
+  for (const scope of [page, ...page.frames()]) {
+    const paragraphs = scope.locator(".se-section-text p, .se-text-paragraph");
+    const count = await paragraphs.count().catch(() => 0);
+    for (let index = 0; index < count; index += 1) {
+      const paragraph = paragraphs.nth(index);
+      const text = (await paragraph.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+      if (text === normalizedExpected) return { scope, paragraph };
+    }
+  }
+  return null;
+}
+
+async function insertImageCaption(
+  page: import("playwright").Page,
+  caption: string,
+  sourceLabel: string,
+  includeSource = true,
+) {
+  const value = includeSource ? `${caption} · ${sourceLabel}` : caption;
   for (const scope of [page, ...page.frames()]) {
     const images = scope.locator(".se-component.se-image");
     if (!(await images.count().catch(() => 0))) continue;
@@ -476,31 +526,104 @@ async function insertImageCaption(page: import("playwright").Page, caption: stri
   return false;
 }
 
+async function formatNaverSourceParagraph(page: import("playwright").Page, sourceLabel: string) {
+  const target = await findNaverExactParagraph(page, sourceLabel);
+  if (!target) return false;
+  const { scope, paragraph } = target;
+  await paragraph.click({ clickCount: 3, delay: 80, timeout: 5000 });
+  const centerButton = scope.locator(".se-contents-toolbar-cycle-toggle-button.se-align-center-toolbar-button:visible").first();
+  if (!(await centerButton.count().catch(() => 0))) return false;
+  await centerButton.click({ timeout: 5000 });
+  await scope.locator(".se-font-size-code-toolbar-button:visible").first().click({ timeout: 5000 });
+  await scope.locator(".se-toolbar-option-font-size-code-fs13-button:visible").click({ timeout: 5000 });
+  await page.waitForTimeout(200);
+  const formatted = await paragraph.evaluate((element) => ({
+    centered: element.classList.contains("se-text-paragraph-align-center"),
+    size13: Boolean(element.querySelector(".se-fs13")),
+  })).catch(() => ({ centered: false, size13: false }));
+  if (!formatted.centered || !formatted.size13) return false;
+  await paragraph.click({ timeout: 5000 });
+  await page.keyboard.press("Home");
+  await page.waitForTimeout(100);
+  return true;
+}
+
+async function prepareNaverInlineImagePlacement(
+  page: import("playwright").Page,
+  heading: string,
+  sourceLabel: string,
+) {
+  if (!(await focusAfterNaverHeading(page, heading))) return false;
+  if (!(await page.keyboard.insertText(sourceLabel).then(() => true, () => false))) return false;
+  await page.waitForTimeout(150);
+  return formatNaverSourceParagraph(page, sourceLabel);
+}
+
 async function applyNaverSectionTitles(page: import("playwright").Page, body: string) {
   const headings = selectNaverSectionHeadings(body);
   for (const heading of headings) {
-    let applied = false;
-    for (const scope of [page, ...page.frames()]) {
-      const paragraphs = scope.locator(".se-section-text p, .se-text-paragraph");
-      const count = await paragraphs.count().catch(() => 0);
-      for (let index = 0; index < count; index += 1) {
-        const paragraph = paragraphs.nth(index);
-        const text = (await paragraph.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
-        if (text !== heading) continue;
-        await paragraph.click({ timeout: 5000 });
-        const formatButton = scope.locator(".se-text-format-toolbar-button").first();
-        const sectionTitleButton = scope.locator(".se-toolbar-option-text-format-sectionTitle-button").first();
-        if (!(await formatButton.count().catch(() => 0))) continue;
-        await formatButton.click({ timeout: 5000 });
-        await sectionTitleButton.click({ timeout: 5000 });
-        applied = true;
-        break;
-      }
-      if (applied) break;
-    }
-    if (!applied) throw new Error(`NAVER_SECTION_TITLE_NOT_APPLIED_${heading}`);
+    let target = await findNaverExactParagraph(page, heading);
+    if (!target) throw new Error(`NAVER_SECTION_TITLE_NOT_FOUND_${heading}`);
+    await page.keyboard.press("Escape").catch(() => undefined);
+    await target.paragraph.click({ timeout: 5000 });
+    const formatButton = target.scope.locator(".se-text-format-toolbar-button").first();
+    const sectionTitleButton = target.scope.locator(".se-toolbar-option-text-format-sectionTitle-button").first();
+    if (!(await formatButton.count().catch(() => 0))) throw new Error(`NAVER_SECTION_TITLE_TOOLBAR_MISSING_${heading}`);
+    await formatButton.click({ timeout: 5000 });
+    await sectionTitleButton.click({ timeout: 5000 });
+    await page.waitForTimeout(350);
+    target = await findNaverExactParagraph(page, heading);
+    const isSectionTitle = target
+      ? await target.paragraph.evaluate((element) => element.closest(".se-component")?.classList.contains("se-sectionTitle") ?? false)
+      : false;
+    if (!target || !isSectionTitle) throw new Error(`NAVER_SECTION_TITLE_NOT_APPLIED_${heading}`);
+    await target.paragraph.click({ clickCount: 3, delay: 80, timeout: 5000 });
+    await page.keyboard.press("Control+B");
+    await page.waitForTimeout(150);
+    if (!(await target.paragraph.locator("b").count().catch(() => 0))) throw new Error(`NAVER_SECTION_TITLE_BOLD_FAILED_${heading}`);
   }
   console.log(`[naver-agent] section title formatting applied: ${headings.length}`);
+}
+
+async function applyNaverEmphasisParagraphs(page: import("playwright").Page, body: string) {
+  const labels = selectNaverEmphasisParagraphs(body);
+  for (const label of labels) {
+    const target = await findNaverExactParagraph(page, label);
+    if (!target) throw new Error(`NAVER_EMPHASIS_PARAGRAPH_NOT_FOUND_${label}`);
+    await target.paragraph.click({ clickCount: 3, delay: 80, timeout: 5000 });
+    await page.keyboard.press("Control+B");
+    await page.waitForTimeout(150);
+    if (!(await target.paragraph.locator("b").count().catch(() => 0))) throw new Error(`NAVER_EMPHASIS_PARAGRAPH_BOLD_FAILED_${label}`);
+  }
+}
+
+async function applyNaverArticleLinks(page: import("playwright").Page, urls: string[]) {
+  if (urls.length === 0) return;
+  const targets = [];
+  const scopes = [page, ...page.frames().filter((frame) => frame !== page.mainFrame())];
+  for (const scope of scopes) {
+    const paragraphs = scope.locator(".se-section-text p, .se-text-paragraph");
+    for (let index = 0; index < await paragraphs.count().catch(() => 0); index += 1) {
+      const paragraph = paragraphs.nth(index);
+      const text = (await paragraph.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+      if (text === "원문 보기") targets.push({ scope, paragraph });
+    }
+  }
+  if (targets.length !== urls.length) throw new Error(`NAVER_ARTICLE_LINK_TARGET_COUNT_${targets.length}_${urls.length}`);
+  for (let index = 0; index < urls.length; index += 1) {
+    const { scope, paragraph } = targets[index];
+    await paragraph.click({ clickCount: 3, delay: 80, timeout: 5000 });
+    await scope.locator(".se-link-toolbar-button:visible").first().click({ timeout: 5000 });
+    await scope.locator("input.se-custom-layer-link-input:visible").fill(urls[index], { timeout: 5000 });
+    await scope.locator("button.se-custom-layer-link-apply-button:visible").click({ timeout: 5000 });
+    await page.waitForTimeout(200);
+  }
+  const linkedUrls: string[] = [];
+  for (const scope of scopes) {
+    linkedUrls.push(...await scope.locator(".se-link[data-href]").evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-href") ?? "")).catch(() => []));
+  }
+  const missing = urls.filter((url) => !linkedUrls.includes(url));
+  if (missing.length) throw new Error(`NAVER_ARTICLE_LINK_VERIFY_FAILED_${missing.length}`);
 }
 
 async function removeNaverOglinkPreviews(page: import("playwright").Page) {
@@ -604,7 +727,8 @@ async function insertMultilineEditorSteps(page: import("playwright").Page, steps
       ? await page.keyboard.press("Enter").then(() => true, () => false)
       : await page.keyboard.insertText(step.value).then(() => true, () => false);
     if (!inserted) return false;
-    if (index > 0 && index % 12 === 0) await page.waitForTimeout(50);
+    await page.waitForTimeout(step.type === "enter" ? 35 : 25);
+    if (index > 0 && index % 8 === 0) await page.waitForTimeout(120);
   }
   return true;
 }
@@ -1063,7 +1187,9 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
       };
     }
 
-    const bodyFilled = await fillMultilineEditorTarget(page, bodySelectors, job.body, "body");
+    const naverBody = prepareNaverPublicationBody(job.body);
+    const articleUrls = selectNaverArticleUrls(job.body);
+    const bodyFilled = await fillMultilineEditorTarget(page, bodySelectors, naverBody, "body");
 
     if (!bodyFilled) {
       return {
@@ -1074,7 +1200,7 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
       };
     }
 
-    const readability = await verifyNaverEditorReadability(page, job.body);
+    const readability = await verifyNaverEditorReadability(page, naverBody);
     if (!readability.ok) {
       return {
         status: "readability_failed",
@@ -1087,13 +1213,11 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
     if (thumbnailUploaded) {
       try {
         await removeNaverOglinkPreviews(page);
-        const articleUrls = job.body.split(/\r?\n/).map((line) => line.trim()).filter((line) => /^https?:\/\//.test(line));
-        const editorTextAfterOglinkRemoval = await readNaverEditorText(page);
-        const missingArticleUrls = articleUrls.filter((url) => !editorTextAfterOglinkRemoval.includes(url));
-        if (missingArticleUrls.length > 0) throw new Error(`NAVER_ARTICLE_URL_MISSING_${missingArticleUrls.length}`);
-        await applyNaverSectionTitles(page, job.body);
+        await applyNaverArticleLinks(page, articleUrls);
+        await applyNaverSectionTitles(page, naverBody);
+        await applyNaverEmphasisParagraphs(page, naverBody);
         for (const [index, image] of imageManifest.bodyImages.entries()) {
-          if (!(await focusAfterNaverHeading(page, image.placementAfterHeading))) {
+          if (!(await prepareNaverInlineImagePlacement(page, image.placementAfterHeading, image.sourceLabel))) {
             throw new Error(`NAVER_IMAGE_PLACEMENT_HEADING_NOT_FOUND_${image.id}`);
           }
           const inlineFile = await downloadTrustedThumbnail({
@@ -1104,7 +1228,7 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
             fileStem: `inline-${index + 1}`,
           });
           await attachNaverImage(page, inlineFile, `inline-${index + 1}`);
-          if (!(await insertImageCaption(page, image.caption, image.sourceLabel))) {
+          if (!(await insertImageCaption(page, image.caption, image.sourceLabel, false))) {
             throw new Error(`NAVER_IMAGE_CAPTION_INSERT_FAILED_${image.id}`);
           }
         }
@@ -1119,7 +1243,7 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
           placement = await verifyNaverImagePlacements(page, imageManifest.bodyImages);
         }
         if (!placement.ok) throw new Error(`NAVER_IMAGE_PLACEMENT_VERIFY_FAILED_${placement.imageId}_${placement.diagnostic}`);
-        const postImageReadability = await verifyNaverEditorReadability(page, job.body);
+        const postImageReadability = await verifyNaverEditorReadability(page, naverBody);
         if (!postImageReadability.ok) throw new Error("NAVER_IMAGE_BODY_READABILITY_FAILED");
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1129,7 +1253,9 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
           || message.includes("READABILITY")
           || message.includes("SECTION_TITLE")
           || message.includes("OGLINK")
-          || message.includes("ARTICLE_URL");
+          || message.includes("ARTICLE_URL")
+          || message.includes("ARTICLE_LINK")
+          || message.includes("EMPHASIS_PARAGRAPH");
         return {
           status: qualityFailure ? "image_quality_failed" : "image_upload_failed",
           externalUrl: page.url(),

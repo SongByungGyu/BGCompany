@@ -5,7 +5,10 @@ import {
   buildMultilineEditorInputSteps,
   hasSavedDraftTitle,
   pickMostReadableEditorText,
+  prepareNaverPublicationBody,
   savedDraftTitleMatchToken,
+  selectNaverArticleUrls,
+  selectNaverEmphasisParagraphs,
   selectNaverSectionHeadings,
 } from "./naver-writer.js";
 
@@ -60,6 +63,41 @@ https://example.com/two
     "함께 확인한 기사",
     "마무리",
   ]);
+});
+
+test("네이버 발행 본문은 긴 5절 제목과 원문 URL을 가독성 형식으로 바꾼다", () => {
+  const body = `4. 다음 주 핵심 일정
+본문
+
+5. 이번 주에 눈여겨볼 기회와 위험
+기회 요인
+본문
+위험 요인
+본문
+
+함께 확인한 기사
+1. 기사 제목 – 언론사, 2026년 7월 19일
+https://example.com/one`;
+  const prepared = prepareNaverPublicationBody(body);
+
+  assert.ok(prepared.includes("5.\u00a0이번 주 기회와 위험"));
+  assert.ok(prepared.includes("원문 보기"));
+  assert.ok(!prepared.includes("https://example.com/one"));
+  assert.deepEqual(selectNaverArticleUrls(body), ["https://example.com/one"]);
+  assert.deepEqual(selectNaverEmphasisParagraphs(prepared), ["기회 요인", "위험 요인"]);
+  assert.deepEqual(selectNaverSectionHeadings(prepared), [
+    "4. 다음 주 핵심 일정",
+    "5. 이번 주 기회와 위험",
+    "함께 확인한 기사",
+  ]);
+});
+
+test("검수 과정처럼 보이는 일정 문장은 독자용 문장으로 바꾼다", () => {
+  const prepared = prepareNaverPublicationBody(
+    "확인되지 않은 국내 일정은 별도로 넣지 않았습니다. 새 일정은 날짜와 공식 내용을 확인한 뒤 시장 반응을 판단할 필요가 있습니다.",
+  );
+
+  assert.equal(prepared, "추가 일정은 공식 발표 여부를 확인한 뒤 시장 반응과 함께 살펴볼 필요가 있습니다.");
 });
 
 test("여러 프레임과 selector 후보 중 가장 긴 본문을 선택한다", () => {
