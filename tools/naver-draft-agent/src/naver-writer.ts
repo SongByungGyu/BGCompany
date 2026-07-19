@@ -167,22 +167,48 @@ function readabilityMetrics(value: string) {
   };
 }
 
+export function pickMostReadableEditorText(candidates: string[]) {
+  let selected = "";
+  let selectedMetrics = readabilityMetrics(selected);
+  for (const candidate of candidates) {
+    const metrics = readabilityMetrics(candidate);
+    if (
+      metrics.characterCount > selectedMetrics.characterCount ||
+      (metrics.characterCount === selectedMetrics.characterCount && metrics.lineCount > selectedMetrics.lineCount) ||
+      (metrics.characterCount === selectedMetrics.characterCount && metrics.lineCount === selectedMetrics.lineCount && metrics.paragraphCount > selectedMetrics.paragraphCount)
+    ) {
+      selected = candidate;
+      selectedMetrics = metrics;
+    }
+  }
+  return selected;
+}
+
 async function readNaverEditorText(page: import("playwright").Page) {
   const selectors = [
     ".se-main-container",
+    ".se-section-text",
+    ".se-section-text p",
+    ".se-text-paragraph",
     ".se-component-content",
     '[contenteditable="true"][aria-label*="본문"]',
     '[contenteditable="true"][data-placeholder*="내용"]',
   ];
+  const candidates: string[] = [];
   for (const scope of [page, ...page.frames()]) {
     for (const selector of selectors) {
-      const target = scope.locator(selector).first();
-      if (!(await target.count().catch(() => 0))) continue;
-      const text = await target.innerText({ timeout: 5000 }).catch(() => "");
-      if (text.trim()) return text;
+      const targets = scope.locator(selector);
+      if (!(await targets.count().catch(() => 0))) continue;
+      const texts = await targets.allInnerTexts().catch(() => [] as string[]);
+      const nonEmpty = texts.filter((text) => text.trim());
+      candidates.push(...nonEmpty);
+      if (nonEmpty.length > 1) candidates.push(nonEmpty.join("\n"));
     }
   }
-  return "";
+  const selected = pickMostReadableEditorText(candidates);
+  const metrics = readabilityMetrics(selected);
+  console.log(`[naver-agent] editor text candidates: count=${candidates.length}, selected_chars=${metrics.characterCount}, selected_lines=${metrics.lineCount}`);
+  return selected;
 }
 
 async function verifyNaverEditorReadability(page: import("playwright").Page, expectedBody: string) {

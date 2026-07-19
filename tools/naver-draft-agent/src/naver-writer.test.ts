@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildMultilineEditorInputSteps } from "./naver-writer.js";
+import { buildMultilineEditorInputSteps, pickMostReadableEditorText } from "./naver-writer.js";
 
 function reconstruct(steps: ReturnType<typeof buildMultilineEditorInputSteps>) {
   return steps.map((step) => step.type === "enter" ? "\n" : step.value).join("");
@@ -28,4 +28,21 @@ test("빈 줄이 있어도 문단 간격을 Enter 횟수로 보존한다", () =>
 
 test("비어 있는 본문은 입력 단계를 만들지 않는다", () => {
   assert.deepEqual(buildMultilineEditorInputSteps(" \n\n "), []);
+});
+
+test("여러 프레임과 selector 후보 중 가장 긴 본문을 선택한다", () => {
+  const selected = pickMostReadableEditorText([
+    "본문",
+    "첫 문단",
+    "첫 문단\n둘째 문단\n셋째 문단",
+    "숨은 짧은 요소",
+  ]);
+
+  assert.equal(selected, "첫 문단\n둘째 문단\n셋째 문단");
+});
+
+test("글자 수가 같으면 줄과 문단 구조가 더 풍부한 후보를 선택한다", () => {
+  const selected = pickMostReadableEditorText(["가나다라마바", "가나\n다라\n마바"]);
+
+  assert.equal(selected, "가나\n다라\n마바");
 });
