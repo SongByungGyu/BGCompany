@@ -247,8 +247,8 @@ function horizontalComparisonSvg(input: {
   rows: Array<{ label: string; value: number; display: string }>;
 }) {
   const maxAbs = Math.max(...input.rows.map((row) => Math.abs(row.value)), 0.0001);
-  const zeroX = 600;
-  const maxWidth = 370;
+  const zeroX = 650;
+  const maxWidth = 360;
   const rowSvg = input.rows.map((row, index) => {
     const y = 230 + index * 72;
     const width = Math.max(4, Math.round(Math.abs(row.value) / maxAbs * maxWidth));
@@ -338,6 +338,11 @@ export async function generateStockBlogImages(input: {
     marketDate: input.marketDate,
     sourceTitle: input.title,
   });
+  const titleFocus = input.title.split(/[｜|]/).slice(1).join(" · ").trim();
+  const thumbnailTitle = input.template === "NEXT_WEEK_MARKET_PREVIEW"
+    ? "다음 주 한국·미국 증시 전망"
+    : editorialTitle;
+  const thumbnailSubtitle = titleFocus || input.topic;
   try {
     const kospi = numericMetric(snapshot.korea?.kospi, "changePct", "KOSPI_CHANGE");
     const kosdaq = numericMetric(snapshot.korea?.kosdaq, "changePct", "KOSDAQ_CHANGE");
@@ -367,7 +372,7 @@ export async function generateStockBlogImages(input: {
     const files = [
       {
         name: "thumbnail.svg",
-        svg: svgCard({ width: 1200, height: 675, title: editorialTitle, subtitle: input.topic, footer, theme, hero: true }),
+        svg: svgCard({ width: 1200, height: 675, title: thumbnailTitle, subtitle: thumbnailSubtitle, footer, theme, hero: true }),
       },
       {
         name: "major-index-change.svg",
@@ -413,7 +418,7 @@ export async function generateStockBlogImages(input: {
         id: "thumbnail",
         role: "thumbnail",
         type: "thumbnail",
-        title: editorialTitle,
+        title: thumbnailTitle,
         placementAfterHeading: "__thumbnail__",
         imageUrl: `${relativeDir}/thumbnail.svg`,
         caption: "다음 주 한국·미국 증시 전망",
