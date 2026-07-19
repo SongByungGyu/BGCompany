@@ -11,7 +11,7 @@ import { buildBlogImagePrompts } from "@/lib/stock-blog/references/reference-nor
 import { evaluateStockBlogReferences } from "@/lib/stock-blog/quality-gate";
 import { FRED_DEGRADED_DISCLOSURE, ensureFredDegradedDisclosure, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import { generateStockBlogImages, type GeneratedStockBlogImages } from "@/lib/stock-blog/stock-blog-image-generator";
-import type { NormalizedHermesRunResult } from "@/lib/hermes/hermes-types";
+import type { HermesRunTelemetry, NormalizedHermesRunResult } from "@/lib/hermes/hermes-types";
 import type { BlogImagePrompt, ReferenceBundle, StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 import type { ContentChannel, ContentPipelineDetail, ContentPipelineRun, ContentPipelineStatus } from "@/features/content-pipeline/content-pipeline-types";
 
@@ -215,6 +215,28 @@ function asNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function asHermesRunTelemetry(value: unknown): HermesRunTelemetry | undefined {
+  const record = asRecord(value);
+  if (!record) return undefined;
+  const agentId = typeof record.agentId === "string" ? record.agentId : undefined;
+  const model = typeof record.model === "string" ? record.model : undefined;
+  const durationMs = asNumber(record.durationMs);
+  const promptBytes = asNumber(record.promptBytes);
+  const outputBytes = asNumber(record.outputBytes);
+  const timeoutLimitMs = asNumber(record.timeoutLimitMs);
+  if (!agentId || !model || durationMs === undefined || promptBytes === undefined || outputBytes === undefined || timeoutLimitMs === undefined) return undefined;
+  return {
+    agentId,
+    model,
+    durationMs,
+    promptBytes,
+    outputBytes,
+    exitCode: asNumber(record.exitCode),
+    timeoutLimitMs,
+    memoryUsagePercentAtStart: asNumber(record.memoryUsagePercentAtStart),
+  };
+}
+
 function normalizeResultForMetadata(result: NormalizedPipelineResult): Record<string, unknown> {
   return toJsonObject({
     ok: result.ok,
@@ -266,6 +288,7 @@ function normalizeResultForMetadata(result: NormalizedPipelineResult): Record<st
     rawText: result.rawText,
     hermesJobId: result.hermesJobId,
     durationMs: result.durationMs,
+    telemetry: result.telemetry,
     errorCode: result.errorCode,
     errorMessage: result.errorMessage,
     raw: result.raw,
@@ -1135,6 +1158,7 @@ function runFromEvent(event: {
       parseStatus: asParseStatus(plannerResult.parseStatus),
       rawText: typeof plannerResult.rawText === "string" ? plannerResult.rawText : undefined,
       durationMs: asNumber(plannerResult.durationMs),
+      telemetry: asHermesRunTelemetry(plannerResult.telemetry),
       errorCode: typeof plannerResult.errorCode === "string" ? plannerResult.errorCode : undefined,
       errorMessage: typeof plannerResult.errorMessage === "string" ? plannerResult.errorMessage : undefined,
     } : undefined,
@@ -1160,6 +1184,7 @@ function runFromEvent(event: {
       parseStatus: asParseStatus(marketingResult.parseStatus),
       rawText: typeof marketingResult.rawText === "string" ? marketingResult.rawText : undefined,
       durationMs: asNumber(marketingResult.durationMs),
+      telemetry: asHermesRunTelemetry(marketingResult.telemetry),
       errorCode: typeof marketingResult.errorCode === "string" ? marketingResult.errorCode : undefined,
       errorMessage: typeof marketingResult.errorMessage === "string" ? marketingResult.errorMessage : undefined,
     } : undefined,
@@ -1183,6 +1208,7 @@ function runFromEvent(event: {
       parseStatus: asParseStatus(writerResult.parseStatus),
       rawText: typeof writerResult.rawText === "string" ? writerResult.rawText : undefined,
       durationMs: asNumber(writerResult.durationMs),
+      telemetry: asHermesRunTelemetry(writerResult.telemetry),
       errorCode: typeof writerResult.errorCode === "string" ? writerResult.errorCode : undefined,
       errorMessage: typeof writerResult.errorMessage === "string" ? writerResult.errorMessage : undefined,
     } : undefined,
@@ -1206,6 +1232,7 @@ function runFromEvent(event: {
       parseStatus: asParseStatus(qaResult.parseStatus),
       rawText: typeof qaResult.rawText === "string" ? qaResult.rawText : undefined,
       durationMs: asNumber(qaResult.durationMs),
+      telemetry: asHermesRunTelemetry(qaResult.telemetry),
       errorCode: typeof qaResult.errorCode === "string" ? qaResult.errorCode : undefined,
       errorMessage: typeof qaResult.errorMessage === "string" ? qaResult.errorMessage : undefined,
     } : undefined,

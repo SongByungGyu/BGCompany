@@ -12,10 +12,17 @@ from typing import Any
 HOST = os.environ.get("HERMES_BRIDGE_HOST", "0.0.0.0")
 PORT = int(os.environ.get("HERMES_BRIDGE_PORT", "8787"))
 BRIDGE_API_KEY = os.environ.get("BRIDGE_API_KEY") or os.environ.get("HERMES_BRIDGE_API_KEY") or ""
-TIMEOUT_MS = int(os.environ.get("HERMES_BRIDGE_TIMEOUT_MS", "45000"))
+LEGACY_TIMEOUT_MS = max(1000, int(os.environ.get("HERMES_BRIDGE_TIMEOUT_MS", "60000")))
+AGENT_TIMEOUT_MS = {
+    "content-planner": max(1000, int(os.environ.get("HERMES_PLANNER_TIMEOUT_MS", str(max(LEGACY_TIMEOUT_MS, 60000))))),
+    "marketing-manager": max(1000, int(os.environ.get("HERMES_MARKETING_TIMEOUT_MS", str(max(LEGACY_TIMEOUT_MS, 60000))))),
+    "content-writer": max(1000, int(os.environ.get("HERMES_WRITER_TIMEOUT_MS", str(max(LEGACY_TIMEOUT_MS, 120000))))),
+    "qa-auditor": max(1000, int(os.environ.get("HERMES_QA_TIMEOUT_MS", str(max(LEGACY_TIMEOUT_MS, 90000))))),
+}
 MAX_STDOUT_BYTES = int(os.environ.get("HERMES_BRIDGE_MAX_STDOUT_BYTES", "200000"))
 MAX_CONCURRENCY = max(1, int(os.environ.get("HERMES_BRIDGE_MAX_CONCURRENCY", "1")))
 MAX_BODY_BYTES = int(os.environ.get("HERMES_BRIDGE_MAX_BODY_BYTES", "1048576"))
+MAX_MEMORY_PERCENT = min(100.0, max(1.0, float(os.environ.get("HERMES_BRIDGE_MAX_MEMORY_PERCENT", "80"))))
 HERMES_PROVIDER = os.environ.get("HERMES_BRIDGE_PROVIDER", "openai-api").strip()
 HERMES_MODEL = os.environ.get("HERMES_BRIDGE_MODEL", "gpt-5.4-mini").strip()
 
@@ -41,6 +48,67 @@ semaphore = threading.BoundedSemaphore(MAX_CONCURRENCY)
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def timeout_for_agent(agent_id: str) -> int:
+    return AGENT_TIMEOUT_MS.get(agent_id, LEGACY_TIMEOUT_MS)
+
+
+def current_memory_usage_percent() -> float | None:
+    try:
+        current_path = "/sys/fs/cgroup/memory.current"
+        maximum_path = "/sys/fs/cgroup/memory.max"
+        if os.path.exists(current_path) and os.path.exists(maximum_path):
+            with open(current_path, encoding="utf-8") as current_file:
+                current = int(current_file.read().strip())
+            with open(maximum_path, encoding="utf-8") as maximum_file:
+                maximum_text = maximum_file.read().strip()
+            if maximum_text != "max":
+                maximum = int(maximum_text)
+                if maximum > 0:
+                    return round((current / maximum) * 100, 2)
+    except (OSError, ValueError):
+        pass
+
+    try:
+        memory: dict[str, int] = {}
+        with open("/proc/meminfo", encoding="utf-8") as meminfo:
+            for line in meminfo:
+                key, value = line.split(":", 1)
+                memory[key] = int(value.strip().split()[0])
+        total = memory.get("MemTotal", 0)
+        available = memory.get("MemAvailable", 0)
+        if total > 0:
+            return round(((total - available) / total) * 100, 2)
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
+def build_run_telemetry(
+    *,
+    agent_id: str,
+    duration_ms: int,
+    prompt_bytes: int,
+    output_bytes: int,
+    exit_code: int | None,
+    timeout_limit_ms: int,
+    memory_usage_percent: float | None,
+) -> dict[str, Any]:
+    return {
+        "agentId": agent_id,
+        "model": HERMES_MODEL,
+        "durationMs": duration_ms,
+        "promptBytes": prompt_bytes,
+        "outputBytes": output_bytes,
+        "exitCode": exit_code,
+        "timeoutLimitMs": timeout_limit_ms,
+        "memoryUsagePercentAtStart": memory_usage_percent,
+    }
+
+
+def log_run_telemetry(status: str, telemetry: dict[str, Any]) -> None:
+    print(json.dumps({"event": "hermes_run", "status": status, **telemetry}, ensure_ascii=False), flush=True)
 
 
 def mask_secrets(value: str) -> str:
@@ -395,7 +463,7 @@ content-planner의 기획안과 marketing-manager의 검토안을 바탕으로 {
 - 경쟁 블로그의 평균 길이와 구조 패턴은 참고하되 문장·비유·체크리스트 항목을 복사하지 않는다.
 - 모든 구체 수치와 일정은 제공된 시장 스냅샷 또는 실제 참고자료에서 확인되는 경우에만 사용한다.
 - 참고자료 URL과 데이터 기준일을 독자가 확인할 수 있게 분리한다.
-- fullDraft 상단에 "데이터 기준" 블록을 두고 한국 지수·수급, 미국 지수·환율·금리의 각 asOf 날짜와 원문 URL을 직접 적는다.
+- 첫 번째 sections 항목의 heading은 반드시 "데이터 기준"으로 작성하고, body에 한국 지수·수급, 미국 지수·환율·금리의 각 asOf 날짜와 원문 URL을 직접 적는다.
 - 수급 값에는 market snapshot의 unit을 반드시 함께 적고, unit이 없으면 수치를 본문에 쓰지 않는다.
 - 다음 주 일정은 각 항목의 날짜와 원문 URL을 함께 적는다. 발표 시각이 입력에 없으면 임의 생성하지 말고 "발표 시각은 원문 일정에서 확인"이라고 명시한다.
 - "오늘", "오늘 장"처럼 기준일을 흐리는 표현을 쓰지 말고 "최근 거래일 기준", "이번 브리핑 기준"으로 바꾼다.
@@ -407,8 +475,8 @@ content-planner의 기획안과 marketing-manager의 검토안을 바탕으로 {
 - JSON 앞뒤 설명 문장, markdown, code fence를 절대 쓰지 않는다.
 - 한국어로 작성한다.
 - sections는 최소 6개 이상이며 각 항목은 서로 다른 heading과 body를 가진다.
-- fullDraft는 공백 제외 2500자 이상 작성하고 같은 문장을 반복하지 않는다.
-- fullDraft 또는 markdownDraft 중 하나 이상은 반드시 작성한다.
+- introduction, sections의 body, conclusion을 합친 본문은 공백 제외 2500자 이상이 되도록 작성하고 같은 문장을 반복하지 않는다.
+- fullDraft, markdownDraft, htmlDraft는 출력하지 않는다. 서버가 sections를 기준으로 파생 본문을 조립한다.
 
 출력 JSON schema:
 {{
@@ -422,10 +490,7 @@ content-planner의 기획안과 marketing-manager의 검토안을 바탕으로 {
   ],
   "conclusion": "마무리 문단",
   "cta": "행동 유도 문구",
-  "fullDraft": "게시 가능한 전체 초안",
-  "markdownDraft": "Markdown 형식 초안",
-  "usedSeoKeywords": ["키워드 1", "키워드 2"],
-  "writingNotes": ["작성 메모 1"]
+  "usedSeoKeywords": ["키워드 1", "키워드 2"]
 }}
 """.strip()
 
@@ -627,22 +692,60 @@ def pick_writer_sections(record: dict[str, Any]) -> list[dict[str, str]] | None:
     return result or None
 
 
+def assemble_writer_drafts(
+    introduction: str | None,
+    sections: list[dict[str, str]] | None,
+    conclusion: str | None,
+    cta: str | None,
+) -> tuple[str | None, str | None]:
+    if not sections:
+        return None, None
+
+    plain_parts: list[str] = []
+    markdown_parts: list[str] = []
+    if introduction:
+        plain_parts.append(introduction)
+        markdown_parts.append(introduction)
+    for section in sections:
+        heading = section.get("heading", "").strip()
+        body = section.get("body", "").strip()
+        if heading:
+            plain_parts.append(heading)
+            markdown_parts.append(f"## {heading}")
+        if body:
+            plain_parts.append(body)
+            markdown_parts.append(body)
+    if conclusion:
+        plain_parts.extend(["마무리", conclusion])
+        markdown_parts.extend(["## 마무리", conclusion])
+    if cta:
+        plain_parts.append(cta)
+        markdown_parts.append(cta)
+    return "\n\n".join(plain_parts), "\n\n".join(markdown_parts)
+
+
 def normalize_content_writer_success(stdout: str, stderr: str, duration_ms: int, agent_id: str) -> dict[str, Any]:
     common, parsed, raw_stdout = normalize_common(stdout, stderr, duration_ms, agent_id)
-    full_draft = pick_string(parsed, "fullDraft", "draft", "content", "article", "body") or raw_stdout.strip()
+    introduction = pick_string(parsed, "introduction", "intro", "opening")
+    sections = pick_writer_sections(parsed)
+    conclusion = pick_string(parsed, "conclusion", "closing")
+    cta = pick_string(parsed, "cta", "callToAction", "action")
+    full_draft, markdown_draft = assemble_writer_drafts(introduction, sections, conclusion, cta)
+    if not full_draft:
+        full_draft = pick_string(parsed, "fullDraft", "draft", "content", "article", "body") or raw_stdout.strip()
+    if not markdown_draft:
+        markdown_draft = pick_string(parsed, "markdownDraft", "markdown", "fullDraft") or full_draft
     return {
         **common,
         "finalTitle": pick_string(parsed, "finalTitle", "title", "headline"),
         "metaDescription": pick_string(parsed, "metaDescription", "description", "summary"),
-        "introduction": pick_string(parsed, "introduction", "intro", "opening"),
-        "sections": pick_writer_sections(parsed),
-        "conclusion": pick_string(parsed, "conclusion", "closing"),
-        "cta": pick_string(parsed, "cta", "callToAction", "action"),
+        "introduction": introduction,
+        "sections": sections,
+        "conclusion": conclusion,
+        "cta": cta,
         "fullDraft": full_draft,
-        "markdownDraft": pick_string(parsed, "markdownDraft", "markdown", "fullDraft"),
-        "htmlDraft": pick_string(parsed, "htmlDraft", "html"),
+        "markdownDraft": markdown_draft,
         "usedSeoKeywords": pick_string_list(parsed, "usedSeoKeywords", "seoKeywords", "keywords"),
-        "writingNotes": pick_string_list(parsed, "writingNotes", "notes", "memo"),
     }
 
 
@@ -711,7 +814,10 @@ class Handler(BaseHTTPRequestHandler):
             "configured": {
                 "bridgeApiKey": bool(BRIDGE_API_KEY),
                 "maxConcurrency": MAX_CONCURRENCY,
-                "timeoutMs": TIMEOUT_MS,
+                "timeoutMs": LEGACY_TIMEOUT_MS,
+                "agentTimeoutMs": AGENT_TIMEOUT_MS,
+                "maxMemoryPercent": MAX_MEMORY_PERCENT,
+                "memoryUsagePercent": current_memory_usage_percent(),
                 "provider": HERMES_PROVIDER,
                 "model": HERMES_MODEL,
             },
@@ -766,29 +872,69 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(status, body)
             return
 
+        timeout_ms = timeout_for_agent(agent_id)
+        memory_usage_percent = current_memory_usage_percent()
+        if memory_usage_percent is not None and memory_usage_percent >= MAX_MEMORY_PERCENT:
+            telemetry = build_run_telemetry(
+                agent_id=agent_id,
+                duration_ms=0,
+                prompt_bytes=0,
+                output_bytes=0,
+                exit_code=None,
+                timeout_limit_ms=timeout_ms,
+                memory_usage_percent=memory_usage_percent,
+            )
+            log_run_telemetry("memory_blocked", telemetry)
+            status, body = error_response(
+                "HERMES_BRIDGE_MEMORY_PRESSURE",
+                f"Hermes run blocked because memory usage is {memory_usage_percent:.2f}% (limit {MAX_MEMORY_PERCENT:.2f}%).",
+                503,
+                agent_id=agent_id,
+                raw=telemetry,
+            )
+            self.send_json(status, body)
+            semaphore.release()
+            return
+
+        prompt = ""
+        prompt_bytes = 0
         started = time.monotonic()
         try:
+            prompt = build_prompt(payload)
+            prompt_bytes = len(prompt.encode("utf-8", errors="replace"))
             completed = subprocess.run(
-                ["hermes", "--provider", HERMES_PROVIDER, "-m", HERMES_MODEL, "-z", build_prompt(payload)],
+                ["hermes", "--provider", HERMES_PROVIDER, "-m", HERMES_MODEL, "-z", prompt],
                 text=True,
                 capture_output=True,
-                timeout=TIMEOUT_MS / 1000,
+                timeout=timeout_ms / 1000,
                 check=False,
             )
             duration_ms = int((time.monotonic() - started) * 1000)
             stdout = completed.stdout or ""
             stderr = completed.stderr or ""
-            if len(stdout.encode("utf-8", errors="replace")) > MAX_STDOUT_BYTES:
+            output_bytes = len(stdout.encode("utf-8", errors="replace"))
+            telemetry = build_run_telemetry(
+                agent_id=agent_id,
+                duration_ms=duration_ms,
+                prompt_bytes=prompt_bytes,
+                output_bytes=output_bytes,
+                exit_code=completed.returncode,
+                timeout_limit_ms=timeout_ms,
+                memory_usage_percent=memory_usage_percent,
+            )
+            if output_bytes > MAX_STDOUT_BYTES:
+                log_run_telemetry("stdout_too_large", telemetry)
                 status, body = error_response(
                     "HERMES_BRIDGE_STDOUT_TOO_LARGE",
                     f"Hermes stdout exceeded {MAX_STDOUT_BYTES} bytes.",
                     502,
                     agent_id=agent_id,
-                    raw={"durationMs": duration_ms},
+                    raw=telemetry,
                 )
                 self.send_json(status, body)
                 return
             if completed.returncode != 0:
+                log_run_telemetry("execution_failed", telemetry)
                 status, body = error_response(
                     "HERMES_BRIDGE_EXECUTION_FAILED",
                     stderr.strip() or stdout.strip() or f"Hermes exited with code {completed.returncode}.",
@@ -798,12 +944,13 @@ class Handler(BaseHTTPRequestHandler):
                         "exitCode": completed.returncode,
                         "stdoutPreview": truncate_bytes(mask_secrets(stdout), MAX_STDOUT_BYTES)[0],
                         "stderrPreview": truncate_bytes(mask_secrets(stderr), MAX_STDOUT_BYTES)[0],
-                        "durationMs": duration_ms,
+                        **telemetry,
                     },
                 )
                 self.send_json(status, body)
                 return
             if looks_like_upstream_error(stdout):
+                log_run_telemetry("upstream_error", telemetry)
                 status, body = error_response(
                     "HERMES_BRIDGE_UPSTREAM_ERROR",
                     stdout.strip() or "Hermes provider returned an error response.",
@@ -813,24 +960,50 @@ class Handler(BaseHTTPRequestHandler):
                         "exitCode": completed.returncode,
                         "stdoutPreview": truncate_bytes(mask_secrets(stdout), MAX_STDOUT_BYTES)[0],
                         "stderrPreview": truncate_bytes(mask_secrets(stderr), MAX_STDOUT_BYTES)[0],
-                        "durationMs": duration_ms,
+                        **telemetry,
                     },
                 )
                 self.send_json(status, body)
                 return
-            self.send_json(200, normalize_success(stdout, stderr, duration_ms, agent_id))
+            normalized = normalize_success(stdout, stderr, duration_ms, agent_id)
+            normalized["telemetry"] = telemetry
+            if isinstance(normalized.get("raw"), dict):
+                normalized["raw"].update(telemetry)
+            log_run_telemetry("succeeded", telemetry)
+            self.send_json(200, normalized)
         except subprocess.TimeoutExpired:
             duration_ms = int((time.monotonic() - started) * 1000)
+            telemetry = build_run_telemetry(
+                agent_id=agent_id,
+                duration_ms=duration_ms,
+                prompt_bytes=prompt_bytes,
+                output_bytes=0,
+                exit_code=None,
+                timeout_limit_ms=timeout_ms,
+                memory_usage_percent=memory_usage_percent,
+            )
+            log_run_telemetry("timed_out", telemetry)
             status, body = error_response(
                 "HERMES_BRIDGE_TIMEOUT",
-                f"Hermes command timed out after {TIMEOUT_MS}ms.",
+                f"Hermes command timed out after {timeout_ms}ms.",
                 504,
                 agent_id=agent_id,
-                raw={"durationMs": duration_ms},
+                raw=telemetry,
             )
             self.send_json(status, body)
         except Exception as exc:
-            status, body = error_response("HERMES_BRIDGE_INTERNAL_ERROR", str(exc), 500, agent_id=agent_id or "unknown")
+            duration_ms = int((time.monotonic() - started) * 1000)
+            telemetry = build_run_telemetry(
+                agent_id=agent_id,
+                duration_ms=duration_ms,
+                prompt_bytes=prompt_bytes,
+                output_bytes=0,
+                exit_code=None,
+                timeout_limit_ms=timeout_ms,
+                memory_usage_percent=memory_usage_percent,
+            )
+            log_run_telemetry("internal_error", telemetry)
+            status, body = error_response("HERMES_BRIDGE_INTERNAL_ERROR", str(exc), 500, agent_id=agent_id or "unknown", raw=telemetry)
             self.send_json(status, body)
         finally:
             semaphore.release()

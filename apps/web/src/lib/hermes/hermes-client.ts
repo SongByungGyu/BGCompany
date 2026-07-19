@@ -7,6 +7,7 @@ import type {
   HermesContentWriterPayload,
   HermesMarketingReviewPayload,
   HermesQaAuditPayload,
+  HermesRunTelemetry,
   MarketingReviewHermesInput,
   MarketingReviewResult,
   QaAuditHermesInput,
@@ -20,11 +21,33 @@ function baseUrl(url: string) {
   return url.replace(/\/$/, "");
 }
 
-function getHermesBridgeConfig() {
+type StockBlogHermesAgentId = "content-planner" | "marketing-manager" | "content-writer" | "qa-auditor";
+
+function positiveNumber(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function getAgentProcessTimeoutMs(agentId: string) {
+  const legacyTimeoutMs = positiveNumber(process.env.HERMES_BRIDGE_TIMEOUT_MS ?? process.env.HERMES_TIMEOUT_MS, 60000);
+  const timeouts: Record<StockBlogHermesAgentId, number> = {
+    "content-planner": positiveNumber(process.env.HERMES_PLANNER_TIMEOUT_MS, Math.max(legacyTimeoutMs, 60000)),
+    "marketing-manager": positiveNumber(process.env.HERMES_MARKETING_TIMEOUT_MS, Math.max(legacyTimeoutMs, 60000)),
+    "content-writer": positiveNumber(process.env.HERMES_WRITER_TIMEOUT_MS, Math.max(legacyTimeoutMs, 120000)),
+    "qa-auditor": positiveNumber(process.env.HERMES_QA_TIMEOUT_MS, Math.max(legacyTimeoutMs, 90000)),
+  };
+  return timeouts[agentId as StockBlogHermesAgentId] ?? legacyTimeoutMs;
+}
+
+function getHermesBridgeConfig(agentId: string = "content-planner") {
+  const processTimeoutMs = getAgentProcessTimeoutMs(agentId);
+  const clientTimeoutBufferMs = positiveNumber(process.env.HERMES_CLIENT_TIMEOUT_BUFFER_MS, 15000);
   return {
     baseUrl: process.env.HERMES_BRIDGE_BASE_URL?.trim() || "http://hermes-bridge:8787",
     apiKey: process.env.BRIDGE_API_KEY?.trim() || process.env.HERMES_BRIDGE_API_KEY?.trim() || "",
-    timeoutMs: Number(process.env.HERMES_BRIDGE_TIMEOUT_MS ?? process.env.HERMES_TIMEOUT_MS ?? "45000"),
+    processTimeoutMs,
+    clientTimeoutBufferMs,
+    timeoutMs: processTimeoutMs + clientTimeoutBufferMs,
   };
 }
 
@@ -62,6 +85,28 @@ function pickNumber(record: Record<string, unknown>, keys: string[]) {
     }
   }
   return undefined;
+}
+
+function pickTelemetry(record: Record<string, unknown>): HermesRunTelemetry | undefined {
+  const telemetry = asRecord(record.telemetry) ?? asRecord(record.raw);
+  if (!telemetry) return undefined;
+  const agentId = typeof telemetry.agentId === "string" ? telemetry.agentId : undefined;
+  const model = typeof telemetry.model === "string" ? telemetry.model : undefined;
+  const durationMs = typeof telemetry.durationMs === "number" ? telemetry.durationMs : undefined;
+  const promptBytes = typeof telemetry.promptBytes === "number" ? telemetry.promptBytes : undefined;
+  const outputBytes = typeof telemetry.outputBytes === "number" ? telemetry.outputBytes : undefined;
+  const timeoutLimitMs = typeof telemetry.timeoutLimitMs === "number" ? telemetry.timeoutLimitMs : undefined;
+  if (!agentId || !model || durationMs === undefined || promptBytes === undefined || outputBytes === undefined || timeoutLimitMs === undefined) return undefined;
+  return {
+    agentId,
+    model,
+    durationMs,
+    promptBytes,
+    outputBytes,
+    exitCode: typeof telemetry.exitCode === "number" ? telemetry.exitCode : undefined,
+    timeoutLimitMs,
+    memoryUsagePercentAtStart: typeof telemetry.memoryUsagePercentAtStart === "number" ? telemetry.memoryUsagePercentAtStart : undefined,
+  };
 }
 
 function pickOutline(record: Record<string, unknown>) {
@@ -321,6 +366,7 @@ export function normalizeHermesRunResponse(raw: unknown, agentId = "content-plan
     rawText: pickString(record, ["rawText"]),
     hermesJobId: extractHermesJobId(raw),
     durationMs: typeof record.durationMs === "number" ? record.durationMs : undefined,
+    telemetry: pickTelemetry(record),
     raw,
   };
 }
@@ -359,6 +405,7 @@ export function normalizeMarketingReviewHermesResponse(raw: unknown): MarketingR
     rawText: pickString(record, ["rawText"]),
     hermesJobId: extractHermesJobId(raw),
     durationMs: typeof record.durationMs === "number" ? record.durationMs : undefined,
+    telemetry: pickTelemetry(record),
     raw,
   };
 }
@@ -395,6 +442,7 @@ export function normalizeContentWriterHermesResponse(raw: unknown): ContentWrite
     rawText: pickString(record, ["rawText"]),
     hermesJobId: extractHermesJobId(raw),
     durationMs: typeof record.durationMs === "number" ? record.durationMs : undefined,
+    telemetry: pickTelemetry(record),
     raw,
   };
 }
@@ -431,18 +479,26 @@ export function normalizeQaAuditHermesResponse(raw: unknown): QaAuditResult {
     rawText: pickString(record, ["rawText"]),
     hermesJobId: extractHermesJobId(raw),
     durationMs: typeof record.durationMs === "number" ? record.durationMs : undefined,
+    telemetry: pickTelemetry(record),
     raw,
   };
 }
 
 export function hermesRunConfigStatus() {
-  const bridge = getHermesBridgeConfig();
+  const bridge = getHermesBridgeConfig("content-planner");
   const legacy = getHermesConfig();
   return {
     configured: Boolean(bridge.baseUrl && bridge.apiKey),
     bridgeBaseUrl: Boolean(bridge.baseUrl),
     bridgeApiKey: Boolean(bridge.apiKey),
-    timeoutMs: Number.isFinite(bridge.timeoutMs) ? bridge.timeoutMs : 45000,
+    timeoutMs: bridge.timeoutMs,
+    clientTimeoutBufferMs: bridge.clientTimeoutBufferMs,
+    agentTimeoutMs: {
+      planner: getAgentProcessTimeoutMs("content-planner"),
+      marketing: getAgentProcessTimeoutMs("marketing-manager"),
+      writer: getAgentProcessTimeoutMs("content-writer"),
+      qa: getAgentProcessTimeoutMs("qa-auditor"),
+    },
     legacy: {
       baseUrl: Boolean(legacy.baseUrl),
       apiKey: Boolean(legacy.apiKey),
@@ -454,7 +510,7 @@ export function hermesRunConfigStatus() {
 type HermesBridgePayload = HermesContentPlannerPayload | HermesMarketingReviewPayload | HermesContentWriterPayload | HermesQaAuditPayload;
 
 async function postHermesBridge<T>(payload: HermesBridgePayload, agentId: string, normalize: (raw: unknown) => T): Promise<{ payload: HermesBridgePayload; result: T }> {
-  const config = getHermesBridgeConfig();
+  const config = getHermesBridgeConfig(agentId);
   if (!config.baseUrl || !config.apiKey) {
     return {
       payload,
@@ -468,7 +524,7 @@ async function postHermesBridge<T>(payload: HermesBridgePayload, agentId: string
     };
   }
 
-  const timeoutMs = Number.isFinite(config.timeoutMs) ? config.timeoutMs : 45000;
+  const timeoutMs = config.timeoutMs;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -493,6 +549,7 @@ async function postHermesBridge<T>(payload: HermesBridgePayload, agentId: string
           provider: "hermes-bridge",
           agentId,
           raw,
+          telemetry: record ? pickTelemetry(record) : undefined,
           errorCode: typeof record?.errorCode === "string" ? record.errorCode : response.status === 401 ? "HERMES_BRIDGE_UNAUTHORIZED" : "HERMES_BRIDGE_HTTP_ERROR",
           errorMessage: extractErrorMessage(raw) ?? `Hermes bridge request failed with HTTP ${response.status}.`,
         } as T,
@@ -509,7 +566,8 @@ async function postHermesBridge<T>(payload: HermesBridgePayload, agentId: string
         provider: "hermes-bridge",
         agentId,
         errorCode: isTimeout ? "HERMES_BRIDGE_TIMEOUT" : "HERMES_BRIDGE_NETWORK_ERROR",
-        errorMessage: isTimeout ? `Hermes bridge request timed out after ${timeoutMs}ms.` : error instanceof Error ? error.message : "Unknown Hermes bridge request error.",
+        errorMessage: isTimeout ? `Hermes bridge client deadline exceeded after ${timeoutMs}ms.` : error instanceof Error ? error.message : "Unknown Hermes bridge request error.",
+        raw: isTimeout ? { agentId, clientTimeoutMs: timeoutMs, processTimeoutMs: config.processTimeoutMs } : undefined,
       } as T,
     };
   } finally {

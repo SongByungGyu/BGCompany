@@ -140,6 +140,17 @@ export type HermesQaAuditPayload = {
 
 export type HermesParseStatus = "json" | "json_extracted" | "fallback_text";
 
+export type HermesRunTelemetry = {
+  agentId: string;
+  model: string;
+  durationMs: number;
+  promptBytes: number;
+  outputBytes: number;
+  exitCode?: number;
+  timeoutLimitMs: number;
+  memoryUsagePercentAtStart?: number;
+};
+
 export type NormalizedHermesRunResult = {
   ok: boolean;
   provider: "hermes" | "hermes-bridge";
@@ -159,6 +170,7 @@ export type NormalizedHermesRunResult = {
   raw?: unknown;
   hermesJobId?: string;
   durationMs?: number;
+  telemetry?: HermesRunTelemetry;
   errorCode?: string;
   errorMessage?: string;
 };
@@ -187,6 +199,7 @@ export type MarketingReviewResult = {
   raw?: unknown;
   hermesJobId?: string;
   durationMs?: number;
+  telemetry?: HermesRunTelemetry;
   errorCode?: string;
   errorMessage?: string;
 };
@@ -219,6 +232,7 @@ export type ContentWriterResult = {
   raw?: unknown;
   hermesJobId?: string;
   durationMs?: number;
+  telemetry?: HermesRunTelemetry;
   errorCode?: string;
   errorMessage?: string;
 };
@@ -245,6 +259,7 @@ export type QaAuditResult = {
   raw?: unknown;
   hermesJobId?: string;
   durationMs?: number;
+  telemetry?: HermesRunTelemetry;
   errorCode?: string;
   errorMessage?: string;
 };

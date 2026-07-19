@@ -69,9 +69,7 @@ class NormalizeSuccessTests(unittest.TestCase):
             "sections": [{"heading": "시작", "body": "본문입니다."}, "문자열 섹션"],
             "conclusion": "마무리입니다.",
             "cta": "다음 편을 확인하세요.",
-            "markdownDraft": "# BG Company 구축기",
             "usedSeoKeywords": ["AI 개인회사", "Hermes"],
-            "writingNotes": ["과장 표현 없음"],
         }, ensure_ascii=False)
         result = bridge.normalize_success(stdout, "", 1500, "content-writer")
         self.assertTrue(result["ok"])
@@ -79,8 +77,11 @@ class NormalizeSuccessTests(unittest.TestCase):
         self.assertEqual(result["finalTitle"], "BG Company 구축기")
         self.assertEqual(result["sections"][0], {"heading": "시작", "body": "본문입니다."})
         self.assertEqual(result["sections"][1], {"heading": "Section 2", "body": "문자열 섹션"})
-        self.assertEqual(result["markdownDraft"], "# BG Company 구축기")
+        self.assertEqual(result["fullDraft"], "도입부입니다.\n\n시작\n\n본문입니다.\n\nSection 2\n\n문자열 섹션\n\n마무리\n\n마무리입니다.\n\n다음 편을 확인하세요.")
+        self.assertEqual(result["markdownDraft"], "도입부입니다.\n\n## 시작\n\n본문입니다.\n\n## Section 2\n\n문자열 섹션\n\n## 마무리\n\n마무리입니다.\n\n다음 편을 확인하세요.")
         self.assertEqual(result["usedSeoKeywords"], ["AI 개인회사", "Hermes"])
+        self.assertNotIn("htmlDraft", result)
+        self.assertNotIn("writingNotes", result)
         self.assertNotIn("reviewSummary", result)
         self.assertNotIn("qaSummary", result)
 
@@ -210,6 +211,36 @@ class AllowlistTests(unittest.TestCase):
         self.assertFalse(bridge.is_agent_task_allowed("qa-auditor", "marketing_review"))
         self.assertFalse(bridge.is_agent_task_allowed("director", "approval"))
         self.assertFalse(bridge.is_agent_task_allowed("unknown", "content_planning"))
+
+
+class RuntimeGuardrailTests(unittest.TestCase):
+    def test_writer_timeout_is_longer_than_planner_timeout(self) -> None:
+        self.assertGreaterEqual(bridge.timeout_for_agent("content-writer"), 120000)
+        self.assertGreaterEqual(bridge.timeout_for_agent("qa-auditor"), 90000)
+        self.assertGreaterEqual(bridge.timeout_for_agent("content-planner"), 60000)
+
+    def test_memory_usage_is_bounded_when_available(self) -> None:
+        usage = bridge.current_memory_usage_percent()
+        if usage is not None:
+            self.assertGreaterEqual(usage, 0)
+            self.assertLessEqual(usage, 100)
+
+    def test_telemetry_contains_only_nonsecret_run_metrics(self) -> None:
+        telemetry = bridge.build_run_telemetry(
+            agent_id="content-writer",
+            duration_ms=1234,
+            prompt_bytes=4567,
+            output_bytes=2345,
+            exit_code=0,
+            timeout_limit_ms=120000,
+            memory_usage_percent=42.5,
+        )
+        self.assertEqual(telemetry["agentId"], "content-writer")
+        self.assertEqual(telemetry["timeoutLimitMs"], 120000)
+        self.assertEqual(telemetry["memoryUsagePercentAtStart"], 42.5)
+        self.assertNotIn("prompt", telemetry)
+        self.assertNotIn("stdout", telemetry)
+        self.assertNotIn("apiKey", telemetry)
 
 
 class UsageGuardrailContractTests(unittest.TestCase):

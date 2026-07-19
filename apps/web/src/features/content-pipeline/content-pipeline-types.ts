@@ -1,4 +1,5 @@
 import type { TimelineRecord } from "@/features/timelines/api";
+import type { HermesRunTelemetry } from "@/lib/hermes/hermes-types";
 import type { BlogImagePrompt, ReferenceBundle } from "@/lib/stock-blog/references/reference-types";
 
 export type ContentChannel = "blog" | "instagram" | "youtube" | "newsletter";
@@ -34,6 +35,7 @@ export type ContentPlannerResult = {
   parseStatus?: ContentPlannerParseStatus;
   rawText?: string;
   durationMs?: number;
+  telemetry?: HermesRunTelemetry;
   errorCode?: string;
   errorMessage?: string;
 };
@@ -60,6 +62,7 @@ export type MarketingReviewResult = {
   parseStatus?: ContentPlannerParseStatus;
   rawText?: string;
   durationMs?: number;
+  telemetry?: HermesRunTelemetry;
   errorCode?: string;
   errorMessage?: string;
 };
@@ -89,6 +92,7 @@ export type ContentWriterResult = {
   parseStatus?: ContentPlannerParseStatus;
   rawText?: string;
   durationMs?: number;
+  telemetry?: HermesRunTelemetry;
   errorCode?: string;
   errorMessage?: string;
 };
@@ -113,6 +117,7 @@ export type QaAuditResult = {
   parseStatus?: ContentPlannerParseStatus;
   rawText?: string;
   durationMs?: number;
+  telemetry?: HermesRunTelemetry;
   errorCode?: string;
   errorMessage?: string;
 };
