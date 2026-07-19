@@ -177,6 +177,26 @@ export function buildMultilineEditorInputSteps(value: string): EditorInputStep[]
   return steps;
 }
 
+export function selectNaverSectionHeadings(value: string) {
+  const headings: string[] = [];
+  let reachedArticleSection = false;
+  for (const rawLine of normalizeEditorText(value).split("\n")) {
+    const line = rawLine.replace(/\s+/g, " ").trim();
+    if (!line) continue;
+    if (line === "함께 확인한 기사") {
+      reachedArticleSection = true;
+      headings.push(line);
+      continue;
+    }
+    if (line === "마무리") {
+      headings.push(line);
+      continue;
+    }
+    if (!reachedArticleSection && /^\d+\.\s+/.test(line)) headings.push(line);
+  }
+  return headings;
+}
+
 function readabilityMetrics(value: string) {
   const normalized = value.replace(/\r\n/g, "\n").trim();
   return {
@@ -329,16 +349,19 @@ async function countNaverImages(page: import("playwright").Page) {
   return count;
 }
 
-async function focusEditorStart(page: import("playwright").Page, selectors: string[]) {
+async function selectBodyForThumbnailReplacement(page: import("playwright").Page, selectors: string[]) {
   for (const scope of [page, ...page.frames()]) {
     for (const selector of selectors) {
       const target = scope.locator(selector).first();
       if (!(await target.count().catch(() => 0))) continue;
-      await target.click({ timeout: 5000 }).catch(() => undefined);
-      await page.keyboard.press(process.platform === "darwin" ? "Meta+Home" : "Control+Home").catch(() => undefined);
-      return;
+      if (!(await target.isVisible().catch(() => false))) continue;
+      await target.click({ timeout: 5000 });
+      await target.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
+      console.log(`[naver-agent] selected initial body block for thumbnail via ${selector}`);
+      return true;
     }
   }
+  return false;
 }
 
 async function attachNaverImage(page: import("playwright").Page, imageFile: string, label: string) {
@@ -380,7 +403,9 @@ async function attachNaverImage(page: import("playwright").Page, imageFile: stri
 
 async function uploadNaverThumbnail(page: import("playwright").Page, bodySelectors: string[], imageFile: string) {
   await dismissNaverDraftModal(page).catch(() => undefined);
-  await focusEditorStart(page, bodySelectors);
+  if (!(await selectBodyForThumbnailReplacement(page, bodySelectors))) {
+    throw new Error("NAVER_THUMBNAIL_BODY_TARGET_NOT_FOUND");
+  }
   await attachNaverImage(page, imageFile, "thumbnail");
 }
 
@@ -431,11 +456,72 @@ async function focusAfterNaverHeading(page: import("playwright").Page, heading: 
 }
 
 async function insertImageCaption(page: import("playwright").Page, caption: string, sourceLabel: string) {
-  await page.keyboard.press("ArrowDown").catch(() => undefined);
-  await page.keyboard.press("Enter").catch(() => undefined);
-  if (!(await page.keyboard.insertText(caption).then(() => true, () => false))) return false;
-  await page.keyboard.press("Enter");
-  return page.keyboard.insertText(sourceLabel).then(() => true, () => false);
+  const value = `${caption} · ${sourceLabel}`;
+  for (const scope of [page, ...page.frames()]) {
+    const images = scope.locator(".se-component.se-image");
+    if (!(await images.count().catch(() => 0))) continue;
+    const image = images.last();
+    const resource = image.locator("img.se-image-resource, img").first();
+    if (!(await resource.count().catch(() => 0))) continue;
+    await resource.click({ timeout: 5000 });
+    const nativeCaption = image.locator(".se-caption p").first();
+    if (!(await nativeCaption.count().catch(() => 0))) continue;
+    await nativeCaption.waitFor({ state: "visible", timeout: 5000 });
+    await nativeCaption.click({ timeout: 5000 });
+    if (!(await page.keyboard.insertText(value).then(() => true, () => false))) return false;
+    await page.waitForTimeout(200);
+    const actual = (await nativeCaption.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+    return actual === value.replace(/\s+/g, " ").trim();
+  }
+  return false;
+}
+
+async function applyNaverSectionTitles(page: import("playwright").Page, body: string) {
+  const headings = selectNaverSectionHeadings(body);
+  for (const heading of headings) {
+    let applied = false;
+    for (const scope of [page, ...page.frames()]) {
+      const paragraphs = scope.locator(".se-section-text p, .se-text-paragraph");
+      const count = await paragraphs.count().catch(() => 0);
+      for (let index = 0; index < count; index += 1) {
+        const paragraph = paragraphs.nth(index);
+        const text = (await paragraph.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+        if (text !== heading) continue;
+        await paragraph.click({ timeout: 5000 });
+        const formatButton = scope.locator(".se-text-format-toolbar-button").first();
+        const sectionTitleButton = scope.locator(".se-toolbar-option-text-format-sectionTitle-button").first();
+        if (!(await formatButton.count().catch(() => 0))) continue;
+        await formatButton.click({ timeout: 5000 });
+        await sectionTitleButton.click({ timeout: 5000 });
+        applied = true;
+        break;
+      }
+      if (applied) break;
+    }
+    if (!applied) throw new Error(`NAVER_SECTION_TITLE_NOT_APPLIED_${heading}`);
+  }
+  console.log(`[naver-agent] section title formatting applied: ${headings.length}`);
+}
+
+async function removeNaverOglinkPreviews(page: import("playwright").Page) {
+  await page.waitForTimeout(1000);
+  for (const scope of [page, ...page.frames()]) {
+    let count = await scope.locator(".se-component.se-oglink").count().catch(() => 0);
+    while (count > 0) {
+      const card = scope.locator(".se-component.se-oglink").first();
+      await card.click({ timeout: 5000 });
+      const deleteButton = card.locator(".se-delete-toolbar-button").last();
+      if (await deleteButton.count().catch(() => 0) && await deleteButton.isVisible().catch(() => false)) {
+        await deleteButton.click({ timeout: 5000 });
+      } else {
+        await page.keyboard.press("Delete");
+      }
+      await page.waitForTimeout(300);
+      const after = await scope.locator(".se-component.se-oglink").count().catch(() => 0);
+      if (after >= count) throw new Error(`NAVER_OGLINK_DELETE_FAILED_${count}_${after}`);
+      count = after;
+    }
+  }
 }
 
 async function verifyNaverImagePlacements(page: import("playwright").Page, bodyImages: NonNullable<NaverDraftJob["contentImages"]>) {
@@ -929,16 +1015,62 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
       };
     }
 
+    const wantsImages = Boolean(job.thumbnailImageUrl || (job.inlineImageUrls?.length ?? 0) > 0);
+    let beforeImages = 0;
+    let thumbnailUploaded = false;
     const titleFilled = await fillFirstEditorTarget(page, titleSelectors, job.title, "title");
     if (titleFilled) await page.waitForTimeout(1200);
-    const bodyFilled = await fillMultilineEditorTarget(page, bodySelectors, job.body, "body");
-
-    if (!titleFilled || !bodyFilled) {
+    if (!titleFilled) {
       return {
         status: allowPublish ? "readability_failed" : "user_publish_required",
         externalUrl: page.url(),
         errorCode: "NAVER_EDITOR_INPUT_NOT_FOUND",
-        errorMessage: `Naver editor input target was not found. titleFilled=${titleFilled}, bodyFilled=${bodyFilled}. Please paste manually in the opened browser.`,
+        errorMessage: "Naver editor title input target was not found.",
+      };
+    }
+
+    if (wantsImages && allowImageUpload) {
+      try {
+        await context.reportProgress?.({ status: "image_uploading" });
+        if (!imageManifest.thumbnail || !job.thumbnailImageUrl) throw new Error("NAVER_THUMBNAIL_REQUIRED");
+        beforeImages = await countNaverImages(page);
+        const thumbnailFile = await downloadTrustedThumbnail({
+          page,
+          jobId: job.id,
+          imageUrl: job.thumbnailImageUrl,
+          assetBaseUrl: context.assetBaseUrl,
+        });
+        await uploadNaverThumbnail(page, bodySelectors, thumbnailFile);
+        if (!(await insertImageCaption(page, imageManifest.thumbnail.caption, imageManifest.thumbnail.sourceLabel))) {
+          throw new Error("NAVER_THUMBNAIL_CAPTION_INSERT_FAILED");
+        }
+        thumbnailUploaded = true;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          status: message.includes("CAPTION") ? "image_quality_failed" : "image_upload_failed",
+          externalUrl: page.url(),
+          errorCode: message.includes("CAPTION") ? "NAVER_IMAGE_QUALITY_FAILED" : "NAVER_IMAGE_UPLOAD_FAILED",
+          errorMessage: message,
+        };
+      }
+    } else if (allowPublish) {
+      return {
+        status: "image_upload_failed",
+        externalUrl: page.url(),
+        errorCode: "NAVER_IMAGE_UPLOAD_NOT_ALLOWED",
+        errorMessage: "Automatic publish requires both server and local image upload permission.",
+      };
+    }
+
+    const bodyFilled = await fillMultilineEditorTarget(page, bodySelectors, job.body, "body");
+
+    if (!bodyFilled) {
+      return {
+        status: allowPublish ? "readability_failed" : "user_publish_required",
+        externalUrl: page.url(),
+        errorCode: "NAVER_EDITOR_INPUT_NOT_FOUND",
+        errorMessage: "Naver editor body input target was not found. Please paste manually in the opened browser.",
       };
     }
 
@@ -952,18 +1084,14 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
       };
     }
 
-    if ((job.thumbnailImageUrl || (job.inlineImageUrls?.length ?? 0) > 0) && allowImageUpload) {
+    if (thumbnailUploaded) {
       try {
-        await context.reportProgress?.({ status: "image_uploading" });
-        if (!imageManifest.thumbnail || !job.thumbnailImageUrl) throw new Error("NAVER_THUMBNAIL_REQUIRED");
-        const beforeImages = await countNaverImages(page);
-        const thumbnailFile = await downloadTrustedThumbnail({
-          page,
-          jobId: job.id,
-          imageUrl: job.thumbnailImageUrl,
-          assetBaseUrl: context.assetBaseUrl,
-        });
-        await uploadNaverThumbnail(page, bodySelectors, thumbnailFile);
+        await removeNaverOglinkPreviews(page);
+        const articleUrls = job.body.split(/\r?\n/).map((line) => line.trim()).filter((line) => /^https?:\/\//.test(line));
+        const editorTextAfterOglinkRemoval = await readNaverEditorText(page);
+        const missingArticleUrls = articleUrls.filter((url) => !editorTextAfterOglinkRemoval.includes(url));
+        if (missingArticleUrls.length > 0) throw new Error(`NAVER_ARTICLE_URL_MISSING_${missingArticleUrls.length}`);
+        await applyNaverSectionTitles(page, job.body);
         for (const [index, image] of imageManifest.bodyImages.entries()) {
           if (!(await focusAfterNaverHeading(page, image.placementAfterHeading))) {
             throw new Error(`NAVER_IMAGE_PLACEMENT_HEADING_NOT_FOUND_${image.id}`);
@@ -995,7 +1123,13 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
         if (!postImageReadability.ok) throw new Error("NAVER_IMAGE_BODY_READABILITY_FAILED");
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const qualityFailure = message.includes("PLACEMENT") || message.includes("CAPTION") || message.includes("TOTAL_COUNT") || message.includes("READABILITY");
+        const qualityFailure = message.includes("PLACEMENT")
+          || message.includes("CAPTION")
+          || message.includes("TOTAL_COUNT")
+          || message.includes("READABILITY")
+          || message.includes("SECTION_TITLE")
+          || message.includes("OGLINK")
+          || message.includes("ARTICLE_URL");
         return {
           status: qualityFailure ? "image_quality_failed" : "image_upload_failed",
           externalUrl: page.url(),
@@ -1003,13 +1137,6 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
           errorMessage: message,
         };
       }
-    } else if (allowPublish) {
-      return {
-        status: "image_upload_failed",
-        externalUrl: page.url(),
-        errorCode: "NAVER_IMAGE_UPLOAD_NOT_ALLOWED",
-        errorMessage: "Automatic publish requires both server and local image upload permission.",
-      };
     }
 
     if (allowDraftSave) {

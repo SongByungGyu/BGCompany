@@ -6,6 +6,7 @@ import {
   hasSavedDraftTitle,
   pickMostReadableEditorText,
   savedDraftTitleMatchToken,
+  selectNaverSectionHeadings,
 } from "./naver-writer.js";
 
 function reconstruct(steps: ReturnType<typeof buildMultilineEditorInputSteps>) {
@@ -33,6 +34,32 @@ test("빈 줄이 있어도 문단 간격을 Enter 횟수로 보존한다", () =>
 
 test("비어 있는 본문은 입력 단계를 만들지 않는다", () => {
   assert.deepEqual(buildMultilineEditorInputSteps(" \n\n "), []);
+});
+
+test("본문 1~6절과 기사·마무리만 네이버 소제목으로 선택한다", () => {
+  const headings = selectNaverSectionHeadings(`도입부
+
+1. 지난주 시장은 어땠을까
+본문
+
+2. 다음 주 한국 증시 전망
+본문
+
+함께 확인한 기사
+1. 첫 번째 기사 – 언론사, 2026년 7월 19일
+https://example.com/one
+2. 두 번째 기사 – 언론사, 2026년 7월 18일
+https://example.com/two
+
+마무리
+결론`);
+
+  assert.deepEqual(headings, [
+    "1. 지난주 시장은 어땠을까",
+    "2. 다음 주 한국 증시 전망",
+    "함께 확인한 기사",
+    "마무리",
+  ]);
 });
 
 test("여러 프레임과 selector 후보 중 가장 긴 본문을 선택한다", () => {
