@@ -2,6 +2,32 @@
 .env
 .env.*
 !.env.example
+!.env.*.example
+
+# Secrets and credentials
+secrets/
+credentials/
+.private/
+.auth/
+*.secret
+*.secrets
+*.credentials
+*.token
+*.tokens
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# Token/API caches
+token-cache/
+.tokens/
+.kis-token-cache/
+.fred-cache/
+.naver-auth/
+.openai-cache/
 
 # Dependencies and build output
 node_modules/
@@ -15,6 +41,9 @@ coverage/
 .DS_Store
 .vercel/
 *.tsbuildinfo
+tmp/
+temp/
+runtime/
 
 
 # Database backups
@@ -25,7 +54,21 @@ backups/
 logs/
 __pycache__/
 tools/naver-draft-agent/.env
+tools/naver-draft-agent/.env.*
+!tools/naver-draft-agent/.env.example
+!tools/naver-draft-agent/.env.*.example
 tools/naver-draft-agent/.naver-profile/
 tools/naver-draft-agent/logs/
 tools/naver-draft-agent/drafts/
 apps/web/public/generated/stock-blog/
+public/generated/stock-blog/
+generated/stock-blog/
+
+# Windows Local Agent copy
+naver-draft-agent-windows/.env
+naver-draft-agent-windows/.env.*
+!naver-draft-agent-windows/.env.example
+!naver-draft-agent-windows/.env.*.example
+naver-draft-agent-windows/.naver-profile/
+naver-draft-agent-windows/drafts/
+naver-draft-agent-windows/logs/
