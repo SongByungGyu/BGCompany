@@ -1,4 +1,5 @@
 import type { BlogImagePrompt, CompetitorBlogAnalysisSummary, CompetitorBlogReference, MarketSnapshot, ReferenceBundle, ReferenceItem, StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
+import type { VerifiedSchedule, VerifiedScheduleValidation } from "@/lib/stock-blog/verified-schedule";
 
 export type ContentPlannerHermesInput = {
   topic: string;
@@ -225,6 +226,8 @@ export type ContentWriterResult = {
   htmlDraft?: string;
   usedSeoKeywords?: string[];
   writingNotes?: string[];
+  verifiedSchedule?: VerifiedSchedule;
+  scheduleValidation?: VerifiedScheduleValidation;
   referenceBundle?: ReferenceBundle;
   blogImagePrompts?: BlogImagePrompt[];
   parseStatus?: HermesParseStatus;

@@ -466,6 +466,8 @@ content-planner의 기획안과 marketing-manager의 검토안을 바탕으로 {
 - 첫 번째 sections 항목의 heading은 반드시 "데이터 기준"으로 작성하고, body에 한국 지수·수급, 미국 지수·환율·금리의 각 asOf 날짜와 원문 URL을 직접 적는다.
 - 수급 값에는 market snapshot의 unit을 반드시 함께 적고, unit이 없으면 수치를 본문에 쓰지 않는다.
 - 다음 주 일정은 각 항목의 날짜와 원문 URL을 함께 적는다. 발표 시각이 입력에 없으면 임의 생성하지 말고 "발표 시각은 원문 일정에서 확인"이라고 명시한다.
+- verified market snapshot의 upcoming 날짜·이벤트명·URL은 변경할 수 없는 원문 값이다. 요일이나 관행을 근거로 날짜를 보정하거나 하루 앞뒤로 옮기지 말고 입력값을 정확히 복사한다.
+- market snapshot의 strongSectors·weakSectors에는 순수 업종 외 지수·테마·상품이 섞일 수 있으므로 모두를 "섹터"로 단정하지 말고 "시장 강약 항목"으로 표현하고 포함 범위를 고지한다.
 - "오늘", "오늘 장"처럼 기준일을 흐리는 표현을 쓰지 말고 "최근 거래일 기준", "이번 브리핑 기준"으로 바꾼다.
 - 전망과 해석은 "가능성", "관찰 포인트", "확인 필요" 중심으로 쓰고 사실 문장과 분리한다.
 - 실제 게시, 외부 발송, 결제, 승인 처리는 하지 않는다.
@@ -514,7 +516,7 @@ def build_qa_audit_prompt(payload: dict[str, Any]) -> str:
     }
     writer_result = {
         key: writer_source[key]
-        for key in ("finalTitle", "metaDescription", "fullDraft", "markdownDraft", "usedSeoKeywords", "writingNotes")
+        for key in ("finalTitle", "metaDescription", "fullDraft", "markdownDraft", "usedSeoKeywords", "writingNotes", "verifiedSchedule", "scheduleValidation")
         if key in writer_source
     }
     if writer_result.get("fullDraft"):
@@ -563,6 +565,9 @@ content-planner, marketing-manager, content-writer가 만든 결과를 바탕으
 - 모르는 사실은 추측하지 말고 "추가 확인 필요"라고 표시한다.
 - 데이터 기준 블록, 지표별 asOf, 수급 단위, 일정별 날짜·원문 URL을 확인한다.
 - 일정 입력에 발표 시각이 없으면 "발표 시각은 원문 일정에서 확인"이라는 고지를 정답으로 인정하고, 존재하지 않는 시각 생성을 요구하지 않는다.
+- scheduleValidation.ok가 true이면 서버가 market snapshot의 upcoming으로 일정 블록을 재조립하고 날짜·이벤트명·URL을 코드로 대조한 결과다. 이 고정 블록의 날짜를 요일 추론이나 일반적인 발표 관행으로 다시 보정하지 않는다.
+- 고정 일정 블록에 검증 범위와 누락 시장 고지가 있으면 입력 데이터의 범위를 정확히 밝힌 것으로 인정한다. 검증되지 않은 한국 일정을 임의로 추가하라고 요구하지 않는다.
+- strongSectors·weakSectors를 "시장 강약 항목"으로 표시하고 지수·테마·상품 포함 가능성을 고지했다면 섹터 오분류로 판단하지 않는다.
 - 수치·URL·단위가 입력과 일치하고 강한 전망 표현이 완화되었으면 선택 개선 의견만으로 needs_revision을 주지 않는다.
 - 실제 게시, 외부 발송, 결제, 승인 처리는 하지 않는다.
 

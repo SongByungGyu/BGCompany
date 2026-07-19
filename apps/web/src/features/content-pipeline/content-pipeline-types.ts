@@ -1,6 +1,7 @@
 import type { TimelineRecord } from "@/features/timelines/api";
 import type { HermesRunTelemetry } from "@/lib/hermes/hermes-types";
 import type { BlogImagePrompt, ReferenceBundle } from "@/lib/stock-blog/references/reference-types";
+import type { VerifiedSchedule, VerifiedScheduleValidation } from "@/lib/stock-blog/verified-schedule";
 
 export type ContentChannel = "blog" | "instagram" | "youtube" | "newsletter";
 export type ContentPipelineStatus =
@@ -87,6 +88,8 @@ export type ContentWriterResult = {
   htmlDraft?: string;
   usedSeoKeywords?: string[];
   writingNotes?: string[];
+  verifiedSchedule?: VerifiedSchedule;
+  scheduleValidation?: VerifiedScheduleValidation;
   referenceBundle?: ReferenceBundle;
   blogImagePrompts?: BlogImagePrompt[];
   parseStatus?: ContentPlannerParseStatus;

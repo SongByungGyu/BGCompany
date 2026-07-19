@@ -11,6 +11,7 @@ import { buildBlogImagePrompts } from "@/lib/stock-blog/references/reference-nor
 import { evaluateStockBlogReferences } from "@/lib/stock-blog/quality-gate";
 import { FRED_DEGRADED_DISCLOSURE, ensureFredDegradedDisclosure, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import { generateStockBlogImages, type GeneratedStockBlogImages } from "@/lib/stock-blog/stock-blog-image-generator";
+import { applyVerifiedSchedule, type VerifiedSchedule, type VerifiedScheduleValidation } from "@/lib/stock-blog/verified-schedule";
 import type { HermesRunTelemetry, NormalizedHermesRunResult } from "@/lib/hermes/hermes-types";
 import type { BlogImagePrompt, ReferenceBundle, StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 import type { ContentChannel, ContentPipelineDetail, ContentPipelineRun, ContentPipelineStatus } from "@/features/content-pipeline/content-pipeline-types";
@@ -91,6 +92,34 @@ function withFredDegradedDisclosure(writer: WriterExecution, referenceBundle?: R
   return { ...writer, result };
 }
 
+function withVerifiedSchedule(writer: WriterExecution, referenceBundle?: ReferenceBundle): WriterExecution {
+  if (writer.agentRunStatus !== "succeeded") return writer;
+  const applied = applyVerifiedSchedule(writer.result, referenceBundle?.marketSnapshot, {
+    contentType: referenceBundle?.contentType,
+  });
+  if (applied.validation.ok) return { ...writer, result: applied.result };
+
+  const outputSummary = `검증 일정 대조 실패: ${applied.validation.issues.join(" / ")}`;
+  return {
+    ...writer,
+    status: "failed",
+    taskStatus: "오류",
+    progress: 90,
+    currentStep: "검증 일정 불일치",
+    outputSummary,
+    recentOutput: outputSummary,
+    agentRunStatus: "failed",
+    agentRunSummary: undefined,
+    agentRunError: outputSummary,
+    result: {
+      ...applied.result,
+      ok: false,
+      errorCode: "VERIFIED_SCHEDULE_VALIDATION_FAILED",
+      errorMessage: outputSummary,
+    },
+  };
+}
+
 function assertValidInput(input: unknown): ContentPipelineInput {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new Error("request body must be a JSON object");
@@ -131,6 +160,49 @@ function asReferenceBundle(value: unknown): ReferenceBundle | undefined {
 
 function asBlogImagePrompts(value: unknown): BlogImagePrompt[] | undefined {
   return Array.isArray(value) ? value as BlogImagePrompt[] : undefined;
+}
+
+function asVerifiedSchedule(value: unknown): VerifiedSchedule | undefined {
+  const record = asRecord(value);
+  if (record?.source !== "marketSnapshot.upcoming" || record.immutable !== true || !Array.isArray(record.events)) return undefined;
+  const events = record.events.flatMap((item) => {
+    const event = asRecord(item);
+    const date = typeof event?.date === "string" ? event.date : "";
+    const eventName = typeof event?.event === "string" ? event.event : "";
+    const url = typeof event?.url === "string" ? event.url : "";
+    if (!date || !eventName) return [];
+    return [{
+      date,
+      event: eventName,
+      market: typeof event?.market === "string" ? event.market : undefined,
+      sourceName: typeof event?.sourceName === "string" ? event.sourceName : undefined,
+      url,
+    }];
+  });
+  const rawScope = asRecord(record.scope);
+  const scope = rawScope ? {
+    marketDate: typeof rawScope.marketDate === "string" ? rawScope.marketDate : undefined,
+    contentType: typeof rawScope.contentType === "string" && stockContentTypes.has(rawScope.contentType as StockReferenceBriefingTemplate)
+      ? rawScope.contentType as StockReferenceBriefingTemplate
+      : undefined,
+    from: typeof rawScope.from === "string" ? rawScope.from : undefined,
+    through: typeof rawScope.through === "string" ? rawScope.through : undefined,
+    markets: asStringArray(rawScope.markets) ?? [],
+    missingMarkets: asStringArray(rawScope.missingMarkets) ?? [],
+  } : undefined;
+  return { source: "marketSnapshot.upcoming", immutable: true, scope, events };
+}
+
+function asScheduleValidation(value: unknown): VerifiedScheduleValidation | undefined {
+  const record = asRecord(value);
+  if (!record || typeof record.ok !== "boolean") return undefined;
+  const checkedEventCount = asNumber(record.checkedEventCount);
+  if (checkedEventCount === undefined) return undefined;
+  return {
+    ok: record.ok,
+    checkedEventCount,
+    issues: asStringArray(record.issues) ?? [],
+  };
 }
 
 function inferReferenceTemplate(input: { topic: string; title: string; contentType?: StockReferenceBriefingTemplate }): StockReferenceBriefingTemplate {
@@ -262,6 +334,8 @@ function normalizeResultForMetadata(result: NormalizedPipelineResult): Record<st
     htmlDraft: result.htmlDraft,
     usedSeoKeywords: result.usedSeoKeywords,
     writingNotes: result.writingNotes,
+    verifiedSchedule: result.verifiedSchedule,
+    scheduleValidation: result.scheduleValidation,
     referenceBundle: result.referenceBundle,
     blogImagePrompts: result.blogImagePrompts,
     reviewSummary: result.reviewSummary,
@@ -1203,6 +1277,8 @@ function runFromEvent(event: {
       htmlDraft: typeof writerResult.htmlDraft === "string" ? writerResult.htmlDraft : undefined,
       usedSeoKeywords: asStringArray(writerResult.usedSeoKeywords),
       writingNotes: asStringArray(writerResult.writingNotes),
+      verifiedSchedule: asVerifiedSchedule(writerResult.verifiedSchedule),
+      scheduleValidation: asScheduleValidation(writerResult.scheduleValidation),
       referenceBundle: asReferenceBundle(writerResult.referenceBundle) ?? referenceBundle,
       blogImagePrompts: asBlogImagePrompts(writerResult.blogImagePrompts) ?? blogImagePrompts,
       parseStatus: asParseStatus(writerResult.parseStatus),
@@ -1433,10 +1509,11 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
   const taskIds = [contentTaskId, marketingTaskId, writerTaskId, qaTaskId];
   const planner = await executePlanner(data);
   const marketing = await executeMarketing(data, planner);
-  const writer = withFredDegradedDisclosure(
-    await executeWriter(data, planner, marketing),
-    data.referenceBundle,
-  );
+  const rawWriter = await executeWriter(data, planner, marketing);
+  const scheduleCheckedWriter = runnerMode === "hermes"
+    ? withVerifiedSchedule(rawWriter, data.referenceBundle)
+    : rawWriter;
+  const writer = withFredDegradedDisclosure(scheduleCheckedWriter, data.referenceBundle);
   const qa = await executeQa(data, planner, marketing, writer);
   const qualityGate = preflightQualityGate;
   const qualityBlocked = runnerMode === "hermes" && !qualityGate.ok;

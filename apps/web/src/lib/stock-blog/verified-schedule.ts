@@ -1,0 +1,307 @@
+import type { MarketSnapshot, StockReferenceBriefingTemplate } from "./references/reference-types";
+
+export type VerifiedScheduleEvent = {
+  date: string;
+  event: string;
+  market?: string;
+  sourceName?: string;
+  url: string;
+};
+
+export type VerifiedSchedule = {
+  source: "marketSnapshot.upcoming";
+  immutable: true;
+  scope?: {
+    marketDate?: string;
+    contentType?: StockReferenceBriefingTemplate;
+    from?: string;
+    through?: string;
+    markets: string[];
+    missingMarkets: string[];
+  };
+  events: VerifiedScheduleEvent[];
+};
+
+export type VerifiedScheduleValidation = {
+  ok: boolean;
+  checkedEventCount: number;
+  issues: string[];
+};
+
+type WriterSection = {
+  heading?: string;
+  body?: string;
+};
+
+type ApplyVerifiedScheduleResult = {
+  result: Record<string, unknown>;
+  validation: VerifiedScheduleValidation;
+};
+
+type ApplyVerifiedScheduleOptions = {
+  contentType?: StockReferenceBriefingTemplate;
+};
+
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const SCHEDULE_HEADING_PATTERN = /(?:주요\s*)?(?:경제\s*)?(?:일정|캘린더)|(?:다음|이번)\s*주.*(?:일정|이벤트)/i;
+const MAX_VERIFIED_EVENTS = 12;
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeSections(value: unknown): WriterSection[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+      const record = item as Record<string, unknown>;
+      const heading = stringValue(record.heading);
+      const body = stringValue(record.body);
+      return heading || body ? { heading, body } : null;
+    })
+    .filter((item): item is { heading: string; body: string } => item !== null);
+}
+
+function addUtcDays(isoDate: string, days: number) {
+  const date = new Date(`${isoDate}T00:00:00Z`);
+  if (!Number.isFinite(date.getTime())) return undefined;
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function normalizeVerifiedEvents(snapshot?: MarketSnapshot, contentType?: StockReferenceBriefingTemplate) {
+  const issues: string[] = [];
+  if (!snapshot) {
+    return { events: [] as VerifiedScheduleEvent[], issues: ["검증된 시장 스냅샷이 없습니다."], from: undefined, through: undefined };
+  }
+  if (!Array.isArray(snapshot.upcoming) || snapshot.upcoming.length === 0) {
+    return { events: [] as VerifiedScheduleEvent[], issues: ["검증된 upcoming 일정이 없습니다."], from: undefined, through: undefined };
+  }
+
+  const seen = new Set<string>();
+  const events: VerifiedScheduleEvent[] = [];
+  snapshot.upcoming.forEach((item, index) => {
+    const date = stringValue(item.date);
+    const event = stringValue(item.event);
+    const url = stringValue(item.url);
+    if (!ISO_DATE_PATTERN.test(date)) {
+      issues.push(`upcoming[${index}] 날짜가 YYYY-MM-DD 형식이 아닙니다.`);
+      return;
+    }
+    if (!event) {
+      issues.push(`upcoming[${index}] 이벤트명이 없습니다.`);
+      return;
+    }
+    const key = `${date}\u0000${event}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    if (!/^https?:\/\//i.test(url)) {
+      issues.push(`${date} ${event}: 원문 URL이 없습니다.`);
+    }
+    events.push({
+      date,
+      event,
+      market: stringValue(item.market) || undefined,
+      sourceName: stringValue(item.sourceName) || undefined,
+      url,
+    });
+  });
+
+  events.sort((left, right) => left.date.localeCompare(right.date) || left.event.localeCompare(right.event));
+  if (contentType !== "NEXT_WEEK_MARKET_PREVIEW" || !ISO_DATE_PATTERN.test(snapshot.marketDate)) {
+    return { events: events.slice(0, MAX_VERIFIED_EVENTS), issues, from: undefined, through: undefined };
+  }
+  const from = addUtcDays(snapshot.marketDate, 1);
+  const through = addUtcDays(snapshot.marketDate, 7);
+  const scopedEvents = from && through
+    ? events.filter((item) => item.date >= from && item.date <= through)
+    : events;
+  return { events: scopedEvents.slice(0, MAX_VERIFIED_EVENTS), issues, from, through };
+}
+
+function marketLabel(market: string) {
+  if (market === "KR") return "한국";
+  if (market === "US") return "미국";
+  return market;
+}
+
+function renderScheduleBody(schedule: VerifiedSchedule) {
+  const scope = schedule.scope;
+  const scopeRange = scope?.from && scope.through ? `${scope.from}~${scope.through}` : "upcoming 제공 범위";
+  const presentMarkets = scope?.markets.length ? scope.markets.map(marketLabel).join("·") : "시장 미분류";
+  const lines = [`검증 범위: ${scopeRange} · ${presentMarkets} 일정 ${schedule.events.length}건`];
+  if (scope?.missingMarkets.length) {
+    lines.push(`${scope.missingMarkets.map(marketLabel).join("·")} 일정은 검증된 upcoming 데이터에 없어 추가 확인 필요`);
+  }
+  lines.push(...schedule.events
+    .map((item) => {
+      const source = item.sourceName || item.market || "원문";
+      const url = item.url || "원문 URL 누락";
+      return `- ${item.date} · ${item.event} · ${source} · ${url} · 발표 시각은 원문 일정에서 확인`;
+    }));
+  return lines.join("\n");
+}
+
+function scheduleHeading(schedule: VerifiedSchedule) {
+  const markets = schedule.scope?.markets ?? [];
+  if (markets.length === 1 && markets[0] === "US") return "검증된 미국 주요 일정";
+  if (markets.length === 1 && markets[0] === "KR") return "검증된 한국 주요 일정";
+  if (markets.includes("KR") && markets.includes("US")) return "검증된 한국·미국 주요 일정";
+  return "검증된 주요 일정";
+}
+
+function normalizeMarketClassification(section: WriterSection): WriterSection {
+  const heading = stringValue(section.heading);
+  const body = stringValue(section.body);
+  if (!/(?:강세.*약세|약세.*강세).*섹터|강세\s*\/\s*약세\s*섹터/i.test(heading)) return { heading, body };
+  const normalizedHeading = heading.replace(/섹터/gi, "시장 항목");
+  const normalizedBody = body
+    .replace(/강세\s*섹터/g, "강세 시장 항목")
+    .replace(/약세\s*섹터/g, "약세 시장 항목")
+    .replace(/섹터\s*강세/g, "시장 항목 강세")
+    .replace(/섹터\s*약세/g, "시장 항목 약세");
+  const disclosure = "이 목록은 검증 스냅샷의 시장 강약 분류를 옮긴 것으로, 순수 업종 외에 지수·테마·상품이 포함될 수 있습니다.";
+  return {
+    heading: normalizedHeading,
+    body: normalizedBody.includes(disclosure) ? normalizedBody : `${disclosure}\n${normalizedBody}`,
+  };
+}
+
+function assembleDraft(input: {
+  introduction: string;
+  sections: WriterSection[];
+  conclusion: string;
+  cta: string;
+}) {
+  const plainParts: string[] = [];
+  const markdownParts: string[] = [];
+  if (input.introduction) {
+    plainParts.push(input.introduction);
+    markdownParts.push(input.introduction);
+  }
+  for (const section of input.sections) {
+    const heading = stringValue(section.heading);
+    const body = stringValue(section.body);
+    if (heading) {
+      plainParts.push(heading);
+      markdownParts.push(`## ${heading}`);
+    }
+    if (body) {
+      plainParts.push(body);
+      markdownParts.push(body);
+    }
+  }
+  if (input.conclusion) {
+    plainParts.push("마무리", input.conclusion);
+    markdownParts.push("## 마무리", input.conclusion);
+  }
+  if (input.cta) {
+    plainParts.push(input.cta);
+    markdownParts.push(input.cta);
+  }
+  return {
+    fullDraft: plainParts.join("\n\n"),
+    markdownDraft: markdownParts.join("\n\n"),
+  };
+}
+
+function normalizeMentionedDate(year: string | undefined, month: string, day: string, expectedYear: string) {
+  return `${year || expectedYear}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+}
+
+function extractDates(text: string, expectedYear: string) {
+  const dates = new Set<string>();
+  for (const match of text.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) {
+    dates.add(`${match[1]}-${match[2]}-${match[3]}`);
+  }
+  for (const match of text.matchAll(/\b(\d{4})[./](\d{1,2})[./](\d{1,2})\b/g)) {
+    dates.add(normalizeMentionedDate(match[1], match[2], match[3], expectedYear));
+  }
+  for (const match of text.matchAll(/(?:(\d{4})년\s*)?(\d{1,2})월\s*(\d{1,2})일/g)) {
+    dates.add(normalizeMentionedDate(match[1], match[2], match[3], expectedYear));
+  }
+  return [...dates];
+}
+
+function validateSchedule(input: {
+  result: Record<string, unknown>;
+  scheduleBody: string;
+  events: VerifiedScheduleEvent[];
+  initialIssues: string[];
+}): VerifiedScheduleValidation {
+  const issues = [...input.initialIssues];
+  if (input.events.length === 0) issues.push("본문에 고정할 검증 일정이 없습니다.");
+
+  const title = stringValue(input.result.finalTitle);
+  const metaDescription = stringValue(input.result.metaDescription);
+  const fullDraft = stringValue(input.result.fullDraft);
+  const publishableText = [title, metaDescription, fullDraft].filter(Boolean).join("\n");
+  const segments = publishableText.split(/\n+|(?<=[.!?。])\s+/).map((item) => item.trim()).filter(Boolean);
+
+  for (const item of input.events) {
+    if (!input.scheduleBody.includes(item.date) || !input.scheduleBody.includes(item.event) || !input.scheduleBody.includes(item.url)) {
+      issues.push(`${item.date} ${item.event}: 고정 일정 블록의 날짜·이벤트명·URL이 일치하지 않습니다.`);
+    }
+    const expectedYear = item.date.slice(0, 4);
+    for (const segment of segments) {
+      if (!segment.toLowerCase().includes(item.event.toLowerCase())) continue;
+      const mentionedDates = extractDates(segment, expectedYear);
+      if (mentionedDates.length > 0 && !mentionedDates.includes(item.date)) {
+        issues.push(`${item.event}: 본문의 날짜 ${mentionedDates.join(", ")}가 검증값 ${item.date}와 다릅니다.`);
+        break;
+      }
+    }
+  }
+
+  return {
+    ok: issues.length === 0,
+    checkedEventCount: input.events.length,
+    issues: [...new Set(issues)],
+  };
+}
+
+export function applyVerifiedSchedule(
+  writerResult: Record<string, unknown>,
+  snapshot?: MarketSnapshot,
+  options: ApplyVerifiedScheduleOptions = {},
+): ApplyVerifiedScheduleResult {
+  const { events, issues, from, through } = normalizeVerifiedEvents(snapshot, options.contentType);
+  const markets = [...new Set(events.map((item) => item.market).filter((item): item is string => Boolean(item)))];
+  const expectedMarkets = options.contentType === "NEXT_WEEK_MARKET_PREVIEW" ? ["KR", "US"] : [];
+  const schedule: VerifiedSchedule = {
+    source: "marketSnapshot.upcoming",
+    immutable: true,
+    scope: {
+      marketDate: snapshot?.marketDate,
+      contentType: options.contentType,
+      from,
+      through,
+      markets,
+      missingMarkets: expectedMarkets.filter((market) => !markets.includes(market)),
+    },
+    events,
+  };
+  const scheduleBody = renderScheduleBody(schedule);
+  const originalSections = normalizeSections(writerResult.sections);
+  if (originalSections.length === 0) issues.push("Writer sections가 없어 본문을 재조립할 수 없습니다.");
+  const sections = originalSections
+    .filter((section) => !SCHEDULE_HEADING_PATTERN.test(stringValue(section.heading)))
+    .map(normalizeMarketClassification);
+  if (events.length > 0) sections.push({ heading: scheduleHeading(schedule), body: scheduleBody });
+
+  const introduction = stringValue(writerResult.introduction);
+  const conclusion = stringValue(writerResult.conclusion);
+  const cta = stringValue(writerResult.cta);
+  const drafts = assembleDraft({ introduction, sections, conclusion, cta });
+  const result: Record<string, unknown> = {
+    ...writerResult,
+    sections,
+    ...drafts,
+    verifiedSchedule: schedule,
+  };
+  delete result.htmlDraft;
+  const validation = validateSchedule({ result, scheduleBody, events, initialIssues: issues });
+  result.scheduleValidation = validation;
+  return { result, validation };
+}

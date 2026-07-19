@@ -243,6 +243,46 @@ class RuntimeGuardrailTests(unittest.TestCase):
         self.assertNotIn("apiKey", telemetry)
 
 
+class VerifiedSchedulePromptTests(unittest.TestCase):
+    def test_writer_prompt_marks_upcoming_values_as_immutable(self) -> None:
+        prompt = bridge.build_content_writer_prompt({
+            "input": {
+                "topic": "다음 주 증시 일정",
+                "title": "주요 일정",
+                "channel": "blog",
+                "language": "ko",
+                "marketSnapshot": {
+                    "upcoming": [{
+                        "date": "2026-07-19",
+                        "event": "FOMC Press Release",
+                        "url": "https://www.federalreserve.gov/newsevents/calendar.htm",
+                    }],
+                },
+            },
+        })
+        self.assertIn("upcoming 날짜·이벤트명·URL은 변경할 수 없는 원문 값", prompt)
+        self.assertIn("하루 앞뒤로 옮기지 말고", prompt)
+        self.assertIn("시장 강약 항목", prompt)
+
+    def test_qa_prompt_receives_server_schedule_validation(self) -> None:
+        prompt = bridge.build_qa_audit_prompt({
+            "input": {
+                "topic": "다음 주 증시 일정",
+                "title": "주요 일정",
+                "channel": "blog",
+                "language": "ko",
+                "writerResult": {
+                    "fullDraft": "검증된 주요 일정",
+                    "verifiedSchedule": {"immutable": True, "events": []},
+                    "scheduleValidation": {"ok": True, "checkedEventCount": 1, "issues": []},
+                },
+            },
+        })
+        self.assertIn('"scheduleValidation"', prompt)
+        self.assertIn("scheduleValidation.ok가 true이면", prompt)
+        self.assertIn("검증되지 않은 한국 일정을 임의로 추가하라고 요구하지 않는다", prompt)
+
+
 class UsageGuardrailContractTests(unittest.TestCase):
     def test_content_pipeline_requires_four_real_hermes_runs(self) -> None:
         service_source = (REPO_ROOT / "apps/web/src/lib/content-pipeline/content-pipeline-service.ts").read_text()
