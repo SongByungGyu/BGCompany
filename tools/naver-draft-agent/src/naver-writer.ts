@@ -525,7 +525,22 @@ async function fillMultilineEditorTarget(
       for (const selector of selectors) {
         const target = scope.locator(selector).first();
         if (!(await target.count().catch(() => 0))) continue;
-        if (!(await target.click({ timeout: 3000 }).then(() => true, () => false))) continue;
+        const clickAttempt = await target.click({ timeout: 3000 }).then(
+          () => ({ ok: true, reason: "normal" }),
+          (error) => ({ ok: false, reason: error instanceof Error ? error.message.split("\n")[0] : String(error) }),
+        );
+        let clicked = clickAttempt.ok;
+        if (!clicked) {
+          const visible = await target.isVisible().catch(() => false);
+          const box = await target.boundingBox().catch(() => null);
+          console.warn(`[naver-agent] ${label} click blocked via ${selector}: visible=${visible}, box=${box ? `${Math.round(box.x)},${Math.round(box.y)},${Math.round(box.width)},${Math.round(box.height)}` : "none"}, reason=${clickAttempt.reason}`);
+          if (visible && box && box.width > 0 && box.height > 0 && box.x > -1000) {
+            await target.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => undefined);
+            clicked = await target.click({ force: true, timeout: 3000 }).then(() => true, () => false);
+            if (clicked) console.log(`[naver-agent] focused ${label} via safe forced click on ${selector}`);
+          }
+        }
+        if (!clicked) continue;
         if (!(await insertMultilineEditorSteps(page, steps))) {
           console.warn(`[naver-agent] failed while inserting ${label} via ${selector}; refusing a second target to avoid duplicate text.`);
           return false;
@@ -875,6 +890,7 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
     ];
     const bodySelectors = [
       ".se-section-text p",
+      ".se-section-text",
       '.se-component-content [contenteditable="true"]',
       '.se-main-container [contenteditable="true"]',
       '[contenteditable="true"][data-placeholder*="내용"]',
