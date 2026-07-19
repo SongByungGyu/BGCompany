@@ -8,7 +8,7 @@ import { buildContentPlannerHermesPayload, buildContentWriterHermesPayload, buil
 import { assertHermesDailyRunAvailable } from "@/lib/hermes/hermes-usage";
 import { collectStockBlogReferences } from "@/lib/stock-blog/references/reference-adapter";
 import { buildBlogImagePrompts } from "@/lib/stock-blog/references/reference-normalizer";
-import { evaluateStockBlogReferences } from "@/lib/stock-blog/quality-gate";
+import { evaluateStockBlogPublishQuality, evaluateStockBlogReferences, getRealStockReferences } from "@/lib/stock-blog/quality-gate";
 import { FRED_DEGRADED_DISCLOSURE, ensureFredDegradedDisclosure, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import { generateStockBlogImages, type GeneratedStockBlogImages } from "@/lib/stock-blog/stock-blog-image-generator";
 import { applyVerifiedSchedule, type VerifiedSchedule, type VerifiedScheduleValidation } from "@/lib/stock-blog/verified-schedule";
@@ -16,6 +16,12 @@ import type { HermesRunTelemetry, NormalizedHermesRunResult } from "@/lib/hermes
 import type { BlogImagePrompt, ReferenceBundle, StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 import type { StockBlogContentImage, StockBlogImageQualityAudit } from "@/lib/stock-blog/stock-blog-image-types";
 import type { ContentChannel, ContentPipelineDetail, ContentPipelineRun, ContentPipelineStatus } from "@/features/content-pipeline/content-pipeline-types";
+import {
+  buildStockBlogEditorialBenchmark,
+  selectSafeEditorialBenchmarkGuidelines,
+  STOCK_BLOG_EDITORIAL_QUALITY_TARGET,
+  type StockBlogEditorialBenchmark,
+} from "@/lib/stock-blog/stock-blog-editorial-benchmark";
 
 type ContentPipelineInput = {
   topic: string;
@@ -25,6 +31,7 @@ type ContentPipelineInput = {
   contentType?: StockReferenceBriefingTemplate;
   referenceBundle?: ReferenceBundle;
   blogImagePrompts?: BlogImagePrompt[];
+  editorialBenchmarkGuidelines?: string[];
 };
 
 type PlannerExecution = {
@@ -241,12 +248,33 @@ function hermesStockContext(data: ContentPipelineInput) {
     marketSnapshot: data.referenceBundle?.marketSnapshot,
     referenceBundle: data.referenceBundle,
     competitorBlogReferences: data.referenceBundle?.competitorBlogReferences,
+    editorialBenchmarkGuidelines: data.editorialBenchmarkGuidelines,
     prohibitedPhrases: STOCK_PROHIBITED_PHRASES,
   };
 }
 
+async function loadRecentEditorialBenchmarkGuidelines(contentType: StockReferenceBriefingTemplate) {
+  const events = await prisma.eventLog.findMany({
+    where: { type: "StockBlogBenchmarkRecorded" },
+    orderBy: { timestamp: "desc" },
+    take: 40,
+    select: { payload: true },
+  });
+  const guidelines: string[] = [];
+  for (const event of events) {
+    const payload = asRecord(event.payload);
+    if (payload?.contentType !== contentType) continue;
+    const benchmark = asRecord(payload.benchmark);
+    const quality = asRecord(benchmark?.quality);
+    if (typeof quality?.score !== "number" || quality.score < STOCK_BLOG_EDITORIAL_QUALITY_TARGET) continue;
+    const applied = asStringArray(benchmark?.appliedGuidelines) ?? [];
+    guidelines.push(...applied);
+    if (guidelines.length >= 10) break;
+  }
+  return Array.from(new Set(guidelines)).slice(0, 10);
+}
+
 async function enrichContentPipelineInput(input: ContentPipelineInput): Promise<ContentPipelineInput> {
-  if (input.referenceBundle && input.blogImagePrompts) return input;
   const contentType = inferReferenceTemplate(input);
   const referenceBundle = input.referenceBundle ?? await collectStockBlogReferences({
     topic: input.topic,
@@ -257,7 +285,14 @@ async function enrichContentPipelineInput(input: ContentPipelineInput): Promise<
     keywords: buildReferenceKeywords(input),
   });
   const blogImagePrompts = input.blogImagePrompts ?? buildBlogImagePrompts(referenceBundle);
-  return { ...input, referenceBundle, blogImagePrompts };
+  const currentGuidelines = selectSafeEditorialBenchmarkGuidelines(referenceBundle.competitorAnalysis);
+  const historicalGuidelines = await loadRecentEditorialBenchmarkGuidelines(contentType);
+  const editorialBenchmarkGuidelines = Array.from(new Set([
+    ...currentGuidelines,
+    ...historicalGuidelines,
+    ...(input.editorialBenchmarkGuidelines ?? []),
+  ])).slice(0, 10);
+  return { ...input, referenceBundle, blogImagePrompts, editorialBenchmarkGuidelines };
 }
 
 function asStringArray(value: unknown) {
@@ -390,7 +425,8 @@ function pipelineMetadata(input: {
   hermesQaRequestPayload?: Record<string, unknown>;
   referenceBundle?: ReferenceBundle;
   blogImagePrompts?: BlogImagePrompt[];
-  qualityGate?: Record<string, unknown>;
+  qualityGate?: ContentPipelineRun["qualityGate"];
+  editorialBenchmark?: StockBlogEditorialBenchmark;
   generatedImages?: GeneratedStockBlogImages;
 }): Prisma.InputJsonObject {
   return toJsonObject({
@@ -410,6 +446,7 @@ function pipelineMetadata(input: {
     referenceBundle: input.referenceBundle,
     blogImagePrompts: input.blogImagePrompts,
     qualityGate: input.qualityGate,
+    editorialBenchmark: input.editorialBenchmark,
     thumbnailImageUrl: input.generatedImages?.thumbnailImageUrl,
     inlineImageUrls: input.generatedImages?.inlineImageUrls,
     contentImages: input.generatedImages?.contentImages,
@@ -1211,6 +1248,7 @@ function runFromEvent(event: {
     ? payload.imageQuality as unknown as StockBlogImageQualityAudit
     : undefined;
   const qualityGate = asRecord(payload.qualityGate) as ContentPipelineRun["qualityGate"] | undefined;
+  const editorialBenchmark = asRecord(payload.editorialBenchmark) as unknown as StockBlogEditorialBenchmark | undefined;
   const qualityBlocked = qualityGate?.ok === false;
   return {
     id: pipelineId,
@@ -1324,6 +1362,7 @@ function runFromEvent(event: {
     referenceBundle,
     blogImagePrompts,
     qualityGate,
+    editorialBenchmark,
     thumbnailImageUrl: typeof payload.thumbnailImageUrl === "string" ? payload.thumbnailImageUrl : undefined,
     inlineImageUrls: asStringArray(payload.inlineImageUrls),
     contentImages,
@@ -1581,8 +1620,6 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     : rawWriter;
   const writer = withFredDegradedDisclosure(scheduleCheckedWriter, data.referenceBundle);
   const qa = await executeQa(data, planner, marketing, writer);
-  const qualityGate = preflightQualityGate;
-  const qualityBlocked = runnerMode === "hermes" && !qualityGate.ok;
   const outputTitle = writer.agentRunStatus === "succeeded" && typeof writer.result.finalTitle === "string" ? writer.result.finalTitle : planner.outputTitle;
   const outputSummary = qa.agentRunStatus === "succeeded"
     ? qa.outputSummary
@@ -1599,7 +1636,7 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     marketDate: data.referenceBundle?.marketDate,
     marketSnapshot: data.referenceBundle?.marketSnapshot,
   });
-  const metadata = pipelineMetadata({
+  const metadataInput = {
     pipelineId,
     topic: data.topic,
     channel: data.channel,
@@ -1620,6 +1657,40 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     referenceBundle: data.referenceBundle,
     blogImagePrompts: data.blogImagePrompts,
     generatedImages,
+  };
+  const provisionalMetadata = pipelineMetadata(metadataInput);
+  const provisionalPipeline = runFromEvent({ id: pipelineId, timestamp: now, payload: provisionalMetadata });
+  if (!provisionalPipeline) throw new Error("CONTENT_PIPELINE_METADATA_INVALID");
+  const bundle = data.referenceBundle;
+  const realReferences = getRealStockReferences(bundle);
+  const publisherCount = new Set(realReferences.map((item) => item.publisher?.trim()).filter(Boolean)).size;
+  const snapshot = bundle?.marketSnapshot;
+  const editorialBenchmark = buildStockBlogEditorialBenchmark({
+    generatedAt: now.toISOString(),
+    contentType: bundle?.contentType,
+    title: provisionalPipeline.writerResult?.finalTitle ?? outputTitle,
+    body: provisionalPipeline.writerResult?.fullDraft ?? "",
+    imageCount: generatedImages.contentImages.length,
+    realReferenceCount: realReferences.length,
+    publisherCount,
+    verifiedMarketSnapshot: snapshot?.status === "ready"
+      && snapshot.dataQuality === "verified"
+      && snapshot.freshness?.status === "fresh",
+    qaScore: provisionalPipeline.qaResult?.qaScore,
+    competitorAnalysis: bundle?.competitorAnalysis,
+    appliedGuidelines: data.editorialBenchmarkGuidelines,
+  });
+  const qualityGate = runnerMode === "hermes"
+    ? evaluateStockBlogPublishQuality({
+      pipeline: { ...provisionalPipeline, editorialBenchmark },
+      requireRealReferences: true,
+    })
+    : preflightQualityGate;
+  const qualityBlocked = runnerMode === "hermes" && !qualityGate.ok;
+  const metadata = pipelineMetadata({
+    ...metadataInput,
+    qualityGate,
+    editorialBenchmark,
   });
 
   await prisma.task.createMany({
@@ -1759,6 +1830,18 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
   });
 
   await createEvent({ type: "ContentPipelineStarted", payload: metadata, summary: `${data.title} 콘텐츠 파이프라인 시작` });
+  await createEvent({
+    type: "StockBlogBenchmarkRecorded",
+    employeeId: "qa-auditor",
+    taskId: qaTaskId,
+    payload: {
+      contentPipelineId: pipelineId,
+      contentType: data.referenceBundle?.contentType,
+      benchmark: editorialBenchmark,
+      qualityGate,
+    },
+    summary: `${data.title} 경쟁 블로그 비교 완료 · 편집 품질 ${editorialBenchmark.quality.score}/100`,
+  });
   await createEvent({ type: "TaskStarted", employeeId: "content-planner", taskId: contentTaskId, payload: { ...metadata, title: data.title }, summary: "콘텐츠 기획 시작" });
   if (planner.agentRunStatus === "failed") {
     await createEvent({ type: "ErrorOccurred", employeeId: "content-planner", taskId: contentTaskId, payload: { ...metadata, error: planner.agentRunError, message: planner.agentRunError, status: "오류 대응 중" }, summary: `content-planner Hermes 실행 실패 · ${planner.agentRunError ?? "원인 미상"}` });
@@ -1818,6 +1901,7 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     imageGeneratedAt: generatedImages.imageGeneratedAt,
     imageErrorMessage: generatedImages.imageErrorMessage,
     qualityGate,
+    editorialBenchmark,
     createdAt: now.toISOString(),
     updatedAt: new Date().toISOString(),
   };

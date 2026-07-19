@@ -231,6 +231,7 @@ export function buildContentPlannerHermesPayload(input: ContentPlannerHermesInpu
       marketSnapshot: input.marketSnapshot,
       referenceBundle: input.referenceBundle,
       competitorBlogReferences: input.competitorBlogReferences,
+      editorialBenchmarkGuidelines: input.editorialBenchmarkGuidelines,
       referencePolicy: input.referencePolicy ?? STOCK_REFERENCE_POLICY,
       prohibitedPhrases: input.prohibitedPhrases,
     },
@@ -257,6 +258,7 @@ export function buildMarketingReviewHermesPayload(input: MarketingReviewHermesIn
       competitorAnalysis: input.referenceBundle?.competitorAnalysis,
       searchKeywords: input.referenceBundle?.queries,
       differentiationPoints: input.referenceBundle?.differentiationPoints,
+      editorialBenchmarkGuidelines: input.editorialBenchmarkGuidelines,
       prohibitedPhrases: input.prohibitedPhrases,
     },
     context: {
@@ -285,6 +287,7 @@ export function buildContentWriterHermesPayload(input: ContentWriterHermesInput)
       realReferences: getRealStockReferences(input.referenceBundle),
       marketSnapshot: input.referenceBundle?.marketSnapshot,
       competitorBlogReferences: input.referenceBundle?.competitorBlogReferences,
+      editorialBenchmarkGuidelines: input.editorialBenchmarkGuidelines,
       bodyStructure: nextWeekPreview
         ? ["1. 지난주 시장은 어땠을까", "2. 다음 주 한국 증시 전망", "3. 다음 주 미국 증시 전망", "4. 다음 주 핵심 일정", "5. 이번 주에 눈여겨볼 기회와 위험", "6. 개인 투자자가 확인할 것", "함께 확인한 기사", "7. 마무리", "투자 유의문구"]
         : ["도입부", "시장 요약", "한국 시장", "미국 시장", "강세/약세 섹터", "다음 주 일정", "투자자 체크리스트", "참고자료", "투자 유의문구"],
@@ -323,7 +326,9 @@ export function buildQaAuditHermesPayload(input: QaAuditHermesInput): HermesQaAu
         requiredCompetitorReferences: 3,
         requireVerifiedOrAllowedFredDegradedMarketSnapshot: true,
         requiredFredDegradedDisclosure: FRED_DEGRADED_DISCLOSURE,
+        requiredEditorialQualityScore: 90,
       },
+      editorialBenchmarkGuidelines: input.editorialBenchmarkGuidelines,
       finalPasteReadyBody: typeof input.writerResult?.fullDraft === "string" ? input.writerResult.fullDraft : undefined,
       prohibitedPhrases: input.prohibitedPhrases,
       blogImagePrompts: input.blogImagePrompts,

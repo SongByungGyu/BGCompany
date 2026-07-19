@@ -1077,6 +1077,26 @@ function NaverBlogPublishPrepPanel({ pipeline }: { pipeline: ContentPipelineRun 
               <p>{pipeline.qualityGate.reasons.length ? pipeline.qualityGate.reasons.join(" · ") : "참고자료와 최종 본문 기준을 충족했습니다."}</p>
               <small>
                 실제 참고자료 {String(pipeline.qualityGate.diagnostics.realReferenceCount ?? 0)}개 · URL {String(pipeline.qualityGate.diagnostics.distinctUrlCount ?? 0)}개 · 발행처 {String(pipeline.qualityGate.diagnostics.publisherCount ?? 0)}곳
+                {pipeline.qualityGate.diagnostics.editorialQualityScore !== undefined
+                  ? ` · 편집 품질 ${String(pipeline.qualityGate.diagnostics.editorialQualityScore)}/${String(pipeline.qualityGate.diagnostics.editorialQualityTarget ?? 90)}`
+                  : ""}
+              </small>
+            </div>
+          ) : null}
+          {pipeline.editorialBenchmark ? (
+            <div className={pipeline.editorialBenchmark.quality.passed ? "stock-reference-quality passed" : "stock-reference-quality blocked"}>
+              <strong>자사·경쟁 블로그 구조 비교</strong>
+              <p>
+                자사 본문 {pipeline.editorialBenchmark.own.bodyLength.toLocaleString("ko-KR")}자 · 소제목 {pipeline.editorialBenchmark.own.headingCount}개 · 이미지 {pipeline.editorialBenchmark.own.imageCount}장
+                {pipeline.editorialBenchmark.competitor.analyzedCount > 0
+                  ? ` / 경쟁군 평균 ${pipeline.editorialBenchmark.competitor.averages.bodyLength.toLocaleString("ko-KR")}자 · 소제목 ${pipeline.editorialBenchmark.competitor.averages.headingCount}개 · 이미지 ${pipeline.editorialBenchmark.competitor.averages.imageCount}장`
+                  : " / 경쟁군 심층 표본 대기"}
+              </p>
+              <small>
+                비교 표본 {pipeline.editorialBenchmark.competitor.analyzedCount}개
+                {pipeline.editorialBenchmark.improvementCandidates.length
+                  ? ` · 개선 후보: ${pipeline.editorialBenchmark.improvementCandidates.slice(0, 3).join(" · ")}`
+                  : " · 추가 개선 필요 없음"}
               </small>
             </div>
           ) : null}

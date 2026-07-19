@@ -311,6 +311,7 @@ def build_content_planner_prompt(payload: dict[str, Any]) -> str:
     market_json = compact_json(compact_market_snapshot(input_data))
     references_json = compact_json(compact_reference_context(input_data))
     competitors_json = compact_json(compact_competitor_context(input_data))
+    benchmark_guidelines_json = compact_json(input_data.get("editorialBenchmarkGuidelines") or [])
     return f"""
 너는 BG Company의 content-planner AI 직원이다.
 아래 입력을 바탕으로 {language} 언어의 {channel} 콘텐츠 기획안을 만든다.
@@ -322,11 +323,13 @@ def build_content_planner_prompt(payload: dict[str, Any]) -> str:
 - verified market snapshot: {market_json}
 - real reference summaries: {references_json}
 - competitor structure benchmark: {competitors_json}
+- accumulated safe editorial guidelines: {benchmark_guidelines_json}
 
 목표:
 - 실제 뉴스와 시장 데이터만 근거로 주식시장 브리핑 구조를 설계한다.
 - 경쟁 블로그 문장은 복사하지 않고 구조 지표, 공통 패턴, 차별화 기회만 반영한다.
 - 평균 길이와 소제목 수를 참고하되 BG Company의 실제 출처·기준일·체크리스트 강점을 우선한다.
+- 누적 가이드는 이전 자사 글과 경쟁군의 구조 비교에서 안전하다고 판정된 항목만 반영하며 경쟁 글의 표현은 재사용하지 않는다.
 - 마케팅 검토와 QA 검토가 이어질 수 있도록 제목, 구조, 메시지, 독자, SEO, 썸네일 방향을 명확히 준다.
 
 엄격한 출력 규칙:
@@ -368,6 +371,7 @@ def build_marketing_review_prompt(payload: dict[str, Any]) -> str:
     planner_json = compact_json(planner_result)
     competitors_json = compact_json(compact_competitor_context(input_data))
     differentiation_json = compact_json(input_data.get("differentiationPoints") or [])
+    benchmark_guidelines_json = compact_json(input_data.get("editorialBenchmarkGuidelines") or [])
     return f"""
 너는 BG Company의 marketing-manager AI 직원이다.
 content-planner가 만든 결과를 바탕으로 {language} 언어의 {channel} 콘텐츠 마케팅 검토안을 작성한다.
@@ -380,12 +384,14 @@ content-planner가 만든 결과를 바탕으로 {language} 언어의 {channel} 
 {planner_json}
 - competitor structure benchmark: {competitors_json}
 - differentiation opportunities: {differentiation_json}
+- accumulated safe editorial guidelines: {benchmark_guidelines_json}
 
 역할:
 - 제목 개선, 썸네일 문구, SEO 키워드, 도입부 hook, SNS/홍보 문구, 클릭 포인트를 제안한다.
 - 마케팅 리스크와 개선 제안을 점검한다.
 - 경쟁 글의 제목 길이·날짜 사용·도입부·소제목·이미지·체크리스트 패턴을 참고해 검색 친화적인 구조를 제안한다.
 - 경쟁 글 문장과 표현은 복사하지 않고 BG Company의 실제 출처와 데이터 투명성으로 차별화한다.
+- 누적 가이드 중 검색성·가독성·출처 투명성에 관한 항목만 제목과 도입부 개선에 사용한다.
 - 과장 광고, 허위 주장, 실제보다 큰 성과 표현은 피한다.
 - 실제 게시, 외부 발송, 결제, 승인 처리는 하지 않는다.
 
@@ -439,6 +445,7 @@ def build_content_writer_prompt(payload: dict[str, Any]) -> str:
     references_json = compact_json(compact_reference_context(input_data))
     competitors_json = compact_json(compact_competitor_context(input_data))
     body_structure_json = compact_json(input_data.get("bodyStructure") or [])
+    benchmark_guidelines_json = compact_json(input_data.get("editorialBenchmarkGuidelines") or [])
     reference_bundle = input_data.get("referenceBundle") if isinstance(input_data.get("referenceBundle"), dict) else {}
     next_week_preview = (
         reference_bundle.get("contentType") == "NEXT_WEEK_MARKET_PREVIEW"
@@ -498,6 +505,7 @@ content-planner의 기획안과 marketing-manager의 검토안을 바탕으로 {
 - verified market snapshot: {market_json}
 - real reference summaries: {references_json}
 - competitor structure benchmark: {competitors_json}
+- accumulated safe editorial guidelines: {benchmark_guidelines_json}
 - required body structure: {body_structure_json}
 
 역할:
@@ -505,6 +513,7 @@ content-planner의 기획안과 marketing-manager의 검토안을 바탕으로 {
 - 제목, 메타 설명, 도입부, 본문 섹션, 결론, CTA를 분리한다.
 - 과장 광고, 검증되지 않은 수치, 실제 운영으로 오해될 표현은 피한다.
 - 경쟁 블로그의 평균 길이와 구조 패턴은 참고하되 문장·비유·체크리스트 항목을 복사하지 않는다.
+- 누적 가이드는 현재 검증 데이터와 충돌하지 않는 범위에서만 반영하고, 사실 판단보다 문단·소제목·이미지·체크리스트 구조에만 사용한다.
 {writer_policy}
 - 실제 게시, 외부 발송, 결제, 승인 처리는 하지 않는다.
 
@@ -575,6 +584,9 @@ def build_qa_audit_prompt(payload: dict[str, Any]) -> str:
     writer_json = json.dumps(writer_result, ensure_ascii=False, indent=2)
     references_json = json.dumps(real_references, ensure_ascii=False, indent=2)
     market_snapshot_json = json.dumps(market_snapshot, ensure_ascii=False, indent=2)
+    benchmark_guidelines_json = compact_json(input_data.get("editorialBenchmarkGuidelines") or [])
+    quality_diagnostics = input_data.get("qualityGateDiagnostics") if isinstance(input_data.get("qualityGateDiagnostics"), dict) else {}
+    quality_target = int(quality_diagnostics.get("requiredEditorialQualityScore") or 90)
     reference_bundle = input_data.get("referenceBundle") if isinstance(input_data.get("referenceBundle"), dict) else {}
     next_week_preview = (
         reference_bundle.get("contentType") == "NEXT_WEEK_MARKET_PREVIEW"
@@ -616,11 +628,16 @@ content-planner, marketing-manager, content-writer가 만든 결과를 바탕으
 {market_snapshot_json}
 - real reference summaries:
 {references_json}
+- accumulated safe editorial guidelines:
+{benchmark_guidelines_json}
+- required editorial quality score: {quality_target}/100
 
 역할:
 - content-writer가 작성한 최종 초안을 기준으로 사실성, 과장 표현, 논리 흐름, 오탈자/문체, 광고성/허위 표현 리스크를 검토한다.
 - 게시 전 반드시 수정해야 할 사항과 선택 개선 사항을 구분한다.
 - 모르는 사실은 추측하지 말고 "추가 확인 필요"라고 표시한다.
+- qaScore가 {quality_target}점 미만이면 publishReadiness=ready 또는 finalRecommendation=approve로 판정하지 않는다.
+- 누적 가이드는 가독성 비교에만 사용하고 경쟁 글의 문장·표현·고유한 구성을 재현하라고 요구하지 않는다.
 {qa_policy}
 - 실제 게시, 외부 발송, 결제, 승인 처리는 하지 않는다.
 

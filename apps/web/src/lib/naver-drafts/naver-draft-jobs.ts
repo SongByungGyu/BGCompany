@@ -10,6 +10,7 @@ import { FRED_DEGRADED_DISCLOSURE, isAllowedFredDegradedSnapshot } from "@/lib/s
 import { renderNaverBody, type NaverBodyBlock } from "@/lib/stock-blog/naver-body";
 import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
 import type { StockBlogContentImage, StockBlogImageQualityAudit } from "@/lib/stock-blog/stock-blog-image-types";
+import { STOCK_BLOG_EDITORIAL_QUALITY_TARGET } from "@/lib/stock-blog/stock-blog-editorial-benchmark";
 
 export type NaverDraftJobStatus =
   | "created"
@@ -581,6 +582,9 @@ function automaticPublishBlockReasons(pipeline: ContentPipelineRun, body: string
   if (!pipeline.writerResult?.ok) reasons.push("content-writer 실패");
   if (!pipeline.qaResult?.ok || pipeline.qaResult.publishReadiness !== "ready" || pipeline.qaResult.finalRecommendation !== "approve") {
     reasons.push("qa-auditor 자동 발행 승인 실패");
+  }
+  if ((pipeline.qaResult?.qaScore ?? 0) < STOCK_BLOG_EDITORIAL_QUALITY_TARGET) {
+    reasons.push(`qa-auditor ${STOCK_BLOG_EDITORIAL_QUALITY_TARGET}점 이상 필요`);
   }
   if ((bundle?.missingItems?.length ?? 0) > 0) reasons.push("Reference missingItems 존재");
   if ((bundle?.competitorAnalysis?.analyzedCount ?? 0) < 1) reasons.push("경쟁 블로그 심층 구조 분석 PASS 필요");

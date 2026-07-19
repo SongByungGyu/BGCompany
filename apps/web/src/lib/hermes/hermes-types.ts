@@ -11,6 +11,7 @@ export type ContentPlannerHermesInput = {
   marketSnapshot?: MarketSnapshot;
   referenceBundle?: ReferenceBundle;
   competitorBlogReferences?: CompetitorBlogReference[];
+  editorialBenchmarkGuidelines?: string[];
   referencePolicy?: string[];
   prohibitedPhrases?: string[];
 };
@@ -48,6 +49,7 @@ export type HermesContentPlannerPayload = {
     marketSnapshot?: MarketSnapshot;
     referenceBundle?: ReferenceBundle;
     competitorBlogReferences?: CompetitorBlogReference[];
+    editorialBenchmarkGuidelines?: string[];
     referencePolicy?: string[];
     prohibitedPhrases?: string[];
   };
@@ -72,6 +74,7 @@ export type HermesMarketingReviewPayload = {
     competitorAnalysis?: CompetitorBlogAnalysisSummary;
     searchKeywords?: string[];
     differentiationPoints?: string[];
+    editorialBenchmarkGuidelines?: string[];
     prohibitedPhrases?: string[];
   };
   context: {
@@ -97,6 +100,7 @@ export type HermesContentWriterPayload = {
     realReferences?: ReferenceItem[];
     marketSnapshot?: MarketSnapshot;
     competitorBlogReferences?: CompetitorBlogReference[];
+    editorialBenchmarkGuidelines?: string[];
     bodyStructure?: string[];
     prohibitedPhrases?: string[];
     blogImagePrompts?: BlogImagePrompt[];
@@ -126,6 +130,7 @@ export type HermesQaAuditPayload = {
     realReferences?: ReferenceItem[];
     marketSnapshot?: MarketSnapshot;
     qualityGateDiagnostics?: Record<string, unknown>;
+    editorialBenchmarkGuidelines?: string[];
     finalPasteReadyBody?: string;
     prohibitedPhrases?: string[];
     blogImagePrompts?: BlogImagePrompt[];

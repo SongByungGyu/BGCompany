@@ -1,6 +1,11 @@
 import type { ContentPipelineRun } from "@/features/content-pipeline/content-pipeline-types";
 import { FRED_DEGRADED_DISCLOSURE, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import type { ReferenceBundle, ReferenceItem } from "@/lib/stock-blog/references/reference-types";
+import {
+  assessStockBlogEditorialQuality,
+  inspectOwnStockBlogStructure,
+  STOCK_BLOG_EDITORIAL_QUALITY_TARGET,
+} from "@/lib/stock-blog/stock-blog-editorial-benchmark";
 
 export type StockBlogQualityStatus =
   | "passed"
@@ -52,6 +57,12 @@ export type StockBlogQualityDiagnostics = {
   manualMarketSnapshot: boolean;
   repeatedPhraseWarnings: string[];
   missingReferenceItems: string[];
+  qaScore?: number;
+  editorialQualityScore?: number;
+  editorialQualityTarget?: number;
+  editorialQualityPassed?: boolean;
+  editorialQualityDimensions?: Record<string, number>;
+  editorialQualityFailedChecks?: string[];
 };
 
 export type StockBlogQualityGateResult = {
@@ -309,13 +320,40 @@ export function evaluateStockBlogPublishQuality(input: {
   const bundle = input.referenceBundle ?? input.pipeline.referenceBundle ?? input.pipeline.writerResult?.referenceBundle ?? input.pipeline.qaResult?.referenceBundle;
   const body = input.pasteReadyBody ?? input.pipeline.naverBlogPublishPrep?.pasteReadyBody ?? input.pipeline.writerResult?.fullDraft ?? "";
   const writerText = input.writerText ?? input.pipeline.writerResult?.fullDraft ?? input.pipeline.writerResult?.markdownDraft ?? "";
-  const d = diagnostics({ bundle, pasteReadyBody: body, writerText });
+  const baseDiagnostics = diagnostics({ bundle, pasteReadyBody: body, writerText });
   const reasons: string[] = [];
   const requireReal = input.requireRealReferences ?? input.pipeline.runnerMode === "hermes";
   const nextWeekPreview = bundle?.contentType === "NEXT_WEEK_MARKET_PREVIEW";
   const editorialContract = nextWeekPreview ? inspectNextWeekEditorialContract(body) : undefined;
+  const imageCount = input.pipeline.contentImages?.length
+    ?? (input.pipeline.thumbnailImageUrl ? 1 : 0) + (input.pipeline.inlineImageUrls?.length ?? 0);
+  const editorialQuality = assessStockBlogEditorialQuality({
+    structure: inspectOwnStockBlogStructure({
+      title: input.pipeline.writerResult?.finalTitle ?? input.pipeline.outputTitle ?? input.pipeline.title,
+      body,
+      imageCount,
+    }),
+    realReferenceCount: baseDiagnostics.realReferenceCount,
+    publisherCount: baseDiagnostics.publisherCount,
+    verifiedMarketSnapshot: baseDiagnostics.marketSnapshotStatus === "ready"
+      && baseDiagnostics.marketSnapshotDataQuality === "verified"
+      && baseDiagnostics.marketSnapshotFreshnessStatus === "fresh",
+    qaScore: input.pipeline.qaResult?.qaScore,
+  });
+  const d: StockBlogQualityDiagnostics = {
+    ...baseDiagnostics,
+    qaScore: input.pipeline.qaResult?.qaScore,
+    editorialQualityScore: editorialQuality.score,
+    editorialQualityTarget: editorialQuality.target,
+    editorialQualityPassed: editorialQuality.passed,
+    editorialQualityDimensions: editorialQuality.dimensions,
+    editorialQualityFailedChecks: editorialQuality.failedChecks,
+  };
 
   if (d.marketSnapshotDegraded && !d.hasFredDegradedDisclosure) reasons.push("FRED 제한 모드 고지 문구 누락");
+  if (requireReal && !editorialQuality.passed) {
+    reasons.push(`편집 품질 ${STOCK_BLOG_EDITORIAL_QUALITY_TARGET}점 이상 필요: 현재 ${editorialQuality.score}점 · ${editorialQuality.failedChecks.join(", ")}`);
+  }
 
   if (requireReal) {
     const minRefs = 5;

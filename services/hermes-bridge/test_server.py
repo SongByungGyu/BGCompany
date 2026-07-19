@@ -300,6 +300,32 @@ class VerifiedSchedulePromptTests(unittest.TestCase):
         self.assertIn("실제 활용한 신뢰 가능한 기사 정확히 3개", prompt)
         self.assertIn("지정된 투자 유의 문구가 cta에 정확히 한 번", prompt)
 
+    def test_benchmark_guidelines_and_ninety_point_target_are_enforced(self) -> None:
+        guidelines = ["본문은 소제목 6개 이상으로 구성합니다."]
+        writer_prompt = bridge.build_content_writer_prompt({
+            "input": {
+                "topic": "다음 주 증시 일정",
+                "title": "주요 일정",
+                "channel": "blog",
+                "referenceBundle": {"contentType": "NEXT_WEEK_MARKET_PREVIEW"},
+                "editorialBenchmarkGuidelines": guidelines,
+            },
+        })
+        qa_prompt = bridge.build_qa_audit_prompt({
+            "input": {
+                "topic": "다음 주 증시 일정",
+                "title": "주요 일정",
+                "channel": "blog",
+                "referenceBundle": {"contentType": "NEXT_WEEK_MARKET_PREVIEW"},
+                "editorialBenchmarkGuidelines": guidelines,
+                "qualityGateDiagnostics": {"requiredEditorialQualityScore": 90},
+            },
+        })
+
+        self.assertIn("소제목 6개 이상", writer_prompt)
+        self.assertIn("required editorial quality score: 90/100", qa_prompt)
+        self.assertIn("qaScore가 90점 미만이면", qa_prompt)
+
 
 class UsageGuardrailContractTests(unittest.TestCase):
     def test_content_pipeline_requires_four_real_hermes_runs(self) -> None:

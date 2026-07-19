@@ -540,7 +540,7 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
     let naverDraftJobId: string | undefined;
     let status: StockBlogSchedulerRunStatus = "succeeded";
     const notes: string[] = [];
-    const qualityGate = pipeline.qualityGate ?? evaluateStockBlogPublishQuality({
+    const qualityGate = evaluateStockBlogPublishQuality({
       pipeline,
       requireRealReferences: config.runnerMode === "hermes",
     });
