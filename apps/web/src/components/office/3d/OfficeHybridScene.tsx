@@ -26,17 +26,17 @@ type RoomMeta = {
 };
 
 const roomMeta: Record<string, RoomMeta> = {
-  "ceo-office": { number: "1", title: "CEO Office", subtitle: "병규" },
-  "director-room": { number: "2", title: "AI Director Desk", subtitle: "루나" },
-  "market-analysis-room": { number: "3", title: "Market Analysis Room", subtitle: "서준" },
-  "content-zone": { number: "4", title: "Content Studio", subtitle: "미나 · 카이 · 지아" },
-  "knowledge-audit-zone": { number: "5", title: "QA & Audit Room", subtitle: "윤아" },
-  "meeting-room": { number: "9", title: "Central Meeting Room", subtitle: "협업 · 의사결정" },
-  "finance-room": { number: "6", title: "Finance Room", subtitle: "도윤" },
-  "dev-ops-zone": { number: "7", title: "Dev & Server Room", subtitle: "준범", accent: "red" },
-  "review-zone": { number: "8", title: "Publishing Station", subtitle: "Local Agent" },
-  "approval-zone": { number: "10", title: "Approval Gate", subtitle: "승인 대기 · 최종 판단", accent: "gold" },
-  "break-lounge": { number: "11", title: "Lounge", subtitle: "휴식 · 재충전" },
+  "ceo-office": { number: "1", title: "대표실", subtitle: "병규" },
+  "director-room": { number: "2", title: "AI 디렉터실", subtitle: "루나" },
+  "market-analysis-room": { number: "3", title: "시장분석실", subtitle: "서준" },
+  "content-zone": { number: "4", title: "콘텐츠 스튜디오", subtitle: "미나 · 카이 · 지아" },
+  "knowledge-audit-zone": { number: "5", title: "QA·감사실", subtitle: "윤아" },
+  "meeting-room": { number: "9", title: "중앙 회의실", subtitle: "협업 · 의사결정" },
+  "finance-room": { number: "6", title: "재정실", subtitle: "도윤" },
+  "dev-ops-zone": { number: "7", title: "개발·서버실", subtitle: "준범", accent: "red" },
+  "review-zone": { number: "8", title: "발행 스테이션", subtitle: "로컬 발행 Agent" },
+  "approval-zone": { number: "10", title: "승인 게이트", subtitle: "승인 대기 · 최종 판단", accent: "gold" },
+  "break-lounge": { number: "11", title: "라운지", subtitle: "휴식 · 재충전" },
 };
 
 

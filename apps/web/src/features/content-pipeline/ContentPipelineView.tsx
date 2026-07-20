@@ -1306,7 +1306,7 @@ export function ContentPipelineView() {
   const [topic, setTopic] = useState("금일 한국 주식시장 흐름과 내일 체크포인트");
   const [title, setTitle] = useState("26/07/09 오늘의 한국 증시 정리와 내일 전망");
   const [channel, setChannel] = useState<ContentChannel>("blog");
-  const [runnerMode, setRunnerMode] = useState<"mock" | "hermes-dry-run" | "hermes">("mock");
+  const [runnerMode, setRunnerMode] = useState<"mock" | "hermes-dry-run" | "hermes">("hermes");
   const [pipelines, setPipelines] = useState<ContentPipelineRun[]>(mockContentPipelines);
   const [selectedPipelineId, setSelectedPipelineId] = useState(mockContentPipelines[0]?.id ?? "");
   const [notice, setNotice] = useState("콘텐츠 파이프라인은 task / approval / event / timeline 조합으로 실행됩니다.");

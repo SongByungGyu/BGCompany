@@ -1373,3 +1373,482 @@
   .hybrid-movement-token-orb,
   .hybrid-office-employee.is-arriving .hybrid-employee-sprite { animation: none; }
 }
+/* Shared command-center visual language for every workspace.
+ * The 3D office introduced this palette first; feature screens now reuse the
+ * same navy surfaces, cyan wayfinding, restrained glow, and status colors. */
+.control-room {
+  --command-bg: #050e1a;
+  --command-shell: #071426;
+  --command-panel: #08182b;
+  --command-card: #0d2137;
+  --command-card-strong: #102944;
+  --command-border: #213c58;
+  --command-border-strong: #315676;
+  --command-text: #e7f0f8;
+  --command-muted: #8199b1;
+  --command-accent: #55ddcf;
+  --command-blue: #6baaf0;
+  color: var(--command-text);
+  background: var(--command-bg);
+}
+
+.control-room .top-bar {
+  color: var(--command-text);
+  background: linear-gradient(90deg, #071426, #0a1c31);
+  border-bottom-color: #1d344d;
+  box-shadow: 0 8px 28px #02081280;
+}
+.control-room .brand > b {
+  background: linear-gradient(145deg, #4a86dd, #39c9ba);
+  box-shadow: 0 0 22px #47cfc066;
+}
+.control-room .brand span,
+.control-room .kpis span { color: #7891aa; }
+.control-room .clock {
+  color: #afc3d6;
+  background: #0e2239;
+  border-color: #27435f;
+}
+.control-room .kpis > button { border-left-color: #1d344d; }
+.control-room .kpis .gear,
+.control-room .kpis .logout-button {
+  color: #abc0d4;
+  background: #0c1d31;
+  border-color: #29445f;
+}
+.control-room .kpis .logout-button:hover {
+  color: #7fe9de;
+  background: #123552;
+}
+.control-room .kpi-loading {
+  background: linear-gradient(90deg,#0d2137 25%,#173552 45%,#0d2137 65%);
+  background-size: 220% 100%;
+}
+
+.control-room .workspace { background: var(--command-bg); }
+.control-room .left-nav {
+  background: linear-gradient(180deg, #071426, #08182b);
+  border-right-color: #1d344d;
+}
+.control-room .left-nav button { color: #758ba2; }
+.control-room .left-nav button:hover {
+  color: #d9e8f4;
+  background: #102a45;
+}
+.control-room .left-nav button.active {
+  color: var(--command-accent);
+  background: linear-gradient(90deg, #153b58, #102a45);
+  box-shadow: inset 3px 0 0 #4bdacb, 0 0 20px #24cdb51a;
+}
+.control-room .left-nav button > i { border-color: #071426; }
+
+.control-room .stage {
+  background-color: var(--command-bg);
+  background-image:
+    linear-gradient(#18314a40 1px, transparent 1px),
+    linear-gradient(90deg, #18314a40 1px, transparent 1px),
+    radial-gradient(circle at 48% -20%, #17466c70, transparent 52%);
+  background-size: 32px 32px, 32px 32px, 100% 100%;
+}
+.control-room .feature-shell {
+  color: var(--command-text);
+  background:
+    radial-gradient(circle at 12% 0%, #123552 0%, transparent 34%),
+    linear-gradient(180deg, #09192c, #071522);
+  border-color: #25415e;
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 1px #294863, 0 18px 46px #020812b3;
+}
+.control-room .feature-hero,
+.control-room .approval-hero,
+.control-room .content-pipeline-hero,
+.control-room .dashboard-summary-hero {
+  background:
+    linear-gradient(115deg, #123552eb, #0b1d32 68%),
+    radial-gradient(circle at 12% 0%, #245e82, transparent 46%);
+  border-color: #2a4b68;
+  box-shadow: inset 0 1px 0 #ffffff0a;
+}
+.control-room .feature-hero span,
+.control-room .dashboard-summary-hero label,
+.control-room .dashboard-summary-card label,
+.control-room .dashboard-schedule label {
+  color: var(--command-accent);
+}
+.control-room .feature-hero h1,
+.control-room .dashboard-summary-hero h1,
+.control-room .dashboard-briefing-card h2,
+.control-room .dashboard-summary-card h3 { color: #f4f8fc; }
+.control-room .feature-hero p,
+.control-room .dashboard-summary-hero p,
+.control-room .dashboard-briefing-card p,
+.control-room .dashboard-schedule p,
+.control-room .dashboard-summary-card p { color: #a4b8cb; }
+
+.control-room .work-summary span {
+  color: #8ea6bd;
+  background: #091a2dda;
+  border-color: #2c4b67;
+}
+.control-room .work-summary b { color: #eef6fc; }
+.control-room .feature-toolbar p,
+.control-room .content-pipeline-list small,
+.control-room .feature-detail-head p { color: var(--command-muted); }
+.control-room .filter-tabs button {
+  color: #8ca3b9;
+  background: #0b1d31;
+  border-color: #29445f;
+}
+.control-room .filter-tabs button:hover,
+.control-room .filter-tabs button.active {
+  color: var(--command-accent);
+  background: #143652;
+  border-color: #3d718e;
+}
+
+.control-room .task-row,
+.control-room .approval-row,
+.control-room .content-pipeline-list button {
+  color: var(--command-text);
+  background: linear-gradient(105deg, #0d2137, #0b1c30);
+  border-color: #25415d;
+  box-shadow: 0 7px 18px #02081238;
+}
+.control-room .task-row:hover,
+.control-room .approval-row:hover,
+.control-room .content-pipeline-list button:hover {
+  background: #102b46;
+  border-color: #44779a;
+}
+.control-room .task-row.selected,
+.control-room .approval-row.selected,
+.control-room .content-pipeline-list button.selected {
+  background: linear-gradient(100deg, #153b59, #102840);
+  border-color: #52b8bd;
+  box-shadow: inset 3px 0 0 var(--command-accent), 0 0 22px #35c7b826;
+}
+.control-room .task-row-main small,
+.control-room .approval-row small,
+.control-room .task-row-meta,
+.control-room .content-pipeline-list em { color: #8199b1; }
+.control-room .task-row-meta strong,
+.control-room .approval-row dd { color: #e0ebf5; }
+.control-room .approval-row dt { color: #708aa4; }
+.control-room .task-row-progress span { background: #1a344d; }
+.control-room .task-row-progress i {
+  background: linear-gradient(90deg, #4e8ee3, #4bdacb);
+  box-shadow: 0 0 12px #4bdacb66;
+}
+
+.control-room .panel,
+.control-room .feature-detail-panel {
+  color: var(--command-text);
+  background: linear-gradient(180deg, #091a2d, #071526);
+  border-left-color: #1f3954;
+  box-shadow: -12px 0 34px #02081280;
+}
+.control-room .feature-panel-tabs,
+.control-room .tabs {
+  background: #0a1d32f2;
+  border-bottom-color: #213b56;
+  backdrop-filter: blur(16px);
+}
+.control-room .feature-panel-tabs span,
+.control-room .tabs button { color: #7890a8; }
+.control-room .tabs button.active { color: var(--command-accent); background: #123552; }
+.control-room .feature-detail-head h2 { color: #f4f8fc; }
+.control-room .feature-card,
+.control-room .task,
+.control-room .metric,
+.control-room .output,
+.control-room .next {
+  color: #e3edf6;
+  background: linear-gradient(145deg, #0d2137, #0b1c30);
+  border-color: #213c58;
+}
+.control-room .feature-card.muted { color: #849bb0; background: #0a1b2e; }
+.control-room .feature-card label,
+.control-room .task label,
+.control-room .metric label,
+.control-room .output label,
+.control-room .next label { color: #7690a8; }
+.control-room .feature-card p,
+.control-room .output small,
+.control-room .step-list li,
+.control-room .audit-list li { color: #9ab0c3; }
+.control-room .task > div > span { background: #1c334b; }
+.control-room .step-list li::before,
+.control-room .audit-list li::before { background: #36536d; }
+.control-room .approval-comment,
+.control-room .content-pipeline-form input,
+.control-room .content-pipeline-form select,
+.control-room .naver-url-row input {
+  color: #e7f0f8;
+  background: #091a2d;
+  border-color: #2b4965;
+  color-scheme: dark;
+}
+.control-room .approval-comment::placeholder,
+.control-room .content-pipeline-form input::placeholder { color: #627d97; }
+.control-room .feature-actions button {
+  color: #a9d2f3;
+  background: #102b46;
+  border-color: #2c526f;
+}
+.control-room .feature-actions button:hover { background: #163b5c; }
+.control-room .feature-actions button:first-child,
+.control-room .content-pipeline-form button,
+.control-room .dashboard-summary-hero button,
+.control-room .dashboard-summary-error button {
+  color: #04111e;
+  background: linear-gradient(135deg, #62b4ee, #55ddcf);
+  border-color: transparent;
+  box-shadow: 0 0 20px #41c8c03d;
+}
+
+.control-room .content-pipeline-form,
+.control-room .content-pipeline-usage-card,
+.control-room .content-pipeline-detail {
+  color: var(--command-text);
+  background: #0a1c30;
+  border-color: #25415d;
+}
+.control-room .content-pipeline-form label { color: #8199b1; }
+.control-room .content-pipeline-usage-card strong { color: #edf5fb; }
+.control-room .content-pipeline-usage-card span,
+.control-room .content-pipeline-usage-card small { color: #91a9be; }
+.control-room .content-pipeline-usage-runs li,
+.control-room .content-pipeline-result-grid > div,
+.control-room .content-pipeline-draft,
+.control-room .content-pipeline-payload,
+.control-room .naver-prep-block,
+.control-room .naver-prep-split pre,
+.control-room .naver-draft-job-card,
+.control-room .market-snapshot-panel,
+.control-room .market-snapshot-metrics article,
+.control-room .market-snapshot-columns > div,
+.control-room .stock-reference-item,
+.control-room .stock-image-prompt-item,
+.control-room .stock-reference-quality,
+.control-room .thumbnail-variant-card {
+  color: #dce8f3;
+  background: #0d2137;
+  border-color: #28445f;
+}
+.control-room .content-pipeline-payload pre,
+.control-room .content-pipeline-draft,
+.control-room .content-pipeline-result-grid p,
+.control-room .stock-reference-item p,
+.control-room .stock-image-prompt-item p,
+.control-room .market-snapshot-columns p { color: #a0b5c8; }
+.control-room .content-pipeline-meta span,
+.control-room .stock-reference-meta span,
+.control-room .market-snapshot-meta span {
+  color: #a9bfd2;
+  background: #132b43;
+  border-color: #31506b;
+}
+.control-room .naver-publish-prep,
+.control-room .naver-draft-job-panel {
+  color: #dce8f3;
+  background: linear-gradient(155deg, #122b40, #0b1d31);
+  border-color: #36546c;
+}
+
+.control-room .dashboard-summary-shell { background-color: #071522; }
+.control-room .dashboard-briefing-card,
+.control-room .dashboard-schedule,
+.control-room .dashboard-summary-card {
+  color: var(--command-text);
+  background: linear-gradient(145deg, #0d2137, #0a1c30);
+  border-color: #25415d;
+  box-shadow: 0 10px 30px #02081240;
+}
+.control-room .dashboard-summary-card.good { background: linear-gradient(145deg, #0d2b31, #0b202c); border-color: #287066; }
+.control-room .dashboard-summary-card.info { background: linear-gradient(145deg, #112b48, #0b1d31); border-color: #315d85; }
+.control-room .dashboard-summary-card.warning { background: linear-gradient(145deg, #342a1b, #171f29); border-color: #72582c; }
+.control-room .dashboard-summary-card.critical { background: linear-gradient(145deg, #39231f, #191e29); border-color: #7b4439; }
+.control-room .dashboard-summary-card small { color: #748fa8; }
+.control-room .dashboard-schedule article,
+.control-room .dashboard-schedule li {
+  color: #d8e5ef;
+  background: #0b1d31;
+  border-color: #25415d;
+}
+.control-room .dashboard-schedule span { color: #8199b1; }
+.control-room .dashboard-side-summary { background: #0d243b; border-color: #315d7e; }
+
+.control-room .placeholder-feature strong,
+.control-room .no-selection strong { color: #e7f0f8; }
+.control-room .placeholder-feature p,
+.control-room .no-selection p,
+.control-room .feature-empty { color: #7f98af; }
+.control-room .no-selection b,
+.control-room .view-center.empty > b {
+  color: var(--command-accent);
+  background: #102c46;
+  border: 1px solid #315774;
+}
+
+.control-room ::-webkit-scrollbar { width: 10px; height: 10px; }
+.control-room ::-webkit-scrollbar-track { background: #071522; }
+.control-room ::-webkit-scrollbar-thumb {
+  background: #294863;
+  border: 2px solid #071522;
+  border-radius: 999px;
+}
+.control-room ::-webkit-scrollbar-thumb:hover { background: #3c6988; }
+
+/* Final readability pass: preserve the office visual language while making
+ * dense operational screens easier to scan. */
+.control-room .task-row-main strong,
+.control-room .approval-row > div:first-child > strong,
+.control-room .content-pipeline-list strong {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 7px;
+  font-weight: 780;
+  line-height: 1.4;
+  letter-spacing: -.012em;
+  text-overflow: ellipsis;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.control-room .task-row-main small,
+.control-room .approval-row small,
+.control-room .content-pipeline-list small { line-height: 1.45; }
+.control-room .feature-detail-head h2 {
+  font-weight: 780;
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.control-room .placeholder-workspace { gap: 14px; }
+.control-room .placeholder-hero { align-items: center; }
+.control-room .placeholder-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  color: #b8ccdc;
+  font-size: 11px;
+  background: #0d243b;
+  border: 1px solid #31526e;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.control-room .placeholder-status i {
+  width: 8px;
+  height: 8px;
+  background: var(--command-accent);
+  border-radius: 50%;
+  box-shadow: 0 0 12px #55ddcf99;
+}
+.control-room .placeholder-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.control-room .placeholder-overview-grid article,
+.control-room .placeholder-checkpoints {
+  color: var(--command-text);
+  background: linear-gradient(145deg, #0d2137, #0a1c30);
+  border: 1px solid #25415d;
+  border-radius: 15px;
+  box-shadow: 0 10px 28px #02081238;
+}
+.control-room .placeholder-overview-grid article { min-height: 145px; padding: 16px; }
+.control-room .placeholder-overview-grid label {
+  display: block;
+  margin-bottom: 16px;
+  color: var(--command-accent);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .08em;
+}
+.control-room .placeholder-overview-grid strong {
+  display: block;
+  color: #f2f7fb;
+  font-size: 15px;
+  line-height: 1.35;
+}
+.control-room .placeholder-overview-grid p {
+  margin: 9px 0 0;
+  color: #8fa7bc;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.55;
+}
+.control-room .placeholder-checkpoints { min-height: 0; flex: 1; padding: 18px; }
+.control-room .placeholder-checkpoints > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #213c58;
+}
+.control-room .placeholder-checkpoints > header span {
+  color: var(--command-accent);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .08em;
+}
+.control-room .placeholder-checkpoints h2 {
+  margin: 5px 0 0;
+  color: #f2f7fb;
+  font-size: 18px;
+  letter-spacing: -.02em;
+}
+.control-room .placeholder-checkpoints > header b {
+  padding: 6px 9px;
+  color: #9eb4c7;
+  font-size: 10px;
+  background: #102a43;
+  border: 1px solid #294b67;
+  border-radius: 999px;
+}
+.control-room .placeholder-checkpoints > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.control-room .placeholder-checkpoints article {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  background: #091a2d;
+  border: 1px solid #203b55;
+  border-radius: 13px;
+}
+.control-room .placeholder-checkpoints article > span {
+  color: #5de1d4;
+  font-size: 11px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+.control-room .placeholder-checkpoints article strong {
+  display: block;
+  color: #dfebf4;
+  font-size: 13px;
+}
+.control-room .placeholder-checkpoints article p {
+  margin: 5px 0 0;
+  color: #7f98af;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.control-room .placeholder-detail-panel .feature-card:first-child {
+  border-color: #315d7e;
+  background: #0d243b;
+}
+
+@media (max-width: 1280px) {
+  .control-room .placeholder-overview-grid,
+  .control-room .placeholder-checkpoints > div { grid-template-columns: 1fr; }
+  .control-room .placeholder-overview-grid article { min-height: auto; }
+  .control-room .placeholder-checkpoints { overflow: auto; }
+}

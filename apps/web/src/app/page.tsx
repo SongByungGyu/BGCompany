@@ -29,6 +29,15 @@ type Employee = {
   group: Group; task: string; progress: number; started: string; model: string;
   cost: string; output: string; outputMeta: string; next: string; error?: string;
 };
+type PlaceholderWorkspaceConfig = {
+  phase: string;
+  description: string;
+  status: string;
+  current: string;
+  next: string;
+  owner: string;
+  checkpoints: [string, string][];
+};
 
 declare global { interface Window { __bgSetView?: (view: View) => void } }
 
@@ -50,6 +59,62 @@ const employeeProfileOverrides: Partial<Record<string, Pick<Employee, "name" | "
 };
 
 const nav = [["⌂","대표실"],["◇","가상 오피스"],["▣","업무 보드"],["♙","승인함"],["✎","콘텐츠"],["▤","재정"],["⌁","주식"],["‹›","개발"],["□","지식관리"],["◉","감사·품질"],["▧","보고서"]];
+const placeholderWorkspaces: Record<string, PlaceholderWorkspaceConfig> = {
+  "재정": {
+    phase: "운영 비용",
+    description: "AI 사용 비용과 운영비, 월별 예산 이상치를 한 화면에서 확인하는 재정 관제 영역입니다.",
+    status: "비용 데이터 연결 준비",
+    current: "대표실 비용 KPI와 직원별 현재 비용을 사용 중입니다.",
+    next: "일·주·월 비용 추이와 예산 경고를 연결합니다.",
+    owner: "도윤 · 재정팀",
+    checkpoints: [["비용 집계", "모델·직원·업무별 비용"], ["예산 경고", "한도 초과와 이상치 감지"], ["월간 요약", "운영비 추이와 전망"]],
+  },
+  "주식": {
+    phase: "시장 데이터",
+    description: "한국·미국 시장 데이터 수집부터 주식 블로그 일정과 발행 준비 상태까지 연결하는 화면입니다.",
+    status: "수집 파이프라인 운영 중",
+    current: "시장 데이터와 블로그 스케줄러가 백그라운드에서 동작 중입니다.",
+    next: "MarketSnapshot 품질과 다음 실행 일정을 시각화합니다.",
+    owner: "서준 · 주식팀",
+    checkpoints: [["시장 스냅샷", "지수·환율·금리·수급"], ["작성 일정", "장전·마감·주간 브리핑"], ["발행 상태", "초안·검수·네이버 작업"]],
+  },
+  "개발": {
+    phase: "서비스 운영",
+    description: "배포 상태, 서비스 헬스, 오류 대응과 변경 이력을 모아보는 개발 관제 영역입니다.",
+    status: "업무 보드 연동 중",
+    current: "개발 직원 상태와 오류 업무는 가상 오피스·업무 보드에 반영됩니다.",
+    next: "서비스별 헬스와 최근 배포 결과를 연결합니다.",
+    owner: "준범 · 개발팀",
+    checkpoints: [["서비스 헬스", "Web·Hermes·DB 상태"], ["배포 기록", "빌드·테스트·릴리스"], ["오류 대응", "원인·조치·복구 시간"]],
+  },
+  "지식관리": {
+    phase: "운영 지식",
+    description: "프롬프트, 운영 문서, 시장 참고자료와 반복 업무 기준을 버전별로 관리하는 영역입니다.",
+    status: "정보 구조 설계 중",
+    current: "콘텐츠 결과물과 직원 타임라인에 운영 지식이 분산되어 있습니다.",
+    next: "문서 검색과 버전·출처 메타데이터를 연결합니다.",
+    owner: "윤아 · 지식관리",
+    checkpoints: [["문서 보관", "프롬프트·런북·보고서"], ["출처 관리", "링크·기준일·사용 범위"], ["변경 이력", "버전·승인·적용 상태"]],
+  },
+  "감사·품질": {
+    phase: "품질 게이트",
+    description: "콘텐츠 QA, 데이터 검증, 이미지 정책과 자동발행 차단 사유를 통합 점검하는 영역입니다.",
+    status: "QA 데이터 연결 준비",
+    current: "QA 업무와 승인 결과는 업무 보드·승인함에서 확인할 수 있습니다.",
+    next: "품질 점수와 차단 사유, 재검수 이력을 연결합니다.",
+    owner: "윤아 · QA 감사",
+    checkpoints: [["콘텐츠 품질", "구조·가독성·중복 검사"], ["데이터 검증", "수치·출처·기준일 확인"], ["발행 차단", "이미지·세션·정책 오류"]],
+  },
+  "보고서": {
+    phase: "경영 보고",
+    description: "오늘의 작업, 비용, 승인과 오류를 일간·주간 보고서로 묶어 전달하는 영역입니다.",
+    status: "대표실 브리핑 연동 준비",
+    current: "대표실에서 rule-based 운영 요약을 제공하고 있습니다.",
+    next: "기간별 보고서 생성과 승인·내보내기를 연결합니다.",
+    owner: "루나 · AI Director",
+    checkpoints: [["일간 보고", "오늘의 완료·대기·오류"], ["주간 추이", "비용·품질·생산성"], ["내보내기", "보고서 프롬프트·문서"]],
+  },
+};
 const legend: [Group,string][] = [["working","업무 중"],["meeting","회의 중"],["waiting","승인 대기"],["error","오류 대응"],["done","업무 완료"],["idle","대기·휴식"]];
 const SHOW_EMPLOYEE_MOVEMENT_DEV_PANEL = process.env.NODE_ENV === "development";
 const SHOW_MOCK_EVENT_SCENARIO_PANEL = process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_SHOW_MOCK_EVENT_PANEL === "true";
@@ -357,7 +422,44 @@ function DashboardWorkspace({summary,isLoading,error,onRefresh}:{summary:Dashboa
   return <><section className="stage"><div className="feature-shell dashboard-summary-shell"><header className="dashboard-summary-hero"><div><span>PHASE 1-S</span><h1>오늘의 운영 브리핑</h1><p>{summary?.briefing ?? "업무·승인·Hermes·네이버 임시저장 상태를 rule-based 요약으로 불러오는 중입니다."}</p></div><button onClick={()=>void onRefresh()} disabled={isLoading}>{isLoading?"새로고침 중":"요약 새로고침"}</button></header>{error?<div className="dashboard-summary-error">요약 조회 실패 · {error}</div>:null}<section className="dashboard-briefing-card"><label>대표실 한 줄 판단</label><strong>{summary?.headline ?? "운영 상태를 확인하고 있습니다."}</strong><p>{summary?`생성 시각 ${new Intl.DateTimeFormat("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(new Date(summary.generatedAt))}`:"DB 상태를 읽는 중입니다."}</p></section><div className="dashboard-summary-grid">{cards.map((card)=><DashboardSummaryCardView key={card.id} card={card}/>)}</div><section className="dashboard-schedule"><h2>주식 블로그 운영 일정</h2><div>{summary?.stockBlogSchedule.map((item)=><article key={item.contentType}><strong>{item.scheduledTimeKst}</strong><div><b>{item.label}</b><span>{item.cadence} · {item.objective}</span></div></article>) ?? <p>일정을 불러오는 중입니다.</p>}</div></section></div></section><aside className="panel feature-detail-panel"><div className="feature-panel-tabs"><strong>대표실 요약</strong><span>Rule-based</span></div><div className="panel-body"><div className="feature-card"><label>다음 행동</label>{summary?.nextActions.map((action)=><p key={action}>• {action}</p>) ?? <p>요약 데이터를 불러오면 다음 행동이 표시됩니다.</p>}</div><div className="feature-card muted"><label>정책</label><p>이 요약은 LLM을 호출하지 않고 DB 상태와 운영 규칙만으로 생성됩니다. 비용은 발생하지 않습니다.</p></div></div></aside></>
 }
 function DashboardSummaryCardView({card}:{card:DashboardSummaryCard}){ return <article className={`dashboard-summary-card ${card.severity}`}><label>{card.title}</label><strong>{card.value}</strong><p>{card.description}</p>{card.actionLabel?<span>{card.actionLabel}</span>:null}</article> }
-function PlaceholderWorkspace({label}:{label:string}){ return <><section className="stage"><div className="feature-shell placeholder-feature"><strong>{label}</strong><p>이 메뉴는 Phase 1-B 이후 단계에서 연결됩니다. 현재는 가상 오피스, 업무 보드, 승인함을 우선 검증합니다.</p></div></section><aside className="panel no-selection"><div><b>□</b><strong>{label}</strong><p>아직 상세 패널이 준비되지 않았습니다.</p></div></aside></> }
+function PlaceholderWorkspace({label}:{label:string}){
+  const workspace = placeholderWorkspaces[label] ?? {
+    phase: "준비 단계",
+    description: `${label} 운영 화면을 준비하고 있습니다.`,
+    status: "연결 항목 검토 중",
+    current: "공통 관제 UI와 직원 상태를 사용할 수 있습니다.",
+    next: "실제 데이터 연결 후 상세 화면을 제공합니다.",
+    owner: "BG Company",
+    checkpoints: [["데이터 연결", "실제 운영 데이터"], ["상태 표시", "진행·승인·오류"], ["상세 패널", "결과와 다음 행동"]] as [string,string][],
+  };
+  return <>
+    <section className="stage">
+      <div className="feature-shell placeholder-workspace">
+        <header className="feature-hero placeholder-hero">
+          <div><span>{workspace.phase}</span><h1>{label}</h1><p>{workspace.description}</p></div>
+          <div className="placeholder-status"><i/><strong>{workspace.status}</strong></div>
+        </header>
+        <div className="placeholder-overview-grid">
+          <article><label>현재 연결</label><strong>사용 가능한 운영 정보</strong><p>{workspace.current}</p></article>
+          <article><label>다음 단계</label><strong>우선 구현 항목</strong><p>{workspace.next}</p></article>
+          <article><label>담당 직원</label><strong>{workspace.owner}</strong><p>가상 오피스와 업무 보드의 직원 상태를 기준으로 연결합니다.</p></article>
+        </div>
+        <section className="placeholder-checkpoints">
+          <header><div><span>연결 설계</span><h2>{label}에서 확인하게 될 정보</h2></div><b>3개 모듈</b></header>
+          <div>{workspace.checkpoints.map(([title,description],index)=><article key={title}><span>{String(index+1).padStart(2,"0")}</span><div><strong>{title}</strong><p>{description}</p></div></article>)}</div>
+        </section>
+      </div>
+    </section>
+    <aside className="panel feature-detail-panel placeholder-detail-panel">
+      <div className="feature-panel-tabs"><strong>{label} 요약</strong><span>준비 단계</span></div>
+      <div className="panel-body">
+        <div className="feature-card"><label>운영 목적</label><strong>{workspace.description}</strong></div>
+        <div className="feature-card muted"><label>연결 원칙</label><p>실제 DB·API 데이터가 확인된 항목만 표시하고, 준비되지 않은 기능은 실행 가능한 것처럼 보이지 않게 구분합니다.</p></div>
+        <div className="feature-card"><label>다음 행동</label><strong>{workspace.next}</strong></div>
+      </div>
+    </aside>
+  </>;
+}
 function MockEventScenarioPanel({eventCount,onReset,onRunScenario}:{eventCount:number;onReset:()=>void;onRunScenario:(scenarioId:MockScenarioDefinition["id"])=>void}){ return <div className="mock-event-scenario-panel"><strong>Mock 이벤트</strong>{mockScenarioDefinitions.map((scenario)=><button key={scenario.id} onClick={()=>onRunScenario(scenario.id)}>{scenario.label}</button>)}<button onClick={onReset}>전체 리셋</button><span>{eventCount} events</span></div> }
 function EmployeeMovementDevPanel({
   employees,

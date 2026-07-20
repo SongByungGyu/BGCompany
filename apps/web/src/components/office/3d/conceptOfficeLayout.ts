@@ -15,17 +15,17 @@ import type {
 const rooms: OfficeRoom[] = [
   // Calibrated against hybrid-office-base-v1.png (1672x941). These bounds keep
   // labels, destinations and movement routes on the photographed room geometry.
-  { id: "ceo-office", name: "CEO Office", position: [-10.39, 0, -6.24], size: [5.88, 5.48], color: "#2B303A", wallType: "low" },
-  { id: "director-room", name: "AI Director Desk", position: [-4.74, 0, -6.24], size: [5.39, 5.48], color: "#203A4A", wallType: "low" },
-  { id: "market-analysis-room", name: "Market Analysis Room", position: [0.2, 0, -6.24], size: [4.45, 5.48], color: "#1C354D", wallType: "low" },
-  { id: "content-zone", name: "Content Studio", position: [8.08, 0, -6.24], size: [10.57, 5.48], color: "#263244", wallType: "low" },
-  { id: "knowledge-audit-zone", name: "QA & Audit Room", position: [-10.41, 0, -0.31], size: [5.97, 5.78], color: "#233245", wallType: "low" },
-  { id: "meeting-room", name: "Central Meeting Room", position: [-2.35, 0, -0.31], size: [8.59, 5.78], color: "#22303F", wallType: "glass" },
-  { id: "finance-room", name: "Finance Room", position: [4.63, 0, -0.31], size: [4.69, 5.78], color: "#253748", wallType: "low" },
-  { id: "dev-ops-zone", name: "Dev & Server Room", position: [10.38, 0, -0.31], size: [6.65, 5.78], color: "#312B35", wallType: "low" },
-  { id: "review-zone", name: "Publishing Station", position: [-10.37, 0, 5.87], size: [5.88, 6.18], color: "#1C3B43", wallType: "low" },
-  { id: "approval-zone", name: "Approval Gate", position: [-1.68, 0, 5.87], size: [7.58, 6.18], color: "#433927", wallType: "low" },
-  { id: "break-lounge", name: "Lounge", position: [7.95, 0, 5.87], size: [11.33, 6.18], color: "#2A3637", wallType: "low" },
+  { id: "ceo-office", name: "대표실", position: [-10.39, 0, -6.24], size: [5.88, 5.48], color: "#2B303A", wallType: "low" },
+  { id: "director-room", name: "AI 디렉터실", position: [-4.74, 0, -6.24], size: [5.39, 5.48], color: "#203A4A", wallType: "low" },
+  { id: "market-analysis-room", name: "시장분석실", position: [0.2, 0, -6.24], size: [4.45, 5.48], color: "#1C354D", wallType: "low" },
+  { id: "content-zone", name: "콘텐츠 스튜디오", position: [8.08, 0, -6.24], size: [10.57, 5.48], color: "#263244", wallType: "low" },
+  { id: "knowledge-audit-zone", name: "QA·감사실", position: [-10.41, 0, -0.31], size: [5.97, 5.78], color: "#233245", wallType: "low" },
+  { id: "meeting-room", name: "중앙 회의실", position: [-2.35, 0, -0.31], size: [8.59, 5.78], color: "#22303F", wallType: "glass" },
+  { id: "finance-room", name: "재정실", position: [4.63, 0, -0.31], size: [4.69, 5.78], color: "#253748", wallType: "low" },
+  { id: "dev-ops-zone", name: "개발·서버실", position: [10.38, 0, -0.31], size: [6.65, 5.78], color: "#312B35", wallType: "low" },
+  { id: "review-zone", name: "발행 스테이션", position: [-10.37, 0, 5.87], size: [5.88, 6.18], color: "#1C3B43", wallType: "low" },
+  { id: "approval-zone", name: "승인 게이트", position: [-1.68, 0, 5.87], size: [7.58, 6.18], color: "#433927", wallType: "low" },
+  { id: "break-lounge", name: "라운지", position: [7.95, 0, 5.87], size: [11.33, 6.18], color: "#2A3637", wallType: "low" },
 ];
 
 const northDoorRooms = new Set(["review-zone", "approval-zone", "break-lounge"]);
