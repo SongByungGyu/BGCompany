@@ -51,13 +51,18 @@
 
 /* Stable scroll layout for feature screens */
 .stage{height:100%;min-height:0;overflow:hidden}
-.feature-shell{display:flex;height:100%;min-height:0;flex-direction:column;overflow:hidden}
+.feature-shell{display:flex;height:100%;min-height:0;flex-direction:column;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
 .feature-hero,.feature-toolbar,.content-pipeline-form{flex:0 0 auto}
 .task-board-list,.approval-list{height:auto;min-height:0;flex:1 1 auto;overscroll-behavior:contain;padding:0 4px 14px 0;scrollbar-gutter:stable}
 .content-pipeline-layout{height:auto;min-height:0;flex:1 1 auto;overflow:hidden}
 .content-pipeline-list,.content-pipeline-detail{min-height:0;overflow:auto;scrollbar-gutter:stable;overscroll-behavior:contain}
 .feature-empty{height:auto;min-height:0;flex:1 1 auto}
-.panel{scrollbar-gutter:stable}
+.panel{min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.control-room .feature-shell,.control-room .panel{scrollbar-width:thin;scrollbar-color:#315d7e #071522}
+.control-room .feature-shell::-webkit-scrollbar,.control-room .panel::-webkit-scrollbar{width:10px}
+.control-room .feature-shell::-webkit-scrollbar-track,.control-room .panel::-webkit-scrollbar-track{background:#071522}
+.control-room .feature-shell::-webkit-scrollbar-thumb,.control-room .panel::-webkit-scrollbar-thumb{background:#315d7e;border:2px solid #071522;border-radius:999px}
+.control-room .feature-shell::-webkit-scrollbar-thumb:hover,.control-room .panel::-webkit-scrollbar-thumb:hover{background:#42789f}
 
 .login-screen{display:grid;min-height:100vh;place-items:center;padding:32px;background:radial-gradient(90% 70% at 50% 10%,#eef5ff 0%,#f6f8fc 48%,#e8eef7 100%);color:var(--text);font-family:Pretendard,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 .login-card{width:min(430px,100%);padding:30px;background:#ffffffee;border:1px solid #dfe7f2;border-radius:24px;box-shadow:0 24px 70px #15233d20;backdrop-filter:blur(12px)}
