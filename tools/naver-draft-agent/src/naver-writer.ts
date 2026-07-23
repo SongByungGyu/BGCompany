@@ -790,34 +790,60 @@ async function fillFirstEditorTarget(
   value: string,
   label: string,
 ) {
-  const scopes = [page, ...page.frames()];
+  const normalizedValue = normalizeEditorText(value);
+  if (!normalizedValue) return false;
 
-  for (const scope of scopes) {
-    for (const selector of selectors) {
-      const target = scope.locator(selector).first();
-      if (!(await target.count().catch(() => 0))) continue;
+  const deadline = Date.now() + 30_000;
+  let attempts = 0;
+  let observedTargets = 0;
 
-      await target.click({ timeout: 10000 }).catch(() => undefined);
+  do {
+    attempts += 1;
+    await dismissNaverDraftModal(page).catch(() => undefined);
+    const scopes = [page, ...page.frames().filter((frame) => frame !== page.mainFrame())];
 
-      const normalizedValue = normalizeEditorText(value);
-      const pasted = await pasteTextWithClipboard(page, normalizedValue).catch(() => false);
-      let filled = pasted || await target.fill(normalizedValue, { timeout: 10000 }).then(
-        () => true,
-        () => false,
-      );
+    for (const scope of scopes) {
+      for (const selector of selectors) {
+        const targets = scope.locator(selector);
+        const count = await targets.count().catch(() => 0);
+        observedTargets = Math.max(observedTargets, count);
+        for (let index = 0; index < count; index += 1) {
+          const target = targets.nth(index);
+          const visible = await target.isVisible().catch(() => false);
+          const box = await target.boundingBox().catch(() => null);
+          if (!visible || !box || box.width <= 0 || box.height <= 0 || box.x < -1000) continue;
 
-      if (!filled) {
-        filled = await page.keyboard.insertText(normalizedValue).then(() => true, () => false);
+          const clicked = await target.click({ timeout: 2000 }).then(
+            () => true,
+            () => false,
+          );
+          if (!clicked) continue;
+
+          const pasted = await pasteTextWithClipboard(page, normalizedValue).catch(() => false);
+          let filled = pasted || await target.fill(normalizedValue, { timeout: 3000 }).then(
+            () => true,
+            () => false,
+          );
+
+          if (!filled) {
+            filled = await page.keyboard.insertText(normalizedValue).then(() => true, () => false);
+          }
+
+          if (!filled) continue;
+
+          console.log(`[naver-agent] filled ${label} via ${selector}${pasted ? " (clipboard paste)" : ""} after ${attempts} readiness checks`);
+          return true;
+        }
       }
-
-      if (!filled) continue;
-
-      console.log(`[naver-agent] filled ${label} via ${selector}${pasted ? " (clipboard paste)" : ""}`);
-      return true;
     }
-  }
 
-  console.warn(`[naver-agent] could not find ${label} input target.`);
+    if (Date.now() < deadline) await page.waitForTimeout(300);
+  } while (Date.now() < deadline);
+
+  console.warn(
+    `[naver-agent] could not find or fill ${label} input target after 30 seconds `
+    + `(checks=${attempts}, observed=${observedTargets}, url=${page.url()}, frames=${page.frames().length}).`,
+  );
   return false;
 }
 
