@@ -2220,3 +2220,388 @@
 @media (prefers-reduced-motion: reduce) {
   .control-room .operations-loading i { animation: none; }
 }
+
+/* Phase 2-P.1 · read-only portfolio monitoring */
+.control-room .portfolio-workspace {
+  grid-column: 2 / -1;
+  min-width: 0;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 18px;
+  color: #dbe8f2;
+  background:
+    radial-gradient(circle at 18% 0%, #173c5547, transparent 31%),
+    radial-gradient(circle at 92% 8%, #193f3840, transparent 28%),
+    #071522;
+  scrollbar-width: thin;
+  scrollbar-color: #315d7e #071522;
+}
+.control-room .portfolio-workspace::-webkit-scrollbar { width: 10px; }
+.control-room .portfolio-workspace::-webkit-scrollbar-track { background: #071522; }
+.control-room .portfolio-workspace::-webkit-scrollbar-thumb { background: #315d7e; border: 2px solid #071522; border-radius: 999px; }
+.control-room .portfolio-workspace button,
+.control-room .portfolio-workspace input,
+.control-room .portfolio-workspace select { font: inherit; }
+.control-room .portfolio-workspace button {
+  min-height: 34px;
+  padding: 0 11px;
+  color: #a9bfd0;
+  font-size: 11px;
+  font-weight: 800;
+  background: #10283d;
+  border: 1px solid #31506a;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.control-room .portfolio-workspace button:hover { color: #f0f8fc; border-color: #4e7998; }
+.control-room .portfolio-workspace button:disabled { opacity: .55; cursor: wait; }
+.control-room .portfolio-workspace button.primary {
+  color: #061b22;
+  background: linear-gradient(135deg, #64e2d6, #5cb6e9);
+  border-color: #71ded5;
+  box-shadow: 0 8px 20px #41bdb338;
+}
+.control-room .portfolio-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 21px 22px;
+  background: linear-gradient(145deg, #102c44ee, #0b2236ee);
+  border: 1px solid #31536d;
+  border-radius: 18px;
+  box-shadow: 0 16px 35px #02081255;
+}
+.control-room .portfolio-hero > div:first-child { min-width: 0; }
+.control-room .portfolio-hero span,
+.control-room .portfolio-section > header span {
+  color: #62dcd0;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+.control-room .portfolio-hero h1 { margin: 7px 0 8px; color: #f2f8fc; font-size: clamp(20px, 2vw, 28px); line-height: 1.15; }
+.control-room .portfolio-hero p { max-width: 720px; margin: 0; color: #8fa9bc; font-size: 11px; line-height: 1.55; }
+.control-room .portfolio-hero-actions,
+.control-room .portfolio-section-actions,
+.control-room .portfolio-row-actions { display: flex; align-items: center; gap: 7px; }
+.control-room .portfolio-hero-actions { flex-wrap: wrap; justify-content: flex-end; }
+.control-room .portfolio-hero-actions select,
+.control-room .portfolio-row-actions select {
+  height: 34px;
+  min-width: 150px;
+  padding: 0 30px 0 10px;
+  color: #c9dbe8;
+  background: #091c2c;
+  border: 1px solid #31506a;
+  border-radius: 9px;
+}
+.control-room .portfolio-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+.control-room .portfolio-alert strong { font-size: 11px; }
+.control-room .portfolio-alert span { min-width: 0; flex: 1; font-size: 11px; overflow-wrap: anywhere; }
+.control-room .portfolio-alert button { min-height: 26px; }
+.control-room .portfolio-alert.error { color: #ffc3bb; background: #46251f; border: 1px solid #7a443c; }
+.control-room .portfolio-alert.success { color: #aaf0d8; background: #123b38; border: 1px solid #286a63; }
+.control-room .portfolio-inline-form,
+.control-room .portfolio-holding-form,
+.control-room .portfolio-dividend-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+  padding: 14px;
+  background: #0c2134;
+  border: 1px solid #2b4963;
+  border-radius: 13px;
+}
+.control-room .portfolio-inline-form label,
+.control-room .portfolio-holding-form label,
+.control-room .portfolio-dividend-form label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  color: #8199ad;
+  font-size: 9px;
+  font-weight: 850;
+}
+.control-room .portfolio-inline-form label.wide,
+.control-room .portfolio-holding-form label.wide { grid-column: span 2; }
+.control-room .portfolio-inline-form input,
+.control-room .portfolio-inline-form select,
+.control-room .portfolio-holding-form input,
+.control-room .portfolio-holding-form select,
+.control-room .portfolio-dividend-form input,
+.control-room .portfolio-dividend-form select {
+  width: 100%;
+  height: 34px;
+  min-width: 0;
+  padding: 0 9px;
+  color: #e5eff6;
+  background: #071827;
+  border: 1px solid #29465e;
+  border-radius: 8px;
+  outline: 0;
+}
+.control-room .portfolio-inline-form input:focus,
+.control-room .portfolio-holding-form input:focus,
+.control-room .portfolio-dividend-form input:focus { border-color: #58cfc3; box-shadow: 0 0 0 2px #58cfc31f; }
+.control-room .portfolio-holding-form .portfolio-check { justify-content: center; flex-direction: row; align-items: center; }
+.control-room .portfolio-holding-form .portfolio-check input { width: 14px; height: 14px; }
+.control-room .portfolio-holding-form > div { display: flex; align-items: flex-end; justify-content: flex-end; gap: 7px; }
+.control-room .portfolio-first-step {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 14px;
+  padding: 24px;
+  background: #0c2134;
+  border: 1px dashed #37607c;
+  border-radius: 15px;
+}
+.control-room .portfolio-first-step > b { color: #64ddd1; font-size: 28px; }
+.control-room .portfolio-first-step > div { min-width: 0; flex: 1; }
+.control-room .portfolio-first-step h2 { margin: 0 0 6px; font-size: 16px; }
+.control-room .portfolio-first-step p { margin: 0; color: #829bad; font-size: 11px; }
+.control-room .portfolio-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(130px, 1fr));
+  gap: 9px;
+  margin-top: 12px;
+}
+.control-room .portfolio-summary-card {
+  min-width: 0;
+  min-height: 108px;
+  padding: 14px;
+  background: linear-gradient(145deg, #0e263b, #091d2f);
+  border: 1px solid #294863;
+  border-radius: 13px;
+  box-shadow: 0 10px 24px #02081235;
+}
+.control-room .portfolio-summary-card span { display: block; color: #819aaf; font-size: 9px; font-weight: 850; }
+.control-room .portfolio-summary-card strong {
+  display: block;
+  overflow: hidden;
+  margin-top: 12px;
+  color: #f0f7fb;
+  font-size: clamp(14px, 1.35vw, 20px);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+}
+.control-room .portfolio-summary-card small { display: block; margin-top: 9px; color: #6f899e; font-size: 8.5px; line-height: 1.35; }
+.control-room .portfolio-summary-card.positive { border-color: #286a63; }
+.control-room .portfolio-summary-card.positive strong { color: #71e2c9; }
+.control-room .portfolio-summary-card.negative { border-color: #74443d; }
+.control-room .portfolio-summary-card.negative strong { color: #ff9f91; }
+.control-room .portfolio-section {
+  min-width: 0;
+  margin-top: 12px;
+  padding: 17px;
+  background: linear-gradient(145deg, #0d2336, #091b2c);
+  border: 1px solid #28465f;
+  border-radius: 15px;
+  box-shadow: 0 12px 28px #02081238;
+}
+.control-room .portfolio-section > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid #203c54;
+}
+.control-room .portfolio-section > header > div:first-child { min-width: 0; }
+.control-room .portfolio-section > header h2 { margin: 5px 0 4px; color: #eef6fb; font-size: 16px; }
+.control-room .portfolio-section > header p { margin: 0; color: #778fa3; font-size: 10px; line-height: 1.45; }
+.control-room .portfolio-section > header > b {
+  padding: 5px 8px;
+  color: #9eb4c5;
+  font-size: 9px;
+  background: #102b42;
+  border: 1px solid #2d4d66;
+  border-radius: 999px;
+}
+.control-room .portfolio-table-wrap {
+  max-width: 100%;
+  margin-top: 12px;
+  overflow-x: auto;
+  border: 1px solid #203c54;
+  border-radius: 11px;
+}
+.control-room .portfolio-table-wrap table { width: 100%; min-width: 1420px; border-collapse: collapse; }
+.control-room .portfolio-table-wrap th {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  padding: 9px 10px;
+  color: #7893a8;
+  font-size: 9px;
+  text-align: left;
+  white-space: nowrap;
+  background: #091b2b;
+  border-bottom: 1px solid #29465e;
+}
+.control-room .portfolio-table-wrap th button { min-height: 0; padding: 0; color: inherit; background: none; border: 0; }
+.control-room .portfolio-table-wrap td {
+  padding: 10px;
+  color: #c5d5e1;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  border-bottom: 1px solid #19344a;
+}
+.control-room .portfolio-table-wrap tr:last-child td { border-bottom: 0; }
+.control-room .portfolio-table-wrap tbody tr:hover { background: #10283b; }
+.control-room .portfolio-table-wrap td > strong { display: block; color: #edf5fa; font-size: 11px; }
+.control-room .portfolio-table-wrap td > small { display: block; margin-top: 4px; color: #6f899e; font-size: 8.5px; }
+.control-room .portfolio-table-wrap td.gain { color: #69dfc5; }
+.control-room .portfolio-table-wrap td.loss { color: #ff9d8e; }
+.control-room .portfolio-market { display: inline-grid; min-width: 30px; height: 24px; place-items: center; font-size: 9px; border-radius: 7px; }
+.control-room .portfolio-market.kr { color: #7fe5d5; background: #153c3c; }
+.control-room .portfolio-market.us { color: #9fc9ff; background: #183756; }
+.control-room .portfolio-freshness,
+.control-room .portfolio-dividend-status { display: inline-block; padding: 4px 6px; font-size: 8px; font-weight: 900; border-radius: 999px; }
+.control-room .portfolio-freshness.fresh,
+.control-room .portfolio-dividend-status.confirmed { color: #79e3ca; background: #153a38; }
+.control-room .portfolio-freshness.delayed,
+.control-room .portfolio-dividend-status.announced { color: #acd5ff; background: #193a56; }
+.control-room .portfolio-freshness.stale,
+.control-room .portfolio-dividend-status.estimated { color: #f5ce7f; background: #49391d; }
+.control-room .portfolio-freshness.unavailable,
+.control-room .portfolio-dividend-status.unavailable { color: #ffaca0; background: #4a2823; }
+.control-room .portfolio-dividend-status.historical { color: #9cb0c0; background: #263747; }
+.control-room .portfolio-row-actions button { min-height: 26px; padding: 0 7px; font-size: 8.5px; }
+.control-room .portfolio-row-actions select { min-width: 58px; height: 26px; padding-left: 6px; font-size: 8.5px; }
+.control-room .portfolio-row-actions .danger { color: #ffb0a5; border-color: #6b4039; background: #3c2522; }
+.control-room .portfolio-empty-copy { margin: 12px 0 0; padding: 14px; color: #728ca1; font-size: 10px; text-align: center; background: #091b2b; border: 1px dashed #29465e; border-radius: 10px; }
+.control-room .portfolio-allocation-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.control-room .portfolio-allocation-card { min-width: 0; padding: 13px; background: #091b2b; border: 1px solid #203b52; border-radius: 11px; }
+.control-room .portfolio-allocation-card > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.control-room .portfolio-allocation-card h3 { margin: 0; color: #dce9f2; font-size: 11px; }
+.control-room .portfolio-allocation-card > header span { color: #6e879c; font-size: 8.5px; }
+.control-room .portfolio-bars { display: grid; gap: 10px; margin-top: 13px; }
+.control-room .portfolio-bars > div > div { display: flex; justify-content: space-between; gap: 8px; }
+.control-room .portfolio-bars strong,
+.control-room .portfolio-bars span { overflow: hidden; color: #9cb1c1; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.control-room .portfolio-bars i { display: block; height: 5px; margin-top: 5px; overflow: hidden; background: #19344b; border-radius: 999px; }
+.control-room .portfolio-bars i b { display: block; height: 100%; background: linear-gradient(90deg, #4f91d9, #60dfcf); border-radius: inherit; box-shadow: 0 0 9px #5edccf55; }
+.control-room .portfolio-two-column { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.control-room .portfolio-card-list,
+.control-room .portfolio-risk-list,
+.control-room .portfolio-news-list { display: grid; gap: 8px; margin-top: 12px; }
+.control-room .portfolio-card-list article {
+  padding: 12px;
+  background: #091b2b;
+  border: 1px solid #203b52;
+  border-radius: 10px;
+}
+.control-room .portfolio-card-list article > div { display: flex; justify-content: space-between; gap: 8px; }
+.control-room .portfolio-card-list strong { color: #dfebf3; font-size: 10.5px; }
+.control-room .portfolio-card-list strong small { color: #718a9e; }
+.control-room .portfolio-card-list p { margin: 7px 0; color: #7f98aa; font-size: 9px; }
+.control-room .portfolio-card-list article > b { color: #69dfc8; font-size: 12px; }
+.control-room .portfolio-card-list article > a,
+.control-room .portfolio-card-list article > small { display: block; margin-top: 7px; color: #7ca8ca; font-size: 8.5px; text-decoration: none; overflow-wrap: anywhere; }
+.control-room .portfolio-risk-list article { display: grid; grid-template-columns: 8px minmax(0, 1fr); gap: 10px; padding: 11px; background: #091b2b; border: 1px solid #203b52; border-radius: 10px; }
+.control-room .portfolio-risk-list article > i { width: 7px; height: 7px; margin-top: 3px; background: #78a4c5; border-radius: 50%; box-shadow: 0 0 9px #78a4c5; }
+.control-room .portfolio-risk-list article.warning { border-color: #6a532e; }
+.control-room .portfolio-risk-list article.warning > i { background: #efc15f; box-shadow: 0 0 9px #efc15f; }
+.control-room .portfolio-risk-list article.high { border-color: #75443c; }
+.control-room .portfolio-risk-list article.high > i { background: #ff8878; box-shadow: 0 0 9px #ff8878; }
+.control-room .portfolio-risk-list strong { color: #dce9f2; font-size: 10.5px; }
+.control-room .portfolio-risk-list p { margin: 5px 0; color: #829aac; font-size: 9px; line-height: 1.55; }
+.control-room .portfolio-risk-list small { color: #607b91; font-size: 8px; }
+.control-room .portfolio-news-list a {
+  display: block;
+  min-width: 0;
+  padding: 11px;
+  color: inherit;
+  text-decoration: none;
+  background: #091b2b;
+  border: 1px solid #203b52;
+  border-radius: 10px;
+}
+.control-room .portfolio-news-list a:hover { background: #102a40; border-color: #3e6683; }
+.control-room .portfolio-news-list span { color: #5fd8cc; font-size: 8px; font-weight: 900; }
+.control-room .portfolio-news-list strong { display: block; margin-top: 5px; overflow: hidden; color: #dce9f2; font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+.control-room .portfolio-news-list p { display: -webkit-box; margin: 5px 0; overflow: hidden; color: #7f98aa; font-size: 9px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.control-room .portfolio-news-list small { color: #69849a; font-size: 8.5px; }
+.control-room .portfolio-briefing blockquote {
+  margin: 13px 0 0;
+  padding: 17px;
+  color: #dbe9f2;
+  font-size: 12px;
+  line-height: 1.8;
+  background: linear-gradient(145deg, #102b42, #0a1d2e);
+  border: 1px solid #31516a;
+  border-left: 3px solid #5cd9cc;
+  border-radius: 11px;
+}
+.control-room .portfolio-quality { margin-top: 10px; padding: 12px; background: #091b2b; border: 1px solid #203b52; border-radius: 10px; }
+.control-room .portfolio-quality strong { color: #a9c0d0; font-size: 9.5px; }
+.control-room .portfolio-quality p,
+.control-room .portfolio-quality ul { margin: 7px 0 0; color: #718b9f; font-size: 9px; line-height: 1.55; }
+.control-room .portfolio-team > div { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.control-room .portfolio-team article { display: flex; min-width: 0; align-items: center; gap: 9px; padding: 11px; background: #091b2b; border: 1px solid #203b52; border-radius: 10px; }
+.control-room .portfolio-team article > b { color: #58d8cd; font-size: 15px; }
+.control-room .portfolio-team article > div { min-width: 0; flex: 1; }
+.control-room .portfolio-team article strong { display: block; overflow: hidden; color: #dbe8f1; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.control-room .portfolio-team article p { margin: 4px 0 0; color: #6f899e; font-size: 8px; line-height: 1.35; }
+.control-room .portfolio-team article > span { color: #7790a4; font-size: 8px; }
+.control-room .portfolio-loading,
+.control-room .portfolio-disabled {
+  grid-column: 2 / -1;
+  display: grid;
+  height: 100%;
+  place-content: center;
+  gap: 12px;
+  padding: 30px;
+  color: #a9bfce;
+  text-align: center;
+  background: #071522;
+}
+.control-room .portfolio-loading i { width: 28px; height: 28px; margin: auto; border: 3px solid #25445c; border-top-color: #5edbcf; border-radius: 50%; animation: operations-spin .8s linear infinite; }
+.control-room .portfolio-disabled span { color: #5cd9cd; font-size: 10px; font-weight: 900; letter-spacing: .14em; }
+.control-room .portfolio-disabled h1 { margin: 0; color: #f0f7fb; font-size: 28px; }
+.control-room .portfolio-disabled p { margin: 0; font-size: 12px; }
+.control-room .portfolio-disabled div { display: grid; gap: 8px; padding: 18px; background: #0c2134; border: 1px solid #2c4d66; border-radius: 13px; }
+.control-room .portfolio-disabled code { color: #73dfd2; }
+.control-room .portfolio-disabled small { color: #6e899d; }
+
+@media (max-width: 1500px) {
+  .control-room .portfolio-summary-grid { grid-template-columns: repeat(4, minmax(140px, 1fr)); }
+  .control-room .portfolio-allocation-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .control-room .portfolio-team > div { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 1050px) {
+  .control-room .portfolio-hero { flex-direction: column; }
+  .control-room .portfolio-hero-actions { justify-content: flex-start; }
+  .control-room .portfolio-summary-grid,
+  .control-room .portfolio-two-column { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .control-room .portfolio-inline-form,
+  .control-room .portfolio-holding-form,
+  .control-room .portfolio-dividend-form { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+}
+@media (max-width: 720px) {
+  .control-room .portfolio-workspace { padding: 10px; }
+  .control-room .portfolio-summary-grid,
+  .control-room .portfolio-two-column,
+  .control-room .portfolio-allocation-grid,
+  .control-room .portfolio-team > div { grid-template-columns: 1fr; }
+  .control-room .portfolio-section > header { flex-direction: column; }
+  .control-room .portfolio-section-actions { flex-wrap: wrap; }
+  .control-room .portfolio-inline-form,
+  .control-room .portfolio-holding-form,
+  .control-room .portfolio-dividend-form { grid-template-columns: 1fr; }
+  .control-room .portfolio-inline-form label.wide,
+  .control-room .portfolio-holding-form label.wide { grid-column: auto; }
+}

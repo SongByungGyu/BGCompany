@@ -14,6 +14,7 @@ import { WorkBoardView } from "@/features/work-board/WorkBoardView";
 import { ApprovalInboxView } from "@/features/approvals/ApprovalInboxView";
 import { ContentPipelineView } from "@/features/content-pipeline/ContentPipelineView";
 import { OperationsWorkspaceView } from "@/features/operations/OperationsWorkspaceView";
+import { PortfolioView } from "@/features/portfolio/PortfolioView";
 import { fetchOperationsOverview } from "@/features/operations/api";
 import type { DashboardEmployeeActivity, DashboardSummary, DashboardSummaryCard } from "@/lib/dashboard-summary/summary-types";
 import type { OperationsOverview } from "@/lib/operations/operations-overview-types";
@@ -437,6 +438,8 @@ export default function Home() {
         <OperationsWorkspaceView scope="development"/>
       ) : activeNav==="재정" ? (
         <OperationsWorkspaceView scope="finance"/>
+      ) : activeNav==="주식" ? (
+        <PortfolioView/>
       ) : (
         <PlaceholderWorkspace label={activeNav}/>
       )}
