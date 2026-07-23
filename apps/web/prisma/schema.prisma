@@ -210,7 +210,7 @@ model PortfolioAccount {
   reports        PortfolioReport[]
   holdingChanges PortfolioHoldingChange[]
 
-  @@unique([source, externalAccountRef])
+  @@index([source, externalAccountRef])
   @@index([isActive])
   @@index([createdAt])
 }
