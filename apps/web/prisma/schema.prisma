@@ -7,7 +7,7 @@ datasource db {
 }
 
 model Employee {
-  id              String    @id
+  id              String   @id
   displayName     String
   initial         String
   department      String
@@ -16,14 +16,14 @@ model Employee {
   currentTaskId   String?
   currentLocation String?
   model           String?
-  currentCost     Decimal?  @db.Decimal(10, 4)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  currentCost     Decimal? @db.Decimal(10, 4)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  tasks           Task[]
-  approvals       ApprovalRequest[]
-  events          EventLog[]
-  agentRuns       AgentRun[]
+  tasks     Task[]
+  approvals ApprovalRequest[]
+  events    EventLog[]
+  agentRuns AgentRun[]
 
   @@index([status])
   @@index([department])
@@ -48,10 +48,10 @@ model Task {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  assignedEmployee   Employee? @relation(fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
-  approvals          ApprovalRequest[]
-  events             EventLog[]
-  agentRuns          AgentRun[]
+  assignedEmployee Employee?         @relation(fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
+  approvals        ApprovalRequest[]
+  events           EventLog[]
+  agentRuns        AgentRun[]
 
   @@index([status])
   @@index([department])
@@ -76,9 +76,9 @@ model ApprovalRequest {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  requestedBy           Employee  @relation(fields: [requestedByEmployeeId], references: [id], onDelete: Cascade)
-  task                  Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  events                EventLog[]
+  requestedBy Employee   @relation(fields: [requestedByEmployeeId], references: [id], onDelete: Cascade)
+  task        Task?      @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  events      EventLog[]
 
   @@index([status])
   @@index([requestedByEmployeeId])
@@ -86,19 +86,19 @@ model ApprovalRequest {
 }
 
 model EventLog {
-  id          String    @id
-  type        String
-  timestamp   DateTime  @default(now())
-  employeeId  String?
-  taskId      String?
-  approvalId  String?
-  payload     Json
-  summary     String?
+  id         String   @id
+  type       String
+  timestamp  DateTime @default(now())
+  employeeId String?
+  taskId     String?
+  approvalId String?
+  payload    Json
+  summary    String?
 
-  employee    Employee?        @relation(fields: [employeeId], references: [id], onDelete: SetNull)
-  task        Task?            @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  approval    ApprovalRequest? @relation(fields: [approvalId], references: [id], onDelete: SetNull)
-  timelines   Timeline[]
+  employee  Employee?        @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  task      Task?            @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  approval  ApprovalRequest? @relation(fields: [approvalId], references: [id], onDelete: SetNull)
+  timelines Timeline[]
 
   @@index([type])
   @@index([timestamp])
@@ -108,15 +108,15 @@ model EventLog {
 }
 
 model Timeline {
-  id          String    @id
+  id          String   @id
   targetType  String
   targetId    String
   eventId     String?
   title       String
   description String?
-  timestamp   DateTime  @default(now())
+  timestamp   DateTime @default(now())
 
-  event       EventLog? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  event EventLog? @relation(fields: [eventId], references: [id], onDelete: SetNull)
 
   @@index([targetType, targetId])
   @@index([timestamp])
@@ -138,8 +138,8 @@ model AgentRun {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  task          Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  task     Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([taskId])
   @@index([employeeId])
@@ -148,40 +148,39 @@ model AgentRun {
   @@index([hermesJobId])
 }
 
-
 model NaverDraftJob {
-  id                 String    @id @default(cuid())
-  contentPipelineId  String?
-  stockBlogContentId String?
-  approvalId         String?
-  status             String
-  title              String
-  body               String
-  markdownBody       String?
-  htmlBody           String?
-  tags               String[]
-  category           String?
-  thumbnailText      String?
-  thumbnailPrompt    String?
-  disclaimer         String?
-  externalUrl        String?
-  allowPublish       Boolean   @default(false)
-  publishKey         String?   @unique
-  marketDate         String?
-  scheduleSlot       String?
-  publishedAt        DateTime?
-  publishedUrl       String?
-  naverPostId        String?
-  publishAttemptCount Int      @default(0)
-  publishMethod      String?
-  errorCode          String?
-  errorMessage       String?
-  claimedBy          String?
-  claimedAt          DateTime?
-  startedAt          DateTime?
-  completedAt        DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  id                  String    @id @default(cuid())
+  contentPipelineId   String?
+  stockBlogContentId  String?
+  approvalId          String?
+  status              String
+  title               String
+  body                String
+  markdownBody        String?
+  htmlBody            String?
+  tags                String[]
+  category            String?
+  thumbnailText       String?
+  thumbnailPrompt     String?
+  disclaimer          String?
+  externalUrl         String?
+  allowPublish        Boolean   @default(false)
+  publishKey          String?   @unique
+  marketDate          String?
+  scheduleSlot        String?
+  publishedAt         DateTime?
+  publishedUrl        String?
+  naverPostId         String?
+  publishAttemptCount Int       @default(0)
+  publishMethod       String?
+  errorCode           String?
+  errorMessage        String?
+  claimedBy           String?
+  claimedAt           DateTime?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@index([status])
   @@index([contentPipelineId])
@@ -189,4 +188,177 @@ model NaverDraftJob {
   @@index([approvalId])
   @@index([claimedBy])
   @@index([createdAt])
+}
+
+model PortfolioAccount {
+  id           String   @id @default(cuid())
+  name         String
+  baseCurrency String   @default("KRW")
+  description  String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  holdings       PortfolioHolding[]
+  valuations     PortfolioValuationSnapshot[]
+  riskSignals    PortfolioRiskSignal[]
+  reports        PortfolioReport[]
+  holdingChanges PortfolioHoldingChange[]
+
+  @@index([isActive])
+  @@index([createdAt])
+}
+
+model PortfolioHolding {
+  id                      String   @id @default(cuid())
+  portfolioAccountId      String
+  market                  String
+  symbol                  String
+  name                    String
+  assetType               String
+  quantity                Decimal  @db.Decimal(28, 8)
+  averagePrice            Decimal  @db.Decimal(28, 8)
+  currency                String
+  sector                  String
+  note                    String?
+  dividendTrackingEnabled Boolean  @default(false)
+  isActive                Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  portfolioAccount PortfolioAccount         @relation(fields: [portfolioAccountId], references: [id], onDelete: Restrict)
+  riskSignals      PortfolioRiskSignal[]
+  changes          PortfolioHoldingChange[]
+
+  @@unique([portfolioAccountId, market, symbol])
+  @@index([portfolioAccountId, isActive])
+  @@index([market, symbol])
+}
+
+model PortfolioHoldingChange {
+  id                 String   @id @default(cuid())
+  portfolioAccountId String
+  holdingId          String
+  changeType         String
+  before             Json?
+  after              Json
+  createdAt          DateTime @default(now())
+
+  portfolioAccount PortfolioAccount @relation(fields: [portfolioAccountId], references: [id], onDelete: Restrict)
+  holding          PortfolioHolding @relation(fields: [holdingId], references: [id], onDelete: Restrict)
+
+  @@index([holdingId, createdAt])
+  @@index([portfolioAccountId, createdAt])
+}
+
+model PortfolioPriceSnapshot {
+  id                  String   @id @default(cuid())
+  market              String
+  symbol              String
+  price               Decimal  @db.Decimal(28, 8)
+  currency            String
+  change              Decimal? @db.Decimal(28, 8)
+  changePercent       Decimal? @db.Decimal(12, 6)
+  weeklyChangePercent Decimal? @db.Decimal(12, 6)
+  marketDate          DateTime
+  observedAt          DateTime
+  collectedAt         DateTime @default(now())
+  provider            String
+  sourceUrl           String?
+  freshnessStatus     String
+
+  @@index([market, symbol, collectedAt])
+  @@index([freshnessStatus])
+}
+
+model PortfolioValuationSnapshot {
+  id                 String   @id @default(cuid())
+  portfolioAccountId String
+  evaluatedAt        DateTime @default(now())
+  baseCurrency       String
+  totalMarketValue   Decimal  @db.Decimal(28, 8)
+  totalCostBasis     Decimal  @db.Decimal(28, 8)
+  totalProfitLoss    Decimal  @db.Decimal(28, 8)
+  totalReturnPercent Decimal  @db.Decimal(12, 6)
+  exchangeRate       Decimal? @db.Decimal(18, 8)
+  dataQuality        String
+  missingItems       Json
+
+  portfolioAccount PortfolioAccount @relation(fields: [portfolioAccountId], references: [id], onDelete: Restrict)
+
+  @@index([portfolioAccountId, evaluatedAt])
+}
+
+model DividendEvent {
+  id             String    @id @default(cuid())
+  market         String
+  symbol         String
+  dividendType   String
+  amountPerShare Decimal?  @db.Decimal(28, 8)
+  currency       String
+  exDividendDate DateTime?
+  recordDate     DateTime?
+  paymentDate    DateTime?
+  status         String
+  sourceName     String?
+  sourceUrl      String?
+  dataQuality    String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([market, symbol, exDividendDate])
+  @@index([status])
+}
+
+model PortfolioNewsReference {
+  id             String   @id @default(cuid())
+  market         String
+  symbol         String
+  title          String
+  sourceName     String
+  url            String   @unique
+  publishedAt    DateTime
+  summary        String?
+  riskCategory   String?
+  relevanceScore Decimal? @db.Decimal(6, 5)
+  collectedAt    DateTime @default(now())
+
+  @@index([market, symbol, publishedAt])
+  @@index([riskCategory])
+}
+
+model PortfolioRiskSignal {
+  id                 String    @id @default(cuid())
+  portfolioAccountId String
+  holdingId          String?
+  type               String
+  severity           String
+  title              String
+  message            String
+  detectedAt         DateTime  @default(now())
+  resolvedAt         DateTime?
+
+  portfolioAccount PortfolioAccount  @relation(fields: [portfolioAccountId], references: [id], onDelete: Restrict)
+  holding          PortfolioHolding? @relation(fields: [holdingId], references: [id], onDelete: SetNull)
+
+  @@index([portfolioAccountId, resolvedAt])
+  @@index([holdingId])
+  @@index([severity])
+}
+
+model PortfolioReport {
+  id                 String   @id @default(cuid())
+  portfolioAccountId String
+  reportType         String
+  reportDate         DateTime
+  summary            String
+  body               String
+  dataQuality        String
+  status             String
+  createdAt          DateTime @default(now())
+
+  portfolioAccount PortfolioAccount @relation(fields: [portfolioAccountId], references: [id], onDelete: Restrict)
+
+  @@index([portfolioAccountId, reportDate])
+  @@index([reportType, status])
 }

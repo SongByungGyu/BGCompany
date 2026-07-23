@@ -5,7 +5,7 @@ import { collectMarketSnapshot } from "./market-snapshot-provider";
 import { dedupeReferenceItems, normalizeReferenceItem, sourceNameFromUrl, stripHtml, summarizeReferenceItems } from "./reference-normalizer";
 import type { CompetitorBlogReference, ReferenceAdapter, ReferenceBundle, ReferenceItem, ReferenceSearchInput } from "./reference-types";
 
-type NaverNewsItem = {
+export type NaverNewsItem = {
   title?: string;
   originallink?: string;
   link?: string;
@@ -84,6 +84,14 @@ async function searchNaver<T>(kind: "news" | "blog", query: string, clientId: st
   if (!response.ok) return [] as T[];
   const data = await response.json() as { items?: T[] };
   return data.items ?? [];
+}
+
+export async function searchNaverNewsReferences(query: string, display = 5) {
+  const enabled = process.env.PORTFOLIO_NEWS_ENABLED === "true";
+  const clientId = process.env.NAVER_SEARCH_CLIENT_ID?.trim();
+  const clientSecret = process.env.NAVER_SEARCH_CLIENT_SECRET?.trim();
+  if (!enabled || !clientId || !clientSecret) return [];
+  return searchNaver<NaverNewsItem>("news", query, clientId, clientSecret, Math.max(1, Math.min(display, 5)));
 }
 
 function disabledBundle(input: ReferenceSearchInput, queries: string[], enabled: boolean): Promise<ReferenceBundle> {
