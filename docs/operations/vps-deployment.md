@@ -134,3 +134,30 @@ API 보호 정책:
 - 공개: `/api/auth/*`, `/api/health`
 
 secret 원문은 로그나 문서에 남기지 않습니다.
+
+## OpenAI 실제 비용·사용량 연동
+
+재정 화면은 DB Seed의 `Task.cost`나 `Employee.currentCost`를 비용으로 간주하지 않습니다. 서버가 OpenAI 조직의 공식 Costs API와 Usage API를 읽어 이번 달·최근 7일·오늘 비용, 요청 수, 토큰 수를 표시합니다.
+
+OpenAI Platform에서 Organization Owner 권한으로 Admin Key를 발급한 뒤 VPS의 `/opt/bg-company/.env`에만 설정합니다.
+
+```env
+OPENAI_ADMIN_KEY=<OpenAI organization admin key>
+OPENAI_COST_PROJECT_IDS=
+OPENAI_FINANCE_TIMEOUT_MS=15000
+OPENAI_FINANCE_CACHE_MS=300000
+```
+
+운영 규칙:
+
+- 일반 `OPENAI_API_KEY`는 모델 실행용이며 Admin Key를 대신할 수 없습니다.
+- `OPENAI_ADMIN_KEY`는 서버 전용이며 API 응답, 브라우저 번들, 로그에 원문을 노출하지 않습니다.
+- `OPENAI_COST_PROJECT_IDS`를 비우면 조직 전체를 집계하고, 필요하면 쉼표로 구분한 project id만 조회합니다.
+- 공식 비용 집계는 사용 직후 지연될 수 있으므로 5분 캐시를 적용합니다.
+- 키가 없거나 권한이 부족하면 금액을 추정하지 않고 재정 화면에 연결 필요 상태를 표시합니다.
+
+환경변수 적용 후 web 컨테이너만 재생성합니다.
+
+```bash
+docker compose up -d --build web
+```

@@ -14,7 +14,9 @@ import { WorkBoardView } from "@/features/work-board/WorkBoardView";
 import { ApprovalInboxView } from "@/features/approvals/ApprovalInboxView";
 import { ContentPipelineView } from "@/features/content-pipeline/ContentPipelineView";
 import { OperationsWorkspaceView } from "@/features/operations/OperationsWorkspaceView";
-import type { DashboardSummary, DashboardSummaryCard } from "@/lib/dashboard-summary/summary-types";
+import { fetchOperationsOverview } from "@/features/operations/api";
+import type { DashboardEmployeeActivity, DashboardSummary, DashboardSummaryCard } from "@/lib/dashboard-summary/summary-types";
+import type { OperationsOverview } from "@/lib/operations/operations-overview-types";
 
 const OfficeCanvas = dynamic(
   () => import("@/components/office/3d/OfficeCanvas"),
@@ -43,16 +45,16 @@ type PlaceholderWorkspaceConfig = {
 declare global { interface Window { __bgSetView?: (view: View) => void } }
 
 const initialEmployees: Employee[] = [
-  { id:"ceo",name:"병규",initial:"병",department:"대표실",role:"대표",status:"대기 중",group:"idle",task:"회사 전체 운영 현황 확인",progress:0,started:"09:00",model:"Human Director",cost:"$0.00",output:"대표 의사결정 보드",outputMeta:"실시간 동기화",next:"승인 및 운영 판단" },
-  { id:"director",name:"루나",initial:"루",department:"대표실",role:"AI Director",status:"대기 중",group:"idle",task:"전체 회사 업무 현황 대기",progress:0,started:"09:00",model:"Claude Opus 4.6",cost:"$0.74",output:"오전 경영 브리핑",outputMeta:"09:30 저장됨",next:"다음 경영 판단 대기" },
-  { id:"content-planner",name:"미나",initial:"미",department:"콘텐츠팀",role:"콘텐츠 기획",status:"업무 중",group:"working",task:"주식시장 브리핑 기획",progress:68,started:"13:50",model:"Claude Opus 4.6",cost:"$0.82",output:"기획안 v2",outputMeta:"14:21 저장됨",next:"제목 A/B안 생성" },
-  { id:"marketing-manager",name:"카이",initial:"카",department:"콘텐츠팀",role:"마케팅 검토",status:"승인 대기",group:"waiting",task:"콘텐츠 제목·썸네일 검토",progress:100,started:"13:35",model:"Claude Opus 4.6",cost:"$0.61",output:"마케팅 검토안",outputMeta:"승인 대기",next:"대표 승인 필요" },
-  { id:"content-writer",name:"지아",initial:"지",department:"콘텐츠팀",role:"콘텐츠 작가",status:"업무 중",group:"working",task:"네이버 블로그 본문 작성",progress:47,started:"13:55",model:"GPT-5.4 mini",cost:"$0.34",output:"게시용 본문 초안",outputMeta:"작성 중",next:"QA 검토 요청" },
-  { id:"qa-auditor",name:"윤아",initial:"윤",department:"지식·감사",role:"QA 감사",status:"회의 중",group:"meeting",task:"콘텐츠 품질 기준 검토",progress:76,started:"13:20",model:"Claude Opus 4.6",cost:"$0.69",output:"QA 체크리스트 v3",outputMeta:"14:05 저장됨",next:"품질 오차 보고" },
-  { id:"finance-manager",name:"도윤",initial:"도",department:"재정팀",role:"재정 관리",status:"업무 중",group:"working",task:"운영비 정산 및 현금흐름 검토",progress:54,started:"13:42",model:"GPT-5.1",cost:"$0.58",output:"주간 비용 요약",outputMeta:"14:18 저장됨",next:"비용 이상치 검토" },
-  { id:"stock-monitor",name:"서준",initial:"서",department:"주식팀",role:"시장 분석",status:"조사 중",group:"waiting",task:"한국·미국 시장 데이터 모니터링",progress:42,started:"13:28",model:"Claude Sonnet 4.6",cost:"$0.37",output:"시장 변동 리포트",outputMeta:"14:12 저장됨",next:"대표 보고 준비" },
-  { id:"developer",name:"준범",initial:"준",department:"개발팀",role:"개발·서버",status:"오류 대응 중",group:"error",task:"배포 파이프라인 및 서버 점검",progress:30,started:"14:18",model:"GPT-5.1 Codex",cost:"$0.46",output:"에러 로그 분석",outputMeta:"14:24 진행 중",next:"핫픽스 PR 생성",error:"빌드 단계 exit code 1 · 14:21 감지, 자동 재시도 1회 실패." },
-  { id:"local-publisher",name:"Local Agent",initial:"N",department:"게시 운영",role:"네이버 게시 에이전트",status:"대기 중",group:"idle",task:"네이버 임시저장 작업 대기",progress:0,started:"상시",model:"Local Playwright",cost:"$0.00",output:"Draft Job Queue",outputMeta:"연결 대기",next:"승인된 글 임시저장" },
+  { id:"ceo",name:"병규",initial:"병",department:"대표실",role:"대표",status:"대기 중",group:"idle",task:"회사 전체 운영 현황 확인",progress:0,started:"09:00",model:"Human Director",cost:"미집계",output:"대표 의사결정 보드",outputMeta:"실시간 동기화",next:"승인 및 운영 판단" },
+  { id:"director",name:"루나",initial:"루",department:"대표실",role:"AI Director",status:"대기 중",group:"idle",task:"전체 회사 업무 현황 대기",progress:0,started:"09:00",model:"Claude Opus 4.6",cost:"미집계",output:"오전 경영 브리핑",outputMeta:"09:30 저장됨",next:"다음 경영 판단 대기" },
+  { id:"content-planner",name:"미나",initial:"미",department:"콘텐츠팀",role:"콘텐츠 기획",status:"업무 중",group:"working",task:"주식시장 브리핑 기획",progress:68,started:"13:50",model:"Claude Opus 4.6",cost:"미집계",output:"기획안 v2",outputMeta:"14:21 저장됨",next:"제목 A/B안 생성" },
+  { id:"marketing-manager",name:"카이",initial:"카",department:"콘텐츠팀",role:"마케팅 검토",status:"승인 대기",group:"waiting",task:"콘텐츠 제목·썸네일 검토",progress:100,started:"13:35",model:"Claude Opus 4.6",cost:"미집계",output:"마케팅 검토안",outputMeta:"승인 대기",next:"대표 승인 필요" },
+  { id:"content-writer",name:"지아",initial:"지",department:"콘텐츠팀",role:"콘텐츠 작가",status:"업무 중",group:"working",task:"네이버 블로그 본문 작성",progress:47,started:"13:55",model:"GPT-5.4 mini",cost:"미집계",output:"게시용 본문 초안",outputMeta:"작성 중",next:"QA 검토 요청" },
+  { id:"qa-auditor",name:"윤아",initial:"윤",department:"지식·감사",role:"QA 감사",status:"회의 중",group:"meeting",task:"콘텐츠 품질 기준 검토",progress:76,started:"13:20",model:"Claude Opus 4.6",cost:"미집계",output:"QA 체크리스트 v3",outputMeta:"14:05 저장됨",next:"품질 오차 보고" },
+  { id:"finance-manager",name:"도윤",initial:"도",department:"재정팀",role:"재정 관리",status:"업무 중",group:"working",task:"운영비 정산 및 현금흐름 검토",progress:54,started:"13:42",model:"GPT-5.1",cost:"미집계",output:"주간 비용 요약",outputMeta:"14:18 저장됨",next:"비용 이상치 검토" },
+  { id:"stock-monitor",name:"서준",initial:"서",department:"주식팀",role:"시장 분석",status:"조사 중",group:"waiting",task:"한국·미국 시장 데이터 모니터링",progress:42,started:"13:28",model:"Claude Sonnet 4.6",cost:"미집계",output:"시장 변동 리포트",outputMeta:"14:12 저장됨",next:"대표 보고 준비" },
+  { id:"developer",name:"준범",initial:"준",department:"개발팀",role:"개발·서버",status:"오류 대응 중",group:"error",task:"배포 파이프라인 및 서버 점검",progress:30,started:"14:18",model:"GPT-5.1 Codex",cost:"미집계",output:"에러 로그 분석",outputMeta:"14:24 진행 중",next:"핫픽스 PR 생성",error:"빌드 단계 exit code 1 · 14:21 감지, 자동 재시도 1회 실패." },
+  { id:"local-publisher",name:"Local Agent",initial:"N",department:"게시 운영",role:"네이버 게시 에이전트",status:"대기 중",group:"idle",task:"네이버 임시저장 작업 대기",progress:0,started:"상시",model:"Local Playwright",cost:"미집계",output:"Draft Job Queue",outputMeta:"연결 대기",next:"승인된 글 임시저장" },
 ];
 
 const employeeProfileOverrides: Partial<Record<string, Pick<Employee, "name" | "initial" | "role">>> = {
@@ -133,13 +135,6 @@ function isEmployeeStatus(value: string): value is EmployeeStatus {
   return value in statusGroupMap;
 }
 
-function formatEmployeeCost(value: string | null, fallback: string) {
-  if (!value) return fallback;
-  if (value.startsWith("$")) return value;
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? `$${numeric.toFixed(2)}` : value;
-}
-
 function mergeEmployeeRecords(currentEmployees: Employee[], records: EmployeeRecord[]) {
   const recordsById = new Map(records.map((record) => [record.id, record]));
   let changed = false;
@@ -157,7 +152,7 @@ function mergeEmployeeRecords(currentEmployees: Employee[], records: EmployeeRec
       status,
       group: statusGroupMap[status],
       model: record.model ?? employee.model,
-      cost: formatEmployeeCost(record.currentCost, employee.cost),
+      cost: "미집계",
     };
     if (
       nextEmployee.name === employee.name
@@ -201,6 +196,7 @@ export default function Home() {
   const [dashboardSummary,setDashboardSummary] = useState<DashboardSummary | null>(null);
   const [dashboardSummaryLoading,setDashboardSummaryLoading] = useState(false);
   const [dashboardSummaryError,setDashboardSummaryError] = useState<string | null>(null);
+  const [financeSummary,setFinanceSummary] = useState<OperationsOverview["finance"] | null>(null);
   const [clock,setClock] = useState("");
   const [employees,setEmployees] = useState(initialEmployees);
   const [eventLog,setEventLog] = useState<BGCompanyEvent[]>([]);
@@ -241,6 +237,24 @@ export default function Home() {
       window.clearInterval(intervalId);
     };
   }, [activeNav, refreshDashboardSummary]);
+  const refreshFinanceSummary = useCallback(async () => {
+    try {
+      const overview = await fetchOperationsOverview();
+      setFinanceSummary(overview.finance);
+      return overview.finance;
+    } catch (error) {
+      console.warn("[BG Company] failed to refresh official finance summary", error);
+      return null;
+    }
+  }, []);
+  useEffect(() => {
+    const initialTimer = window.setTimeout(() => void refreshFinanceSummary(), 0);
+    const intervalId = window.setInterval(() => void refreshFinanceSummary(), 300_000);
+    return () => {
+      window.clearTimeout(initialTimer);
+      window.clearInterval(intervalId);
+    };
+  }, [refreshFinanceSummary]);
   const selectIndexById = useCallback((employeeId: string) => {
     const index = employees.findIndex((employee) => employee.id === employeeId);
     if (index >= 0) setSelected(index);
@@ -285,7 +299,14 @@ export default function Home() {
     };
   }, [activeNav, refreshEmployeesFromDb]);
   const current=employees[selected], approvals=employees.filter(e=>e.status==="승인 대기").length, errors=employees.filter(e=>e.group==="error").length, working=employees.filter(e=>["working","meeting"].includes(e.group)).length;
-  const kpis=useMemo(()=>[["업무 중",String(working),""],["진행 중 업무","12",""],["승인 대기",String(approvals),"waiting"],["오류",String(errors),"error"],["오늘 AI 비용","$4.20",""],["이번 달","$86.40",""]],[approvals,errors,working]);
+  const financeValue = useCallback((value: number | null) => {
+    if (financeSummary?.providerStatus === "setup_required") return "키 연결 필요";
+    if (financeSummary?.providerStatus === "forbidden") return "권한 확인";
+    if (financeSummary?.providerStatus && financeSummary.providerStatus !== "connected") return "조회 지연";
+    if (value === null || value === undefined) return "—";
+    return `$${value.toFixed(value > 0 && value < 0.01 ? 4 : 2)}`;
+  }, [financeSummary]);
+  const kpis=useMemo(()=>[["업무 중",String(working),""],["진행 중 업무","12",""],["승인 대기",String(approvals),"waiting"],["오류",String(errors),"error"],["오늘 OpenAI",financeValue(financeSummary?.costs.todayUsd ?? null),financeSummary?.providerStatus === "connected" ? "" : "waiting"],["이번 달 실비",financeValue(financeSummary?.costs.monthUsd ?? null),financeSummary?.providerStatus === "forbidden" ? "error" : financeSummary?.providerStatus === "connected" ? "" : "waiting"]],[approvals,errors,financeSummary,financeValue,working]);
   const choose=useCallback((i:number)=>{ if(selected===i&&view!=="unselected"){setView("unselected");return} setSelected(i);setTab("summary");setView(employees[i].status==="승인 대기"?"approval":employees[i].group==="error"?"error":"selected"); },[employees,selected,view]);
   const chooseEmployeeById = useCallback((employeeId: string) => {
     const index = employees.findIndex((employee) => employee.id === employeeId);
@@ -424,9 +445,15 @@ export default function Home() {
 }
 
 function OfficeViewportStatusBar(){ return <div className="office-viewport-status-bar"><strong>상태 범례</strong><div>{legend.map(([group,label])=><span key={group}><i className={`dot ${group}`}/>{label}</span>)}</div></div> }
+function formatDashboardActivityTime(value:string){ return new Intl.DateTimeFormat("ko-KR",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}).format(new Date(value)); }
+function DashboardActivityList({title,eyebrow,items,emptyText}:{title:string;eyebrow:string;items:DashboardEmployeeActivity[];emptyText:string}){
+  return <section className="dashboard-activity-section"><header><div><span>{eyebrow}</span><h2>{title}</h2></div><b>{items.length}건</b></header><div className="dashboard-activity-list">{items.length>0?items.map((item)=><article key={item.id} className={item.severity}><div className="dashboard-activity-head"><strong>{item.employeeName} <span>({item.taskTitle})</span></strong><b>{item.statusLabel}</b></div><p>{item.detail}</p><footer><span>{item.employeeRole ?? "역할 미지정"} · {item.source}{item.mode?` · ${item.mode}`:""}</span><time>{formatDashboardActivityTime(item.occurredAt)}</time></footer></article>):<p className="dashboard-activity-empty">{emptyText}</p>}</div></section>
+}
 function DashboardWorkspace({summary,isLoading,error,onRefresh}:{summary:DashboardSummary | null;isLoading:boolean;error:string | null;onRefresh:()=>Promise<DashboardSummary | null>}){
   const cards = summary?.cards ?? [];
-  return <><section className="stage"><div className="feature-shell dashboard-summary-shell"><header className="dashboard-summary-hero"><div><span>PHASE 1-S</span><h1>오늘의 운영 브리핑</h1><p>{summary?.briefing ?? "업무·승인·Hermes·네이버 임시저장 상태를 rule-based 요약으로 불러오는 중입니다."}</p></div><button onClick={()=>void onRefresh()} disabled={isLoading}>{isLoading?"새로고침 중":"요약 새로고침"}</button></header>{error?<div className="dashboard-summary-error">요약 조회 실패 · {error}</div>:null}<section className="dashboard-briefing-card"><label>대표실 한 줄 판단</label><strong>{summary?.headline ?? "운영 상태를 확인하고 있습니다."}</strong><p>{summary?`생성 시각 ${new Intl.DateTimeFormat("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(new Date(summary.generatedAt))}`:"DB 상태를 읽는 중입니다."}</p></section><div className="dashboard-summary-grid">{cards.map((card)=><DashboardSummaryCardView key={card.id} card={card}/>)}</div><section className="dashboard-schedule"><h2>주식 블로그 운영 일정</h2><div>{summary?.stockBlogSchedule.map((item)=><article key={item.contentType}><strong>{item.scheduledTimeKst}</strong><div><b>{item.label}</b><span>{item.cadence} · {item.objective}</span></div></article>) ?? <p>일정을 불러오는 중입니다.</p>}</div></section></div></section><aside className="panel feature-detail-panel"><div className="feature-panel-tabs"><strong>대표실 요약</strong><span>Rule-based</span></div><div className="panel-body"><div className="feature-card"><label>다음 행동</label>{summary?.nextActions.map((action)=><p key={action}>• {action}</p>) ?? <p>요약 데이터를 불러오면 다음 행동이 표시됩니다.</p>}</div><div className="feature-card muted"><label>정책</label><p>이 요약은 LLM을 호출하지 않고 DB 상태와 운영 규칙만으로 생성됩니다. 비용은 발생하지 않습니다.</p></div></div></aside></>
+  const activeWork = summary?.activeWork ?? [];
+  const recentAgentActivity = summary?.recentAgentActivity ?? [];
+  return <><section className="stage"><div className="feature-shell dashboard-summary-shell"><header className="dashboard-summary-hero"><div><span>PHASE 1-S</span><h1>오늘의 운영 브리핑</h1><p>{summary?.briefing ?? "업무·승인·Hermes·네이버 임시저장 상태를 rule-based 요약으로 불러오는 중입니다."}</p></div><button onClick={()=>void onRefresh()} disabled={isLoading}>{isLoading?"새로고침 중":"요약 새로고침"}</button></header>{error?<div className="dashboard-summary-error">요약 조회 실패 · {error}</div>:null}<section className="dashboard-briefing-card"><label>대표실 한 줄 판단</label><strong>{summary?.headline ?? "운영 상태를 확인하고 있습니다."}</strong><p>{summary?`생성 시각 ${new Intl.DateTimeFormat("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(new Date(summary.generatedAt))}`:"DB 상태를 읽는 중입니다."}</p></section><div className="dashboard-summary-grid">{cards.map((card)=><DashboardSummaryCardView key={card.id} card={card}/>)}</div><div className="dashboard-agent-columns"><DashboardActivityList eyebrow="현재 Task" title="직원별 진행 업무" items={activeWork} emptyText="현재 진행 중인 실제 업무가 없습니다."/><DashboardActivityList eyebrow="최근 AgentRun" title="에이전트가 수행한 작업" items={recentAgentActivity} emptyText="최근 에이전트 실행 기록이 없습니다."/></div><section className="dashboard-schedule"><h2>주식 블로그 운영 일정</h2><div>{summary?.stockBlogSchedule.map((item)=><article key={item.contentType}><strong>{item.scheduledTimeKst}</strong><div><b>{item.label}</b><span>{item.cadence} · {item.objective}</span></div></article>) ?? <p>일정을 불러오는 중입니다.</p>}</div></section></div></section><aside className="panel feature-detail-panel"><div className="feature-panel-tabs"><strong>대표실 요약</strong><span>실제 DB</span></div><div className="panel-body"><div className="feature-card"><label>직원 활동</label><strong>진행 업무 {activeWork.length}건</strong><p>최근 AgentRun {recentAgentActivity.length}건을 이름과 업무 단위로 표시합니다.</p></div><div className="feature-card"><label>다음 행동</label>{summary?.nextActions.map((action)=><p key={action}>• {action}</p>) ?? <p>요약 데이터를 불러오면 다음 행동이 표시됩니다.</p>}</div><div className="feature-card muted"><label>정책</label><p>이 요약은 LLM을 호출하지 않고 실제 Task·AgentRun DB 기록만 읽습니다. 화면 조회 비용은 발생하지 않습니다.</p></div></div></aside></>
 }
 function DashboardSummaryCardView({card}:{card:DashboardSummaryCard}){ return <article className={`dashboard-summary-card ${card.severity}`}><label>{card.title}</label><strong>{card.value}</strong><p>{card.description}</p>{card.actionLabel?<span>{card.actionLabel}</span>:null}</article> }
 function PlaceholderWorkspace({label}:{label:string}){

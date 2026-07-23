@@ -1,4 +1,5 @@
 export type OperationsHealth = "healthy" | "warning" | "critical" | "info" | "idle";
+export type OperationsFinanceStatus = "connected" | "setup_required" | "forbidden" | "rate_limited" | "unavailable";
 
 export type OperationsMetric = {
   label: string;
@@ -53,9 +54,23 @@ export type OperationsOverview = {
   finance: {
     headline: string;
     currency: "USD";
+    providerStatus: OperationsFinanceStatus;
+    source: string;
+    message: string;
+    collectedAt: string;
+    costs: {
+      monthUsd: number | null;
+      last7DaysUsd: number | null;
+      todayUsd: number | null;
+    };
+    usage: {
+      requests: number | null;
+      inputTokens: number | null;
+      outputTokens: number | null;
+    };
     metrics: OperationsMetric[];
-    departmentCosts: OperationsCostBreakdown[];
-    employeeCosts: OperationsCostBreakdown[];
+    lineItemCosts: OperationsCostBreakdown[];
+    projectCosts: OperationsCostBreakdown[];
     hermesUsed: number;
     hermesLimit: number;
     note: string;

@@ -11,7 +11,7 @@ import {
   summarizeHermesUsage,
   summarizeNaverDraftJobStatus,
 } from "./summary-rules";
-import type { DashboardSummary, DashboardSummaryCard } from "./summary-types";
+import type { DashboardEmployeeActivity, DashboardSummary, DashboardSummaryCard, DashboardSummarySeverity } from "./summary-types";
 
 const unfinishedTaskStatuses = ["진행 중", "업무 중", "조사 중", "검토 중", "수정 중", "보고 중", "오류", "오류 대응 중", "승인 대기", "결과 대기"];
 const terminalNaverDraftStatuses = ["completed", "cancelled"];
@@ -28,12 +28,61 @@ function getLatestNaverStatus(naverJobs: Awaited<ReturnType<typeof listNaverDraf
   return naverJobs[0]?.status ?? null;
 }
 
+function activitySeverity(status: string): DashboardSummarySeverity {
+  if (["failed", "오류", "오류 대응 중"].includes(status)) return "critical";
+  if (["queued", "승인 대기", "결과 대기"].includes(status)) return "warning";
+  if (["succeeded", "업무 완료", "완료"].includes(status)) return "good";
+  return "info";
+}
+
+function activityStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    queued: "실행 대기",
+    running: "실행 중",
+    succeeded: "완료",
+    failed: "실패",
+    cancelled: "취소",
+  };
+  return labels[status] ?? status;
+}
+
 export async function buildDashboardSummary(): Promise<DashboardSummary> {
-  const [activeTasks, waitingApprovals, errorTasks, recentAgentRuns, contentPipelines, naverJobs, hermesUsage, stockBlogScheduler] = await Promise.all([
+  const [activeTasks, activeTaskRows, waitingApprovals, errorTasks, recentAgentRuns, contentPipelines, naverJobs, hermesUsage, stockBlogScheduler] = await Promise.all([
     prisma.task.count({ where: { status: { in: unfinishedTaskStatuses } } }),
+    prisma.task.findMany({
+      where: { status: { in: unfinishedTaskStatuses } },
+      orderBy: { updatedAt: "desc" },
+      take: 8,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        progress: true,
+        currentStep: true,
+        recentOutput: true,
+        updatedAt: true,
+        assignedEmployee: { select: { id: true, displayName: true, role: true } },
+      },
+    }),
     prisma.approvalRequest.count({ where: { status: "승인 대기" } }),
     prisma.task.count({ where: { OR: [{ status: "오류" }, { error: { not: null } }] } }),
-    prisma.agentRun.findMany({ orderBy: { createdAt: "desc" }, take: 5, select: { id: true, employeeId: true, status: true, mode: true, createdAt: true, resultSummary: true } }),
+    prisma.agentRun.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 8,
+      select: {
+        id: true,
+        employeeId: true,
+        status: true,
+        mode: true,
+        createdAt: true,
+        startedAt: true,
+        completedAt: true,
+        resultSummary: true,
+        errorMessage: true,
+        employee: { select: { displayName: true, role: true } },
+        task: { select: { title: true } },
+      },
+    }),
     listContentPipelines(),
     listNaverDraftJobs(),
     getHermesUsageSummary({ recentLimit: 6 }),
@@ -92,8 +141,36 @@ export async function buildDashboardSummary(): Promise<DashboardSummary> {
 
   const headline = buildHeadline({ errorTasks, waitingApprovals, naverDraftPending, hermesRemaining: hermesUsage.remaining });
   const agentRunSummary = recentAgentRuns.length > 0
-    ? `최근 AgentRun은 ${recentAgentRuns[0].employeeId} / ${recentAgentRuns[0].status} 상태입니다.`
+    ? `최근 AgentRun은 ${recentAgentRuns[0].employee.displayName} / ${activityStatusLabel(recentAgentRuns[0].status)} 상태입니다.`
     : "최근 AgentRun 기록은 아직 없습니다.";
+  const activeWork: DashboardEmployeeActivity[] = activeTaskRows.map((task) => ({
+    id: `task-${task.id}`,
+    employeeId: task.assignedEmployee?.id ?? null,
+    employeeName: task.assignedEmployee?.displayName ?? "담당 미지정",
+    employeeRole: task.assignedEmployee?.role ?? null,
+    taskTitle: task.title,
+    status: task.status,
+    statusLabel: task.status,
+    severity: activitySeverity(task.status),
+    detail: task.currentStep?.trim() || task.recentOutput?.trim() || `진행률 ${task.progress}%`,
+    source: "Task",
+    mode: null,
+    occurredAt: task.updatedAt.toISOString(),
+  }));
+  const recentAgentActivity: DashboardEmployeeActivity[] = recentAgentRuns.map((run) => ({
+    id: `agent-run-${run.id}`,
+    employeeId: run.employeeId,
+    employeeName: run.employee.displayName,
+    employeeRole: run.employee.role,
+    taskTitle: run.task?.title ?? `${run.mode} 실행`,
+    status: run.status,
+    statusLabel: activityStatusLabel(run.status),
+    severity: activitySeverity(run.status),
+    detail: run.errorMessage?.trim() || run.resultSummary?.trim() || `${activityStatusLabel(run.status)} 상태로 기록됐습니다.`,
+    source: "AgentRun",
+    mode: run.mode,
+    occurredAt: (run.completedAt ?? run.startedAt ?? run.createdAt).toISOString(),
+  }));
 
   return {
     ok: true,
@@ -101,6 +178,8 @@ export async function buildDashboardSummary(): Promise<DashboardSummary> {
     headline,
     briefing: `${summarizeContentPipelineStatus(latestPipeline)} ${summarizeHermesUsage(hermesUsage)} ${agentRunSummary}`,
     cards,
+    activeWork,
+    recentAgentActivity,
     nextActions: [
       waitingApprovals > 0 ? "승인함에서 Director 승인 대기 항목을 먼저 처리하세요." : "승인함은 안정적입니다.",
       naverDraftPending > 0 ? "로컬 Naver Draft Agent 상태와 네이버 로그인 상태를 확인하세요." : "새 주식 브리핑을 생성할 수 있습니다.",

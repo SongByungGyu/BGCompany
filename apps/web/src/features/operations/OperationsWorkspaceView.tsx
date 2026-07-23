@@ -15,7 +15,7 @@ export type OperationsWorkspaceScope = "report" | "development" | "finance";
 const scopeConfig: Record<OperationsWorkspaceScope, { eyebrow: string; title: string; description: string; owner: string }> = {
   report: { eyebrow: "경영 보고", title: "운영 보고서", description: "오늘 완료한 업무와 대기·오류를 실제 운영 기록으로 정리합니다.", owner: "루나 · AI Director" },
   development: { eyebrow: "서비스 운영", title: "개발 관제", description: "Web·DB·Hermes·스케줄러·네이버 작업 상태를 한 화면에서 확인합니다.", owner: "준범 · 개발팀" },
-  finance: { eyebrow: "운영 비용", title: "재정 현황", description: "DB에 기록된 업무 비용과 Hermes 실행 한도를 분리해 확인합니다.", owner: "도윤 · 재정팀" },
+  finance: { eyebrow: "실제 청구 비용", title: "재정 현황", description: "OpenAI 공식 비용·사용량 API와 Hermes 실행 기록을 분리해 확인합니다.", owner: "도윤 · 재정팀" },
 };
 
 const statusText: Record<OperationsHealth, string> = {
@@ -67,12 +67,16 @@ function Section({ eyebrow, title, count, children }: { eyebrow: string; title: 
   </section>;
 }
 
-function CostBars({ rows }: { rows: OperationsCostBreakdown[] }) {
+function formatCostAmount(amount: number) {
+  return `$${amount.toFixed(amount > 0 && amount < 0.01 ? 4 : 2)}`;
+}
+
+function CostBars({ rows, emptyText }: { rows: OperationsCostBreakdown[]; emptyText: string }) {
   const max = Math.max(...rows.map((row) => row.amount), 1);
-  if (rows.length === 0) return <p className="operations-empty">기록된 비용이 없습니다.</p>;
+  if (rows.length === 0) return <p className="operations-empty">{emptyText}</p>;
   return <div className="operations-cost-list">{rows.map((row) => (
     <article key={row.id}>
-      <div><strong>{row.label}</strong><b>${row.amount.toFixed(2)}</b></div>
+      <div><strong>{row.label}</strong><b>{formatCostAmount(row.amount)}</b></div>
       <span><i style={{ width: `${Math.max((row.amount / max) * 100, 3)}%` }}/></span>
       <p>{row.detail}</p>
     </article>
@@ -118,14 +122,21 @@ function DevelopmentWorkspace({ overview }: { overview: OperationsOverview }) {
 
 function FinanceWorkspace({ overview }: { overview: OperationsOverview }) {
   const finance = overview.finance;
+  const sourceTone = finance.providerStatus === "connected" ? "healthy" : finance.providerStatus === "forbidden" ? "critical" : "warning";
   return <>
+    <div className={`operations-finance-source ${sourceTone}`}>
+      <div><i/><span>{finance.providerStatus === "connected" ? "공식 비용 연결" : "비용 연결 확인 필요"}</span></div>
+      <strong>{finance.source}</strong>
+      <p>{finance.message}</p>
+      <time>{formatTime(finance.collectedAt)} 동기화</time>
+    </div>
     <MetricGrid metrics={finance.metrics}/>
     <div className="operations-two-column">
-      <Section eyebrow="부서별" title="업무 기록 비용">
-        <CostBars rows={finance.departmentCosts}/>
+      <Section eyebrow="청구 항목" title="이번 달 실제 비용">
+        <CostBars rows={finance.lineItemCosts} emptyText="실제 청구 항목이 없거나 Admin Key 연결이 필요합니다."/>
       </Section>
-      <Section eyebrow="직원별" title="현재 기록 비용">
-        <CostBars rows={finance.employeeCosts}/>
+      <Section eyebrow="OpenAI 프로젝트" title="프로젝트별 실제 비용">
+        <CostBars rows={finance.projectCosts} emptyText="프로젝트별 실제 비용이 아직 집계되지 않았습니다."/>
       </Section>
     </div>
   </>;
@@ -165,8 +176,10 @@ export function OperationsWorkspaceView({ scope }: { scope: OperationsWorkspaceS
       return { tone, label: statusText[tone], headline: overview.report.headline };
     }
     if (scope === "development") return { tone: overview.development.overallStatus, label: statusText[overview.development.overallStatus], headline: overview.development.headline };
-    const tone = overview.finance.hermesUsed >= overview.finance.hermesLimit ? "critical" : overview.finance.hermesLimit - overview.finance.hermesUsed <= 4 ? "warning" : "healthy";
-    return { tone, label: statusText[tone], headline: overview.finance.headline };
+    const providerStatus = overview.finance.providerStatus;
+    const tone: OperationsHealth = providerStatus === "connected" ? "healthy" : providerStatus === "forbidden" ? "critical" : "warning";
+    const label = providerStatus === "connected" ? "실비 연결" : providerStatus === "setup_required" ? "키 연결 필요" : statusText[tone];
+    return { tone, label, headline: overview.finance.headline };
   }, [loading, overview, scope]);
 
   return <>
@@ -188,12 +201,13 @@ export function OperationsWorkspaceView({ scope }: { scope: OperationsWorkspaceS
       </div>
     </section>
     <aside className="panel feature-detail-panel operations-detail-panel">
-      <div className="feature-panel-tabs"><strong>{config.title} 요약</strong><span>실제 DB</span></div>
+      <div className="feature-panel-tabs"><strong>{config.title} 요약</strong><span>{scope === "finance" ? "공식 API" : "실제 DB"}</span></div>
       <div className="panel-body">
         <div className="feature-card operations-side-head"><label>현재 판단</label><strong>{state.headline}</strong>{overview ? <p>{formatTime(overview.generatedAt)} 기준</p> : null}</div>
         <div className="feature-card"><label>담당 직원</label><strong>{config.owner}</strong><p>30초마다 운영 데이터를 자동으로 갱신합니다.</p></div>
         {scope === "report" && overview ? <div className="feature-card"><label>오늘 요약</label><p>{overview.report.summary}</p></div> : null}
         {scope === "development" && overview ? <div className="feature-card"><label>서비스 상태</label>{overview.development.services.map((entry) => <p key={entry.id}>• {entry.name}: {entry.label}</p>)}</div> : null}
+        {scope === "finance" && overview ? <div className="feature-card"><label>비용 데이터 상태</label><strong>{overview.finance.source}</strong><p>{overview.finance.message}</p></div> : null}
         {scope === "finance" && overview ? <div className="feature-card muted"><label>집계 기준</label><p>{overview.finance.note}</p></div> : null}
       </div>
     </aside>

@@ -1,9 +1,11 @@
 import { prisma } from "@/lib/db";
 import { checkHermesBridgeHealth } from "@/lib/agents/hermes-client";
+import { getOpenAIFinanceSummary } from "@/lib/finance/openai-finance-client";
 import { getHermesUsageSummary } from "@/lib/hermes/hermes-usage";
 import { getStockBlogSchedulerStatus } from "@/lib/stock-blog/stock-blog-scheduler";
 import type {
   OperationsCostBreakdown,
+  OperationsHealth,
   OperationsListItem,
   OperationsOverview,
   OperationsService,
@@ -13,12 +15,6 @@ import { getKstDayWindow, getServiceOverallStatus } from "./operations-overview-
 const activeTaskStatuses = ["진행 중", "업무 중", "조사 중", "검토 중", "수정 중", "보고 중", "승인 대기", "결과 대기"];
 const failedNaverStatuses = ["failed", "publish_blocked", "image_quality_failed", "image_upload_failed", "save_failed"];
 const pendingNaverStatuses = ["queued", "claimed", "in_progress", "image_uploading", "draft_saving", "publishing"];
-
-function decimalNumber(value: unknown) {
-  if (value === null || value === undefined) return 0;
-  const number = Number(typeof value === "object" && "toString" in value ? value.toString() : value);
-  return Number.isFinite(number) ? number : 0;
-}
 
 function item(input: OperationsListItem): OperationsListItem {
   return input;
@@ -30,6 +26,29 @@ function sortNewest(items: OperationsListItem[]) {
 
 function service(input: OperationsService): OperationsService {
   return input;
+}
+
+function formatUsd(value: number | null) {
+  if (value === null) return "—";
+  const digits = value > 0 && value < 0.01 ? 4 : 2;
+  return `$${value.toFixed(digits)}`;
+}
+
+function formatCompactNumber(value: number | null) {
+  if (value === null) return "—";
+  return new Intl.NumberFormat("ko-KR", { notation: value >= 10_000 ? "compact" : "standard", maximumFractionDigits: 1 }).format(value);
+}
+
+function financeTone(status: OperationsOverview["finance"]["providerStatus"]): OperationsHealth {
+  if (status === "connected") return "healthy";
+  if (status === "forbidden") return "critical";
+  return "warning";
+}
+
+function projectLabel(projectId: string) {
+  if (projectId === "organization") return "조직 공통";
+  if (projectId.length <= 16) return projectId;
+  return `${projectId.slice(0, 9)}…${projectId.slice(-4)}`;
 }
 
 export async function buildOperationsOverview(now = new Date()): Promise<OperationsOverview> {
@@ -54,11 +73,7 @@ export async function buildOperationsOverview(now = new Date()): Promise<Operati
     recentAgentRuns,
     publishedJobs,
     recentNaverJobs,
-    taskCostTotal,
-    taskCostToday,
-    departmentCostRows,
-    employeeCostRows,
-    pendingApprovalCost,
+    openaiFinance,
     hermesUsage,
     hermesHealth,
     scheduler,
@@ -104,15 +119,7 @@ export async function buildOperationsOverview(now = new Date()): Promise<Operati
       take: 10,
       select: { id: true, title: true, status: true, errorCode: true, errorMessage: true, updatedAt: true, publishedAt: true },
     }),
-    prisma.task.aggregate({ _sum: { cost: true } }),
-    prisma.task.aggregate({ where: { createdAt: { gte: start, lt: end } }, _sum: { cost: true } }),
-    prisma.task.groupBy({ by: ["department"], _sum: { cost: true }, orderBy: { _sum: { cost: "desc" } } }),
-    prisma.employee.findMany({
-      where: { currentCost: { not: null } },
-      orderBy: { currentCost: "desc" },
-      select: { id: true, displayName: true, department: true, currentCost: true },
-    }),
-    prisma.approvalRequest.aggregate({ where: { status: "승인 대기" }, _sum: { estimatedCost: true } }),
+    getOpenAIFinanceSummary({ now }),
     getHermesUsageSummary({ recentLimit: 6, now }),
     checkHermesBridgeHealth(),
     getStockBlogSchedulerStatus(now),
@@ -234,16 +241,20 @@ export async function buildOperationsOverview(now = new Date()): Promise<Operati
     tone: run.status === "succeeded" ? "healthy" : run.status === "failed" ? "critical" : "warning",
   }));
 
-  const departmentCosts: OperationsCostBreakdown[] = departmentCostRows
-    .map((row) => ({ id: row.department, label: row.department, amount: decimalNumber(row._sum.cost), detail: "완료·진행 업무에 기록된 누적 비용" }))
-    .filter((row) => row.amount > 0);
-  const employeeCosts: OperationsCostBreakdown[] = employeeCostRows
-    .map((row) => ({ id: row.id, label: row.displayName, amount: decimalNumber(row.currentCost), detail: `${row.department} · 현재 기록 비용` }))
-    .filter((row) => row.amount > 0);
+  const lineItemCosts: OperationsCostBreakdown[] = openaiFinance.lineItems.map((row) => ({
+    id: row.id,
+    label: row.label,
+    amount: row.amountUsd,
+    detail: "OpenAI 청구 항목 · 이번 달 실비",
+  }));
+  const projectCosts: OperationsCostBreakdown[] = openaiFinance.projects.map((row) => ({
+    id: row.id,
+    label: projectLabel(row.label),
+    amount: row.amountUsd,
+    detail: "OpenAI 프로젝트 · 이번 달 실비",
+  }));
   const overallStatus = getServiceOverallStatus(developmentServices);
-  const totalRecordedCost = decimalNumber(taskCostTotal._sum.cost);
-  const todayRecordedCost = decimalNumber(taskCostToday._sum.cost);
-  const plannedCost = decimalNumber(pendingApprovalCost._sum.estimatedCost);
+  const providerTone = financeTone(openaiFinance.status);
 
   return {
     ok: true,
@@ -271,19 +282,33 @@ export async function buildOperationsOverview(now = new Date()): Promise<Operati
       recentRuns: recentRunItems,
     },
     finance: {
-      headline: `DB 기록 누적 비용은 $${totalRecordedCost.toFixed(2)}이며, 오늘 Hermes는 ${hermesUsage.used}/${hermesUsage.limit}회 사용했습니다.`,
+      headline: openaiFinance.status === "connected"
+        ? `OpenAI 공식 비용 기준 이달 ${formatUsd(openaiFinance.costs.monthUsd)}, API 요청 ${formatCompactNumber(openaiFinance.usage.requests)}회입니다.`
+        : openaiFinance.message,
       currency: "USD",
+      providerStatus: openaiFinance.status,
+      source: openaiFinance.source,
+      message: openaiFinance.message,
+      collectedAt: openaiFinance.collectedAt,
+      costs: openaiFinance.costs,
+      usage: {
+        requests: openaiFinance.usage.requests,
+        inputTokens: openaiFinance.usage.inputTokens,
+        outputTokens: openaiFinance.usage.outputTokens,
+      },
       metrics: [
-        { label: "누적 기록 비용", value: `$${totalRecordedCost.toFixed(2)}`, note: "Task.cost 합계", tone: "info" },
-        { label: "오늘 기록 비용", value: `$${todayRecordedCost.toFixed(2)}`, note: "오늘 생성 업무 기준", tone: "info" },
-        { label: "승인 예정 비용", value: `$${plannedCost.toFixed(2)}`, note: "승인 대기 추정 비용", tone: plannedCost > 0 ? "warning" : "healthy" },
-        { label: "Hermes 사용량", value: `${hermesUsage.used}/${hermesUsage.limit}`, note: `남음 ${hermesUsage.remaining}회`, tone: hermesUsage.remaining <= 4 ? "warning" : "healthy" },
+        { label: "이번 달 실비", value: formatUsd(openaiFinance.costs.monthUsd), note: openaiFinance.status === "connected" ? "OpenAI Costs API" : "Admin Key 연결 필요", tone: providerTone },
+        { label: "최근 7일", value: formatUsd(openaiFinance.costs.last7DaysUsd), note: "KST 기준 실제 비용", tone: providerTone },
+        { label: "오늘 비용", value: formatUsd(openaiFinance.costs.todayUsd), note: "공식 집계는 지연될 수 있음", tone: providerTone },
+        { label: "API 요청", value: formatCompactNumber(openaiFinance.usage.requests), note: "이번 달 모델 요청", tone: openaiFinance.usage.available ? "info" : "idle" },
+        { label: "입·출력 토큰", value: openaiFinance.usage.available ? formatCompactNumber((openaiFinance.usage.inputTokens ?? 0) + (openaiFinance.usage.outputTokens ?? 0)) : "—", note: openaiFinance.usage.available ? `입력 ${formatCompactNumber(openaiFinance.usage.inputTokens)} · 출력 ${formatCompactNumber(openaiFinance.usage.outputTokens)}` : "Usage API 연결 필요", tone: openaiFinance.usage.available ? "info" : "idle" },
+        { label: "오늘 Hermes", value: `${hermesUsage.used}/${hermesUsage.limit}`, note: `내부 실행 한도 · 남음 ${hermesUsage.remaining}회`, tone: hermesUsage.remaining <= 4 ? "warning" : "healthy" },
       ],
-      departmentCosts,
-      employeeCosts,
+      lineItemCosts,
+      projectCosts,
       hermesUsed: hermesUsage.used,
       hermesLimit: hermesUsage.limit,
-      note: "표시 금액은 BG Company DB의 Task.cost·Employee.currentCost 기록이며 실제 카드 또는 OpenAI 청구 금액과 다를 수 있습니다.",
+      note: "금액은 OpenAI 조직 Costs API의 청구 집계만 사용합니다. Task.cost·Employee.currentCost Seed 값은 재정 화면에서 제외하며, 공식 집계는 사용 직후 다소 지연될 수 있습니다.",
     },
   };
 }
