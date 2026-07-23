@@ -161,4 +161,3 @@ export type PortfolioDisabledResponse = {
 };
 
 export type PortfolioResponse = PortfolioDashboard | PortfolioDisabledResponse;
-

@@ -7,4 +7,3 @@ export async function GET(request: Request) {
   const accountId = new URL(request.url).searchParams.get("accountId");
   return noStoreJson(await getPortfolioDashboard(accountId));
 }
-

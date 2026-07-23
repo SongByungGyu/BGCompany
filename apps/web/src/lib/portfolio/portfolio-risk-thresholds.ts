@@ -7,4 +7,3 @@ export const PORTFOLIO_RISK_THRESHOLDS = {
   weeklyVolatilityPercent: 10,
   upcomingEventDays: 14,
 } as const;
-

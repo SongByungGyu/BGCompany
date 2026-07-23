@@ -19,4 +19,3 @@ forbidden_actions:
 # 출력
 
 매매 지시 없이 관찰 사실과 확인 항목만 포함한 DAILY, WEEKLY, DIVIDEND, RISK 보고서를 작성합니다.
-

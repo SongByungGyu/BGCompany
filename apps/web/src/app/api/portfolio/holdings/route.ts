@@ -27,4 +27,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: status === 409 ? "같은 계좌에 이미 등록된 종목입니다." : errorMessage(error) }, { status });
   }
 }
-

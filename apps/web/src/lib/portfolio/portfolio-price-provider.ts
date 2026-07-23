@@ -286,4 +286,3 @@ export const PORTFOLIO_KIS_READ_ONLY_POLICY = {
   quoteEndpoints: Array.from(KIS_READ_ONLY_ENDPOINTS.keys()),
   prohibitedCapabilities: ["order", "balance", "account", "position", "buy", "sell", "transfer", "cancel", "amend"],
 } as const;
-

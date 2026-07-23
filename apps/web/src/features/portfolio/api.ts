@@ -42,4 +42,3 @@ export async function refreshPortfolio(accountId: string) {
     body: JSON.stringify({ accountId }),
   }));
 }
-

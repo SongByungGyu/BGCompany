@@ -18,4 +18,3 @@ Decimal 계산, 통화 단위, 데이터 기준 시각, freshness, 누락 항목
 # 출력
 
 보고서의 데이터 품질을 verified, provisional, unavailable로 구분합니다.
-

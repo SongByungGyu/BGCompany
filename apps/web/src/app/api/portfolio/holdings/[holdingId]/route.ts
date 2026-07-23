@@ -50,4 +50,3 @@ export async function PATCH(request: Request, context: RouteContext<"/api/portfo
     return NextResponse.json({ error: errorMessage(error) }, { status: 400 });
   }
 }
-

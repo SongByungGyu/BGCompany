@@ -11,4 +11,3 @@
 7. 기능 플래그는 `PORTFOLIO_MONITORING_ENABLED=false`로 유지한다.
 
 사용자 데이터 초기화, 전체 seed 재실행, `docker compose down -v`, 볼륨 삭제는 금지합니다. migration 체계로 전환하려면 현재 운영 DB를 기준으로 별도 baseline migration을 먼저 생성해야 합니다.
-

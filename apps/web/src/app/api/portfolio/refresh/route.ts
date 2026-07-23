@@ -16,4 +16,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: status === 429 ? "새로고침은 1분에 3회까지 가능합니다." : errorMessage(error) }, { status });
   }
 }
-

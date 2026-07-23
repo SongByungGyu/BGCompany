@@ -7,4 +7,3 @@ export async function GET(request: Request) {
   const dashboard = await getPortfolioDashboard(new URL(request.url).searchParams.get("accountId"));
   return noStoreJson({ risks: dashboard.risks });
 }
-

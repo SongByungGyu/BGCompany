@@ -20,4 +20,3 @@ export function noStoreJson(value: unknown, init?: ResponseInit) {
   response.headers.set("cache-control", "no-store");
   return response;
 }
-
