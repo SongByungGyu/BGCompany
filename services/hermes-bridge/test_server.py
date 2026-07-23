@@ -263,7 +263,7 @@ class VerifiedSchedulePromptTests(unittest.TestCase):
         })
         self.assertIn("개인 투자자가 운영하는 네이버 주식 블로그의 전문 에디터", prompt)
         self.assertIn('URL은 마지막 "함께 확인한 기사"', prompt)
-        self.assertIn("공백 포함 약 2,000~3,000자", prompt)
+        self.assertIn("공백 포함 2,000~2,700자", prompt)
         self.assertIn("실제 활용한 기사 3개만", prompt)
         self.assertNotIn('첫 번째 sections 항목의 heading은 반드시 "데이터 기준"', prompt)
 
@@ -277,8 +277,41 @@ class VerifiedSchedulePromptTests(unittest.TestCase):
                 "referenceBundle": {"contentType": "KOREA_DAILY_PREVIEW"},
             },
         })
-        self.assertIn("upcoming 날짜·이벤트명·URL은 변경할 수 없는 원문 값", prompt)
+        self.assertIn("upcoming 날짜·이벤트명은 변경할 수 없는 원문 값", prompt)
         self.assertIn("하루 앞뒤로 옮기지 말고", prompt)
+        self.assertIn("내용 있는 문단 블록을 10개 이상", prompt)
+        self.assertIn('"- " 불릿은 최소 5개', prompt)
+        self.assertNotIn('첫 번째 sections 항목의 heading은 반드시 "데이터 기준"', prompt)
+
+    def test_writer_schema_lists_every_required_section(self) -> None:
+        headings = [
+            "1. 최근 시장은 어땠을까",
+            "2. 한국 증시 흐름과 전망",
+            "3. 미국 증시와 글로벌 변수",
+            "4. 금리·환율·핵심 일정",
+            "5. 눈여겨볼 기회와 위험",
+            "6. 개인 투자자가 확인할 것",
+            "함께 확인한 기사",
+        ]
+        prompt = bridge.build_content_writer_prompt({
+            "input": {
+                "topic": "한국 증시 장마감 브리핑",
+                "title": "장마감 브리핑",
+                "channel": "blog",
+                "language": "ko",
+                "referenceBundle": {"contentType": "KOREA_DAILY_CLOSE"},
+                "bodyStructure": headings,
+            },
+        })
+
+        for heading in headings:
+            self.assertIn(f'"heading": "{heading}"', prompt)
+        self.assertIn("sections 배열 길이는 정확히 7개", prompt)
+        self.assertIn("지정 투자 유의문구는 cta에 정확히 한 번", prompt)
+        self.assertIn("서로 다른 시장의 순매수를 한 문장으로 합쳐", prompt)
+        self.assertIn("수급 금액은 원본 단위 환산 오류를 막기 위해", prompt)
+        self.assertIn("한국투자증권·FRED 최근 거래일 자료 기준", prompt)
+        self.assertIn('"6,516.27으로"가 아니라 "6,516.27로"', prompt)
 
     def test_qa_prompt_receives_server_schedule_validation(self) -> None:
         prompt = bridge.build_qa_audit_prompt({
@@ -325,13 +358,39 @@ class VerifiedSchedulePromptTests(unittest.TestCase):
         self.assertIn("소제목 6개 이상", writer_prompt)
         self.assertIn("required editorial quality score: 90/100", qa_prompt)
         self.assertIn("qaScore가 90점 미만이면", qa_prompt)
+        self.assertIn("requiredRevisions가 비어 있고", qa_prompt)
+        self.assertIn('"qaScore": 92', qa_prompt)
+        self.assertIn("provider가 kis-fred", qa_prompt)
 
 
 class UsageGuardrailContractTests(unittest.TestCase):
-    def test_content_pipeline_requires_four_real_hermes_runs(self) -> None:
+    def test_content_pipeline_reserves_up_to_eight_real_hermes_runs(self) -> None:
         service_source = (REPO_ROOT / "apps/web/src/lib/content-pipeline/content-pipeline-service.ts").read_text()
-        self.assertIn("const HERMES_PIPELINE_REQUIRED_RUNS = 4", service_source)
+        self.assertIn("const HERMES_PIPELINE_REQUIRED_RUNS = STOCK_BLOG_MAX_HERMES_RUNS", service_source)
         self.assertIn('if (runnerMode === "hermes") await assertHermesDailyRunAvailable(HERMES_PIPELINE_REQUIRED_RUNS);', service_source)
+
+    def test_writer_revision_prompt_contains_previous_draft_and_qa_feedback(self) -> None:
+        prompt = bridge.build_content_writer_prompt({
+            "input": {
+                "topic": "Korea market preview",
+                "title": "Morning preview",
+                "channel": "blog",
+                "revisionAttempt": 2,
+                "previousWriterResult": {
+                    "finalTitle": "Previous title",
+                    "sections": [{"heading": "Market", "body": "US indices were mixed."}],
+                },
+                "qaRevisionFeedback": {
+                    "qaScore": 88,
+                    "requiredRevisions": ["Correct the US index direction."],
+                },
+            },
+        })
+        self.assertIn("automatic revision attempt: 2/3", prompt)
+        self.assertIn("Previous title", prompt)
+        self.assertIn("Correct the US index direction.", prompt)
+        self.assertIn("previous writer result", prompt)
+        self.assertIn("QA revision feedback", prompt)
 
     def test_usage_summary_counts_only_real_hermes_agent_runs(self) -> None:
         usage_source = (REPO_ROOT / "apps/web/src/lib/hermes/hermes-usage.ts").read_text()

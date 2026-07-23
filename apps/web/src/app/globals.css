@@ -1852,3 +1852,256 @@
   .control-room .placeholder-overview-grid article { min-height: auto; }
   .control-room .placeholder-checkpoints { overflow: auto; }
 }
+
+/* Live report, development and finance workspaces. */
+.control-room .operations-shell {
+  gap: 14px;
+  overflow: auto;
+}
+.control-room .operations-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+.control-room .operations-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 0 0 auto;
+}
+.control-room .operations-hero-actions > button,
+.control-room .operations-error button {
+  padding: 9px 13px;
+  color: #061522;
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+  background: linear-gradient(135deg, #62b4ee, #55ddcf);
+  border: 0;
+  border-radius: 9px;
+}
+.control-room .operations-hero-actions > button:disabled { cursor: wait; opacity: .65; }
+.control-room .operations-live-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 11px;
+  color: #b9cede;
+  font-size: 10px;
+  background: #0c2238;
+  border: 1px solid #31506b;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.control-room .operations-live-status i,
+.control-room .operations-tone,
+.control-room .operations-service-grid article > div i {
+  width: 8px;
+  height: 8px;
+  background: #7e93a7;
+  border-radius: 50%;
+  box-shadow: 0 0 10px currentColor;
+}
+.control-room .operations-live-status.healthy i,
+.control-room .operations-tone.healthy,
+.control-room .operations-service-grid article.healthy > div i { color: #55ddcf; background: #55ddcf; }
+.control-room .operations-live-status.warning i,
+.control-room .operations-tone.warning,
+.control-room .operations-service-grid article.warning > div i { color: #e0a63b; background: #e0a63b; }
+.control-room .operations-live-status.critical i,
+.control-room .operations-tone.critical,
+.control-room .operations-service-grid article.critical > div i { color: #ef735a; background: #ef735a; }
+.control-room .operations-live-status.info i,
+.control-room .operations-tone.info,
+.control-room .operations-service-grid article.info > div i { color: #6baaf0; background: #6baaf0; }
+.control-room .operations-live-status.idle i,
+.control-room .operations-tone.idle,
+.control-room .operations-service-grid article.idle > div i { color: #7890a8; background: #7890a8; }
+
+.control-room .operations-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  color: #ffd4ca;
+  background: #321d1c;
+  border: 1px solid #75453d;
+  border-radius: 11px;
+}
+.control-room .operations-error span { flex: 1; color: #d9a79d; font-size: 11px; }
+.control-room .operations-loading {
+  display: grid;
+  min-height: 280px;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  color: #8fa7bc;
+}
+.control-room .operations-loading i {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #24445f;
+  border-top-color: #55ddcf;
+  border-radius: 50%;
+  animation: operations-spin .8s linear infinite;
+}
+@keyframes operations-spin { to { transform: rotate(360deg); } }
+
+.control-room .operations-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.control-room .operations-metric {
+  min-width: 0;
+  padding: 15px;
+  background: linear-gradient(145deg, #0d2137, #0a1c30);
+  border: 1px solid #294762;
+  border-radius: 14px;
+  box-shadow: 0 9px 24px #02081238;
+}
+.control-room .operations-metric.healthy { border-color: #286a63; }
+.control-room .operations-metric.warning { border-color: #70562d; }
+.control-room .operations-metric.critical { border-color: #7a443c; }
+.control-room .operations-metric label {
+  display: block;
+  color: #7f98af;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+.control-room .operations-metric strong {
+  display: block;
+  margin-top: 9px;
+  color: #f2f8fc;
+  font-size: 22px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.control-room .operations-metric p { margin: 8px 0 0; color: #8098ae; font-size: 10px; }
+
+.control-room .operations-two-column {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.control-room .operations-section {
+  min-width: 0;
+  padding: 16px;
+  background: linear-gradient(145deg, #0d2137, #091a2d);
+  border: 1px solid #25415d;
+  border-radius: 15px;
+  box-shadow: 0 10px 28px #02081238;
+}
+.control-room .operations-section > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid #213c58;
+}
+.control-room .operations-section > header span {
+  color: #55ddcf;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .09em;
+}
+.control-room .operations-section h2 { margin: 4px 0 0; color: #eef5fa; font-size: 16px; }
+.control-room .operations-section > header b {
+  padding: 5px 8px;
+  color: #9fb5c8;
+  font-size: 9px;
+  background: #102a43;
+  border: 1px solid #2d4c67;
+  border-radius: 999px;
+}
+.control-room .operations-list { display: grid; gap: 8px; margin-top: 12px; }
+.control-room .operations-list article,
+.control-room .operations-list a {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px;
+  color: inherit;
+  text-decoration: none;
+  background: #091a2d;
+  border: 1px solid #203b55;
+  border-radius: 11px;
+}
+.control-room .operations-list a:hover { background: #102a43; border-color: #3d6d8d; }
+.control-room .operations-tone { flex: 0 0 auto; }
+.control-room .operations-list strong {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #dce8f2;
+  font-size: 11px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.control-room .operations-list p {
+  overflow: hidden;
+  margin: 4px 0 0;
+  color: #7f98ae;
+  font-size: 10px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.control-room .operations-list time,
+.control-room .operations-service-grid time { color: #6e879e; font-size: 9px; white-space: nowrap; }
+.control-room .operations-empty { margin: 14px 0 0; padding: 14px; color: #7890a7; font-size: 11px; text-align: center; background: #091a2d; border: 1px dashed #29445e; border-radius: 11px; }
+
+.control-room .operations-service-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 9px;
+}
+.control-room .operations-service-grid article {
+  min-width: 0;
+  min-height: 145px;
+  padding: 13px;
+  background: linear-gradient(145deg, #0d2137, #091a2d);
+  border: 1px solid #294762;
+  border-radius: 13px;
+}
+.control-room .operations-service-grid article.healthy { border-color: #286a63; }
+.control-room .operations-service-grid article.warning { border-color: #70562d; }
+.control-room .operations-service-grid article.critical { border-color: #7a443c; }
+.control-room .operations-service-grid article > div { display: flex; align-items: center; gap: 7px; color: #8fa7ba; font-size: 9px; }
+.control-room .operations-service-grid article strong { display: block; margin-top: 15px; color: #edf5fb; font-size: 12px; }
+.control-room .operations-service-grid article p { min-height: 35px; margin: 7px 0 10px; color: #8299ae; font-size: 10px; line-height: 1.4; }
+
+.control-room .operations-cost-list { display: grid; gap: 12px; margin-top: 13px; }
+.control-room .operations-cost-list article > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.control-room .operations-cost-list strong { color: #dce8f2; font-size: 11px; }
+.control-room .operations-cost-list b { color: #72e2d6; font-size: 11px; font-variant-numeric: tabular-nums; }
+.control-room .operations-cost-list span { display: block; height: 6px; margin-top: 7px; overflow: hidden; background: #19344c; border-radius: 999px; }
+.control-room .operations-cost-list span i { display: block; height: 100%; background: linear-gradient(90deg, #4e8ee3, #55ddcf); border-radius: inherit; box-shadow: 0 0 12px #55ddcf66; }
+.control-room .operations-cost-list p { margin: 5px 0 0; color: #748da4; font-size: 9px; }
+.control-room .operations-side-head { border-color: #315d7e; background: #0d243b; }
+.control-room .operations-side-head strong { display: block; color: #eff7fc; font-size: 14px; line-height: 1.45; }
+.control-room .operations-side-head p { margin-top: 9px; color: #7892aa; font-size: 10px; }
+
+@media (max-width: 1440px) {
+  .control-room .operations-service-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 1180px) {
+  .control-room .operations-metric-grid,
+  .control-room .operations-two-column { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .control-room .operations-service-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 820px) {
+  .control-room .operations-hero { align-items: flex-start; flex-direction: column; }
+  .control-room .operations-metric-grid,
+  .control-room .operations-two-column,
+  .control-room .operations-service-grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .control-room .operations-loading i { animation: none; }
+}

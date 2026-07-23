@@ -109,10 +109,14 @@ function normalizeVerifiedEvents(snapshot?: MarketSnapshot, contentType?: StockR
   });
 
   events.sort((left, right) => left.date.localeCompare(right.date) || left.event.localeCompare(right.event));
-  if (contentType !== "NEXT_WEEK_MARKET_PREVIEW" || !ISO_DATE_PATTERN.test(snapshot.marketDate)) {
+  if (!ISO_DATE_PATTERN.test(snapshot.marketDate)) {
     return { events: events.slice(0, MAX_VERIFIED_EVENTS), issues, from: undefined, through: undefined };
   }
-  const from = addUtcDays(snapshot.marketDate, 1);
+  const dailyPreview = contentType === "KOREA_DAILY_PREVIEW" || contentType === "KOREA_MARKET_CLOSE_US_PREVIEW";
+  if (contentType !== "NEXT_WEEK_MARKET_PREVIEW" && !dailyPreview) {
+    return { events: events.slice(0, MAX_VERIFIED_EVENTS), issues, from: undefined, through: undefined };
+  }
+  const from = addUtcDays(snapshot.marketDate, contentType === "NEXT_WEEK_MARKET_PREVIEW" ? 1 : 0);
   const through = addUtcDays(snapshot.marketDate, 7);
   const scopedEvents = from && through
     ? events.filter((item) => item.date >= from && item.date <= through)
@@ -127,15 +131,34 @@ function koreanScheduleDate(isoDate: string) {
   return `${date.getUTCMonth() + 1}월 ${date.getUTCDate()}일 ${weekdays[date.getUTCDay()]}`;
 }
 
-function scheduleImportance(market?: string) {
+function scheduleImportance(event: string, market?: string) {
+  const normalized = event.toLowerCase();
+  if (/fomc|federal open market/.test(normalized)) {
+    return "통화정책 신호가 미국 국채금리와 기술주 투자심리를 바꿀지 주의해서 봐야 합니다.";
+  }
+  if (/foreign exchange|exchange rates|h\.10/.test(normalized)) {
+    return "달러 흐름이 원·달러 환율과 외국인 수급 부담으로 이어지는지 살펴볼 필요가 있습니다.";
+  }
+  if (/selected interest rates|h\.15|treasury/.test(normalized)) {
+    return "미국 단기·장기 금리의 방향이 성장주 밸류에이션에 미치는 영향을 확인해야 합니다.";
+  }
+  if (/employment cost|earnings|wage|salary/.test(normalized)) {
+    return "임금 압력이 물가와 연준 정책 기대에 어떤 영향을 주는지 살펴봐야 합니다.";
+  }
+  if (/job openings|turnover|jolts/.test(normalized)) {
+    return "노동 수요의 둔화 여부에 따라 미국 금리와 성장주 투자심리가 달라질 수 있습니다.";
+  }
+  if (/unemployment|employment|payroll/.test(normalized)) {
+    return "고용 흐름이 경기 기대와 달러, 미국 국채금리에 미치는 반응을 확인할 필요가 있습니다.";
+  }
   if (market === "KR") return "국내 경기 기대와 원·달러 환율, 외국인 수급에 미치는 영향을 함께 봐야 합니다.";
-  if (market === "US") return "미국 국채금리와 달러, 성장주 투자심리가 어떻게 반응하는지 확인해야 합니다.";
+  if (market === "US") return "미국 국채금리와 달러, 성장주 투자심리의 반응을 함께 확인해야 합니다.";
   return "글로벌 금리·환율과 위험선호가 어떻게 반응하는지 확인할 필요가 있습니다.";
 }
 
 function renderScheduleBody(schedule: VerifiedSchedule) {
   const lines = schedule.events.map((item) => (
-    `* ${koreanScheduleDate(item.date)}: ${item.event}\n  ${scheduleImportance(item.market)}`
+    `- ${koreanScheduleDate(item.date)}: ${item.event}\n  ${scheduleImportance(item.event, item.market)}`
   ));
   return lines.join("\n");
 }
@@ -271,9 +294,8 @@ export function applyVerifiedSchedule(
   const scheduleSections = originalSections.filter((section) => SCHEDULE_HEADING_PATTERN.test(stringValue(section.heading)));
   const writerScheduleText = scheduleSections.map((section) => stringValue(section.body)).join("\n").toLowerCase();
   const writerSelectedEvents = verifiedEvents.filter((item) => writerScheduleText.includes(item.event.toLowerCase()));
-  const events = options.contentType === "NEXT_WEEK_MARKET_PREVIEW"
-    ? (writerSelectedEvents.length > 0 ? writerSelectedEvents : verifiedEvents).slice(0, 6)
-    : verifiedEvents;
+  const eventLimit = options.contentType === "NEXT_WEEK_MARKET_PREVIEW" ? 6 : 4;
+  const events = (writerSelectedEvents.length > 0 ? writerSelectedEvents : verifiedEvents).slice(0, eventLimit);
   const markets = [...new Set(events.map((item) => item.market).filter((item): item is string => Boolean(item)))];
   const expectedMarkets = options.contentType === "NEXT_WEEK_MARKET_PREVIEW" ? ["KR", "US"] : [];
   const schedule: VerifiedSchedule = {
@@ -295,7 +317,7 @@ export function applyVerifiedSchedule(
   for (const section of originalSections) {
     if (SCHEDULE_HEADING_PATTERN.test(stringValue(section.heading))) {
       if (!scheduleInserted && events.length > 0) {
-        sections.push({ heading: scheduleHeading(schedule), body: scheduleBody });
+        sections.push({ heading: stringValue(section.heading) || scheduleHeading(schedule), body: scheduleBody });
         scheduleInserted = true;
       }
       continue;

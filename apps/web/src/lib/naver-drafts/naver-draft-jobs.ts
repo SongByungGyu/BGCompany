@@ -380,7 +380,7 @@ function buildPlainBody(pipeline: ContentPipelineRun, template: StockBriefingTem
   return sanitizeByTemplate(renderNaverBody(blocks), template);
 }
 
-function buildNextWeekEditorialBody(pipeline: ContentPipelineRun) {
+function buildWriterEditorialBody(pipeline: ContentPipelineRun, template: StockBriefingTemplate) {
   const writer = pipeline.writerResult;
   if (!writer) return "";
   const sections = writer.sections?.map((section) => {
@@ -397,7 +397,7 @@ function buildNextWeekEditorialBody(pipeline: ContentPipelineRun) {
   ].filter(Boolean).join("\n\n");
   return sanitizeByTemplate(stripMarkdownSyntax(body)
     .replace(/\r\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n"), "NEXT_WEEK_MARKET_PREVIEW");
+    .replace(/\n{3,}/g, "\n\n"), template);
 }
 
 function buildMarkdownBody(title: string, body: string) {
@@ -446,8 +446,9 @@ function buildDraftFromPipeline(pipeline: ContentPipelineRun): DraftBuildResult 
   const thumbnailText = clean(thumbnail.thumbnailTitle) || clean(thumbnail.thumbnailPrimaryText) || `${title} 핵심 정리`;
   const thumbnailPrompt = clean(thumbnail.thumbnailPrompt) || `네이버 블로그 썸네일, 깔끔한 금융 리포트 스타일, 제목: ${title}, 핵심 문구: ${thumbnailText}`;
   const refs = collectReferences(pipeline);
-  const body = template === "NEXT_WEEK_MARKET_PREVIEW"
-    ? buildNextWeekEditorialBody(pipeline)
+  const writerBody = buildWriterEditorialBody(pipeline, template);
+  const body = pipeline.runnerMode === "hermes" && writerBody
+    ? writerBody
     : buildPlainBody(pipeline, template, title, refs);
   const quality = buildDraftQualityCheck(template, body, refs, pipeline);
   if (!quality.ok) {

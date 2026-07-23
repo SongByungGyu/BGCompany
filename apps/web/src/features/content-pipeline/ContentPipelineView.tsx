@@ -26,7 +26,7 @@ const channelLabels: Record<ContentChannel, string> = {
   newsletter: "뉴스레터",
 };
 
-const HERMES_PIPELINE_REQUIRED_RUNS = 4;
+const HERMES_PIPELINE_REQUIRED_RUNS = 8;
 
 const INVESTMENT_DISCLAIMER =
   "본 글은 투자 판단을 돕기 위한 시장 정리 자료이며, 특정 종목의 매수·매도 추천이 아닙니다. 투자 결정과 책임은 투자자 본인에게 있습니다.";
@@ -44,8 +44,8 @@ const DEFAULT_NAVER_TAGS = [
 const STOCK_BRIEFING_TEMPLATE_CONFIGS: Record<StockBriefingTemplate, StockBriefingTemplateConfig> = {
   KOREA_DAILY_PREVIEW: {
     type: "KOREA_DAILY_PREVIEW",
-    label: "매일 09:00 KST · 금일 한국 주식시장 현황/전망",
-    recommendedSchedule: "매일 08:30~08:50 KST 작성 · 09:00 KST 발행 권장",
+    label: "매일 08:30 KST · 금일 한국 주식시장 현황/전망",
+    recommendedSchedule: "매일 08:00~08:20 KST 작성 · 08:30 KST 발행 권장",
     recommendedCategory: "오늘의 한국장 전망",
     requiredSections: ["오늘의 한국장 한 줄 요약", "전일 미국장 흐름", "환율/금리/유가 체크", "오늘의 주요 변수", "코스피·코스닥 예상 흐름", "주목 섹터", "리스크 요인", "투자자 체크리스트"],
     defaultTags: ["BGMarketNote", "주식시장", "증시브리핑", "시장전망", "투자공부", "한국주식", "코스피", "코스닥", "국장전망", "환율", "반도체", "2차전지"],
@@ -1444,7 +1444,7 @@ export function ContentPipelineView() {
         ? `오늘 남은 Hermes 실행 가능 횟수: ${latestUsage.remaining} / ${latestUsage.limit}회`
         : "Hermes 사용량을 확인하지 못했습니다.";
       const confirmed = window.confirm(
-        `Hermes 실제 실행은 OpenAI API 비용이 발생할 수 있습니다.\n${remainingText}\n\n이번 실행은 content-planner, marketing-manager, content-writer, qa-auditor를 각 1회씩 최대 ${HERMES_PIPELINE_REQUIRED_RUNS}회 Hermes Bridge로 실행합니다. 계속 실행할까요?`,
+        `Hermes 실제 실행은 OpenAI API 비용이 발생할 수 있습니다.\n${remainingText}\n\n이번 실행은 기획·마케팅 각 1회와 작성·QA 자동 수정 검수를 최대 3회, 총 ${HERMES_PIPELINE_REQUIRED_RUNS}회까지 Hermes Bridge로 실행합니다. 계속 실행할까요?`,
       );
       if (!confirmed) {
         setNotice("Hermes 실제 실행을 취소했습니다. 비용 없는 검증은 mock 또는 hermes-dry-run을 사용하세요.");

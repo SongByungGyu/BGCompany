@@ -6,6 +6,7 @@ import type { StockBriefingTemplate } from "@/features/content-pipeline/content-
 import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
 import type { MarketSnapshot, MarketSnapshotMetric } from "@/lib/stock-blog/references/reference-types";
 import { evaluateStockBlogImageQuality } from "@/lib/stock-blog/stock-blog-image-quality";
+import { getStockBlogImagePlacementHeadings } from "@/lib/stock-blog/stock-blog-image-placements";
 import type { StockBlogContentImage, StockBlogImageDataPoint, StockBlogImageQualityAudit } from "@/lib/stock-blog/stock-blog-image-types";
 
 export type GeneratedStockBlogImages = {
@@ -332,6 +333,7 @@ export async function generateStockBlogImages(input: {
   const relativeDir = `/generated/stock-blog/${id}`;
   const outputDir = path.join(process.cwd(), "public", "generated", "stock-blog", id);
   const theme = THEMES[input.template];
+  const placements = getStockBlogImagePlacementHeadings(input.template);
   const footer = `${input.marketDate || generatedAt.slice(0, 10)} · BG Market Note original graphic`;
   const editorialTitle = buildStockBlogEditorialTitle({
     template: input.template,
@@ -440,7 +442,7 @@ export async function generateStockBlogImages(input: {
         role: "body",
         type: "chart",
         title: "한국·미국 주요 지수 등락 비교",
-        placementAfterHeading: "1. 지난주 시장은 어땠을까",
+        placementAfterHeading: placements.majorIndexChange,
         imageUrl: `${relativeDir}/major-index-change.svg`,
         caption: "최근 거래일 기준 한국과 미국 주요 지수 등락률 비교",
         sourceLabel: indexSource,
@@ -464,7 +466,7 @@ export async function generateStockBlogImages(input: {
         role: "body",
         type: "chart",
         title: "KOSPI 투자자별 순매수 비교",
-        placementAfterHeading: "2. 다음 주 한국 증시 전망",
+        placementAfterHeading: placements.kospiInvestorFlow,
         imageUrl: `${relativeDir}/kospi-investor-flow.svg`,
         caption: "외국인·기관·개인의 KOSPI 순매수 비교",
         sourceLabel: flowSource,
@@ -482,7 +484,7 @@ export async function generateStockBlogImages(input: {
         role: "body",
         type: "chart",
         title: "원·달러 환율과 미국 국채금리 현황",
-        placementAfterHeading: "3. 다음 주 미국 증시 전망",
+        placementAfterHeading: placements.fxAndUsYields,
         imageUrl: `${relativeDir}/fx-and-us-yields.svg`,
         caption: "원·달러 환율과 미국 2년물·10년물 국채금리 비교",
         sourceLabel: macroSource,

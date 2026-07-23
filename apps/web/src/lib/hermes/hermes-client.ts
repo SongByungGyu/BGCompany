@@ -289,11 +289,14 @@ export function buildContentWriterHermesPayload(input: ContentWriterHermesInput)
       competitorBlogReferences: input.referenceBundle?.competitorBlogReferences,
       editorialBenchmarkGuidelines: input.editorialBenchmarkGuidelines,
       bodyStructure: nextWeekPreview
-        ? ["1. 지난주 시장은 어땠을까", "2. 다음 주 한국 증시 전망", "3. 다음 주 미국 증시 전망", "4. 다음 주 핵심 일정", "5. 이번 주에 눈여겨볼 기회와 위험", "6. 개인 투자자가 확인할 것", "함께 확인한 기사", "7. 마무리", "투자 유의문구"]
-        : ["도입부", "시장 요약", "한국 시장", "미국 시장", "강세/약세 섹터", "다음 주 일정", "투자자 체크리스트", "참고자료", "투자 유의문구"],
+        ? ["1. 지난주 시장은 어땠을까", "2. 다음 주 한국 증시 전망", "3. 다음 주 미국 증시 전망", "4. 다음 주 핵심 일정", "5. 이번 주에 눈여겨볼 기회와 위험", "6. 개인 투자자가 확인할 것", "함께 확인한 기사"]
+        : ["1. 최근 시장은 어땠을까", "2. 한국 증시 흐름과 전망", "3. 미국 증시와 글로벌 변수", "4. 금리·환율·핵심 일정", "5. 눈여겨볼 기회와 위험", "6. 개인 투자자가 확인할 것", "함께 확인한 기사"],
       prohibitedPhrases: input.prohibitedPhrases,
       blogImagePrompts: input.blogImagePrompts,
       referencePolicy: STOCK_REFERENCE_POLICY,
+      revisionAttempt: input.revisionAttempt,
+      previousWriterResult: input.previousWriterResult,
+      qaRevisionFeedback: input.qaRevisionFeedback,
     },
     context: {
       company: "BG Company",

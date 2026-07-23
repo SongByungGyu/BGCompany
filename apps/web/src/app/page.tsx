@@ -13,6 +13,7 @@ import { DB_SYNC_INTERVAL_MS } from "@/lib/db-sync";
 import { WorkBoardView } from "@/features/work-board/WorkBoardView";
 import { ApprovalInboxView } from "@/features/approvals/ApprovalInboxView";
 import { ContentPipelineView } from "@/features/content-pipeline/ContentPipelineView";
+import { OperationsWorkspaceView } from "@/features/operations/OperationsWorkspaceView";
 import type { DashboardSummary, DashboardSummaryCard } from "@/lib/dashboard-summary/summary-types";
 
 const OfficeCanvas = dynamic(
@@ -409,6 +410,12 @@ export default function Home() {
         <ApprovalInboxView employees={employees} eventLog={eventLog} onPublishEvent={publishBGEvent}/>
       ) : activeNav==="콘텐츠" ? (
         <ContentPipelineView/>
+      ) : activeNav==="보고서" ? (
+        <OperationsWorkspaceView scope="report"/>
+      ) : activeNav==="개발" ? (
+        <OperationsWorkspaceView scope="development"/>
+      ) : activeNav==="재정" ? (
+        <OperationsWorkspaceView scope="finance"/>
       ) : (
         <PlaceholderWorkspace label={activeNav}/>
       )}

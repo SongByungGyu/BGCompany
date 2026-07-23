@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { inspectNextWeekEditorialContract } from "./quality-gate";
+import { hasValidStockBlogBodyLength, inspectNextWeekEditorialContract } from "./quality-gate";
 
 const disclaimer = "본 글은 시장 정보를 정리한 투자 참고 자료이며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 최종 투자 판단과 책임은 투자자 본인에게 있습니다.";
 
@@ -45,4 +45,10 @@ test("기사 섹션 밖 링크와 내부 용어를 차단 대상으로 식별한
   assert.equal(result.outsideArticleUrlCount, 1);
   assert.ok(result.forbiddenTerms.length >= 1);
   assert.ok(result.missingOrOutOfOrderHeadings.length >= 1);
+});
+
+test("본문 분량은 공백 포함 글자 수로 판정한다", () => {
+  assert.equal(hasValidStockBlogBodyLength("가 ".repeat(1000)), true);
+  assert.equal(hasValidStockBlogBodyLength("가".repeat(1999)), false);
+  assert.equal(hasValidStockBlogBodyLength("가".repeat(3201)), false);
 });

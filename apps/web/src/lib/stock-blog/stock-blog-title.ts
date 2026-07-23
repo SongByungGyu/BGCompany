@@ -8,6 +8,13 @@ const DEFAULT_HOOKS: Record<StockBriefingTemplate, string> = {
 };
 
 const PROHIBITED_TITLE_EXPRESSIONS = ["급등 확정", "무조건 상승", "매수 추천", "수익 보장", "상한가 확정", "폭등", "몰빵"];
+const COMPLETE_EDITORIAL_TITLE_PATTERN = /(?:20\d{2}년\s*\d{1,2}월\s*\d{1,2}일|(?:20)?\d{2}[-/.]\d{1,2}[-/.]\d{1,2}).*(?:증시|시장)/;
+
+function removeProhibitedExpressions(value: string) {
+  let result = value;
+  for (const expression of PROHIBITED_TITLE_EXPRESSIONS) result = result.replaceAll(expression, "핵심 변수");
+  return result.replace(/\s+/g, " ").trim();
+}
 
 function parseDateParts(value?: string) {
   const source = value?.trim() ?? "";
@@ -40,7 +47,7 @@ function cleanHook(value: string | undefined, template: StockBriefingTemplate) {
     .replace(/[|:·\-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  for (const expression of PROHIBITED_TITLE_EXPRESSIONS) result = result.replaceAll(expression, "핵심 변수");
+  result = removeProhibitedExpressions(result);
   if (result.length < 6) result = DEFAULT_HOOKS[template];
   return result.length > 30 ? `${result.slice(0, 29)}…` : result;
 }
@@ -50,6 +57,10 @@ export function buildStockBlogEditorialTitle(input: {
   marketDate?: string;
   sourceTitle?: string;
 }) {
+  const sourceTitle = removeProhibitedExpressions(input.sourceTitle?.trim() ?? "");
+  if (sourceTitle.length >= 15 && COMPLETE_EDITORIAL_TITLE_PATTERN.test(sourceTitle)) {
+    return sourceTitle.length > 90 ? `${sourceTitle.slice(0, 89)}…` : sourceTitle;
+  }
   const prefix = baseTitle(input.template, input.marketDate);
-  return `${prefix} ${cleanHook(input.sourceTitle, input.template)}`;
+  return `${prefix} ${cleanHook(sourceTitle, input.template)}`;
 }

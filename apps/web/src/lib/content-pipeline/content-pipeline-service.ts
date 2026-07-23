@@ -22,6 +22,12 @@ import {
   STOCK_BLOG_EDITORIAL_QUALITY_TARGET,
   type StockBlogEditorialBenchmark,
 } from "@/lib/stock-blog/stock-blog-editorial-benchmark";
+import {
+  buildStockBlogQaRevisionFeedback,
+  shouldRetryStockBlogQa,
+  STOCK_BLOG_MAX_HERMES_RUNS,
+  STOCK_BLOG_MAX_QA_ATTEMPTS,
+} from "@/lib/stock-blog/qa-revision-policy";
 
 type ContentPipelineInput = {
   topic: string;
@@ -73,6 +79,18 @@ type WriterExecution = MarketingExecution;
 
 type QaExecution = MarketingExecution;
 
+type WriterRevisionContext = {
+  revisionAttempt: number;
+  previousWriterResult: Record<string, unknown>;
+  qaRevisionFeedback: Record<string, unknown>;
+};
+
+type WriterQaAttempt = {
+  attempt: number;
+  writer: WriterExecution;
+  qa: QaExecution;
+};
+
 type NormalizedPipelineResult = NormalizedHermesRunResult & Record<string, unknown>;
 
 const channels = new Set(["blog", "instagram", "youtube", "newsletter"]);
@@ -82,7 +100,7 @@ const stockContentTypes = new Set<StockReferenceBriefingTemplate>([
   "WEEKLY_MARKET_REVIEW",
   "NEXT_WEEK_MARKET_PREVIEW",
 ]);
-const HERMES_PIPELINE_REQUIRED_RUNS = 4;
+const HERMES_PIPELINE_REQUIRED_RUNS = STOCK_BLOG_MAX_HERMES_RUNS;
 
 function withFredDegradedDisclosure(writer: WriterExecution, referenceBundle?: ReferenceBundle): WriterExecution {
   const snapshot = referenceBundle?.marketSnapshot;
@@ -428,6 +446,7 @@ function pipelineMetadata(input: {
   qualityGate?: ContentPipelineRun["qualityGate"];
   editorialBenchmark?: StockBlogEditorialBenchmark;
   generatedImages?: GeneratedStockBlogImages;
+  revisionHistory?: Array<Record<string, unknown>>;
 }): Prisma.InputJsonObject {
   return toJsonObject({
     contentPipelineId: input.pipelineId,
@@ -458,6 +477,7 @@ function pipelineMetadata(input: {
     hermesMarketingRequestPayload: input.hermesMarketingRequestPayload,
     hermesWriterRequestPayload: input.hermesWriterRequestPayload,
     hermesQaRequestPayload: input.hermesQaRequestPayload,
+    revisionHistory: input.revisionHistory,
   });
 }
 
@@ -899,7 +919,12 @@ function dryRunWriterExecution(data: ContentPipelineInput, planner: PlannerExecu
   };
 }
 
-async function hermesWriterExecution(data: ContentPipelineInput, planner: PlannerExecution, marketing: MarketingExecution): Promise<WriterExecution> {
+async function hermesWriterExecution(
+  data: ContentPipelineInput,
+  planner: PlannerExecution,
+  marketing: MarketingExecution,
+  revision?: WriterRevisionContext,
+): Promise<WriterExecution> {
   if (planner.agentRunStatus === "failed") {
     const outputSummary = "content-planner 실패로 content-writer Hermes 실행을 건너뛰었습니다.";
     return {
@@ -955,6 +980,9 @@ async function hermesWriterExecution(data: ContentPipelineInput, planner: Planne
     marketingResult: marketing.result,
     referenceBundle: data.referenceBundle,
     blogImagePrompts: data.blogImagePrompts,
+    revisionAttempt: revision?.revisionAttempt,
+    previousWriterResult: revision?.previousWriterResult,
+    qaRevisionFeedback: revision?.qaRevisionFeedback,
   });
   const hermesPayload = toJsonObject(payload);
   const normalizedResult = normalizeResultForMetadata(result as NormalizedPipelineResult);
@@ -999,10 +1027,15 @@ async function hermesWriterExecution(data: ContentPipelineInput, planner: Planne
   };
 }
 
-async function executeWriter(data: ContentPipelineInput, planner: PlannerExecution, marketing: MarketingExecution): Promise<WriterExecution> {
+async function executeWriter(
+  data: ContentPipelineInput,
+  planner: PlannerExecution,
+  marketing: MarketingExecution,
+  revision?: WriterRevisionContext,
+): Promise<WriterExecution> {
   const runnerMode = data.runnerMode ?? "mock";
   if (runnerMode === "hermes-dry-run") return dryRunWriterExecution(data, planner, marketing);
-  if (runnerMode === "hermes") return hermesWriterExecution(data, planner, marketing);
+  if (runnerMode === "hermes") return hermesWriterExecution(data, planner, marketing, revision);
   return mockWriterExecution(data, planner, marketing);
 }
 
@@ -1614,12 +1647,43 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
   const taskIds = [contentTaskId, marketingTaskId, writerTaskId, qaTaskId];
   const planner = await executePlanner(data);
   const marketing = await executeMarketing(data, planner);
-  const rawWriter = await executeWriter(data, planner, marketing);
-  const scheduleCheckedWriter = runnerMode === "hermes"
+  let rawWriter = await executeWriter(data, planner, marketing);
+  let scheduleCheckedWriter = runnerMode === "hermes"
     ? withVerifiedSchedule(rawWriter, data.referenceBundle)
     : rawWriter;
-  const writer = withFredDegradedDisclosure(scheduleCheckedWriter, data.referenceBundle);
-  const qa = await executeQa(data, planner, marketing, writer);
+  let writer = withFredDegradedDisclosure(scheduleCheckedWriter, data.referenceBundle);
+  let qa = await executeQa(data, planner, marketing, writer);
+  const writerQaAttempts: WriterQaAttempt[] = [{ attempt: 1, writer, qa }];
+
+  while (
+    runnerMode === "hermes"
+    && writer.agentRunStatus === "succeeded"
+    && qa.agentRunStatus === "succeeded"
+    && shouldRetryStockBlogQa(qa.result, writerQaAttempts.length)
+  ) {
+    const revisionAttempt = writerQaAttempts.length + 1;
+    rawWriter = await executeWriter(data, planner, marketing, {
+      revisionAttempt,
+      previousWriterResult: writer.result,
+      qaRevisionFeedback: buildStockBlogQaRevisionFeedback(qa.result),
+    });
+    scheduleCheckedWriter = withVerifiedSchedule(rawWriter, data.referenceBundle);
+    writer = withFredDegradedDisclosure(scheduleCheckedWriter, data.referenceBundle);
+    qa = await executeQa(data, planner, marketing, writer);
+    writerQaAttempts.push({ attempt: revisionAttempt, writer, qa });
+  }
+
+  const revisionHistory = writerQaAttempts.map((item) => ({
+    attempt: item.attempt,
+    writerStatus: item.writer.agentRunStatus,
+    qaStatus: item.qa.agentRunStatus,
+    qaScore: typeof item.qa.result.qaScore === "number" ? item.qa.result.qaScore : null,
+    publishReadiness: typeof item.qa.result.publishReadiness === "string" ? item.qa.result.publishReadiness : null,
+    finalRecommendation: typeof item.qa.result.finalRecommendation === "string" ? item.qa.result.finalRecommendation : null,
+    requiredRevisions: Array.isArray(item.qa.result.requiredRevisions)
+      ? item.qa.result.requiredRevisions.filter((value): value is string => typeof value === "string")
+      : [],
+  }));
   const outputTitle = writer.agentRunStatus === "succeeded" && typeof writer.result.finalTitle === "string" ? writer.result.finalTitle : planner.outputTitle;
   const outputSummary = qa.agentRunStatus === "succeeded"
     ? qa.outputSummary
@@ -1657,6 +1721,7 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     referenceBundle: data.referenceBundle,
     blogImagePrompts: data.blogImagePrompts,
     generatedImages,
+    revisionHistory,
   };
   const provisionalMetadata = pipelineMetadata(metadataInput);
   const provisionalPipeline = runFromEvent({ id: pipelineId, timestamp: now, payload: provisionalMetadata });
@@ -1806,28 +1871,49 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     hermesJobId: marketing.hermesJobId,
     metadata: { role: "marketing-manager", hermesPayload: marketing.hermesPayload, hermesResponse: marketing.hermesResponse, plannerResult: planner.result, marketingResult: marketing.result },
   });
-  await createPipelineAgentRun({
-    pipelineId,
-    taskId: writerTaskId,
-    employeeId: "content-writer",
-    mode: writer.agentRunMode,
-    status: writer.agentRunStatus,
-    summary: writer.agentRunSummary,
-    errorMessage: writer.agentRunError,
-    hermesJobId: writer.hermesJobId,
-    metadata: { role: "content-writer", hermesPayload: writer.hermesPayload, hermesResponse: writer.hermesResponse, plannerResult: planner.result, marketingResult: marketing.result, writerResult: writer.result },
-  });
-  await createPipelineAgentRun({
-    pipelineId,
-    taskId: qaTaskId,
-    employeeId: "qa-auditor",
-    mode: qa.agentRunMode,
-    status: qa.agentRunStatus,
-    summary: qa.agentRunSummary,
-    errorMessage: qa.agentRunError,
-    hermesJobId: qa.hermesJobId,
-    metadata: { role: "qa-auditor", hermesPayload: qa.hermesPayload, hermesResponse: qa.hermesResponse, plannerResult: planner.result, marketingResult: marketing.result, writerResult: writer.result, qaResult: qa.result },
-  });
+  for (const item of writerQaAttempts) {
+    await createPipelineAgentRun({
+      pipelineId,
+      taskId: writerTaskId,
+      employeeId: "content-writer",
+      mode: item.writer.agentRunMode,
+      status: item.writer.agentRunStatus,
+      summary: item.writer.agentRunSummary,
+      errorMessage: item.writer.agentRunError,
+      hermesJobId: item.writer.hermesJobId,
+      metadata: {
+        role: "content-writer",
+        revisionAttempt: item.attempt,
+        maxQaAttempts: STOCK_BLOG_MAX_QA_ATTEMPTS,
+        hermesPayload: item.writer.hermesPayload,
+        hermesResponse: item.writer.hermesResponse,
+        plannerResult: planner.result,
+        marketingResult: marketing.result,
+        writerResult: item.writer.result,
+      },
+    });
+    await createPipelineAgentRun({
+      pipelineId,
+      taskId: qaTaskId,
+      employeeId: "qa-auditor",
+      mode: item.qa.agentRunMode,
+      status: item.qa.agentRunStatus,
+      summary: item.qa.agentRunSummary,
+      errorMessage: item.qa.agentRunError,
+      hermesJobId: item.qa.hermesJobId,
+      metadata: {
+        role: "qa-auditor",
+        revisionAttempt: item.attempt,
+        maxQaAttempts: STOCK_BLOG_MAX_QA_ATTEMPTS,
+        hermesPayload: item.qa.hermesPayload,
+        hermesResponse: item.qa.hermesResponse,
+        plannerResult: planner.result,
+        marketingResult: marketing.result,
+        writerResult: item.writer.result,
+        qaResult: item.qa.result,
+      },
+    });
+  }
 
   await createEvent({ type: "ContentPipelineStarted", payload: metadata, summary: `${data.title} 콘텐츠 파이프라인 시작` });
   await createEvent({
@@ -1842,6 +1928,23 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     },
     summary: `${data.title} 경쟁 블로그 비교 완료 · 편집 품질 ${editorialBenchmark.quality.score}/100`,
   });
+  for (const item of revisionHistory.slice(1)) {
+    await createEvent({
+      type: "ContentPipelineQaRevisionCompleted",
+      employeeId: "qa-auditor",
+      taskId: qaTaskId,
+      payload: {
+        contentPipelineId: pipelineId,
+        attempt: item.attempt,
+        maxAttempts: STOCK_BLOG_MAX_QA_ATTEMPTS,
+        qaScore: item.qaScore,
+        publishReadiness: item.publishReadiness,
+        finalRecommendation: item.finalRecommendation,
+        requiredRevisions: item.requiredRevisions,
+      },
+      summary: `QA 피드백 반영 재작성·재검수 ${item.attempt}/${STOCK_BLOG_MAX_QA_ATTEMPTS} 완료`,
+    });
+  }
   await createEvent({ type: "TaskStarted", employeeId: "content-planner", taskId: contentTaskId, payload: { ...metadata, title: data.title }, summary: "콘텐츠 기획 시작" });
   if (planner.agentRunStatus === "failed") {
     await createEvent({ type: "ErrorOccurred", employeeId: "content-planner", taskId: contentTaskId, payload: { ...metadata, error: planner.agentRunError, message: planner.agentRunError, status: "오류 대응 중" }, summary: `content-planner Hermes 실행 실패 · ${planner.agentRunError ?? "원인 미상"}` });

@@ -106,6 +106,48 @@ test("Writer가 선택한 검증 일정만 원래 섹션 위치에 공개하고 
   assert.equal(applied.validation.checkedEventCount, 1);
 });
 
+test("일일 마감 글은 원래 번호 제목을 유지하고 가까운 일정만 사용한다", () => {
+  const applied = applyVerifiedSchedule(writerResult([
+    { heading: "1. 최근 시장은 어땠을까", body: "최근 시장 흐름입니다." },
+    { heading: "4. 금리·환율·핵심 일정", body: "가까운 고용 일정을 확인합니다." },
+    { heading: "함께 확인한 기사", body: "1. 기사 – 언론사, 발행일\nhttps://news.example.com/article" },
+  ]), snapshot({
+    marketDate: "2026-07-17",
+    upcoming: [
+      { date: "2026-07-21", event: "State Employment and Unemployment", market: "US", url: "https://example.com/employment" },
+      { date: "2026-07-22", event: "State Job Openings and Labor Turnover", market: "US", url: "https://example.com/jolts" },
+      { date: "2026-07-29", event: "Later Employment Event", market: "US", url: "https://example.com/later" },
+    ],
+  }), { contentType: "KOREA_MARKET_CLOSE_US_PREVIEW" });
+  const sections = applied.result.sections as Array<{ heading: string; body: string }>;
+  const scheduleSection = sections.find((section) => section.heading === "4. 금리·환율·핵심 일정");
+
+  assert.ok(scheduleSection);
+  assert.match(scheduleSection.body, /^- 7월 21일 화요일:/m);
+  assert.match(scheduleSection.body, /고용 흐름이 경기 기대/);
+  assert.match(scheduleSection.body, /노동 수요의 둔화 여부/);
+  assert.doesNotMatch(scheduleSection.body, /7월 29일|Later Employment Event/);
+  assert.equal(applied.validation.checkedEventCount, 2);
+});
+
+test("FOMC·환율·금리 일정은 서로 다른 중요도 문장으로 설명한다", () => {
+  const applied = applyVerifiedSchedule(writerResult([
+    { heading: "4. 금리·환율·핵심 일정", body: "FOMC와 환율, 금리 자료를 확인합니다." },
+  ]), snapshot({
+    marketDate: "2026-07-20",
+    upcoming: [
+      { date: "2026-07-20", event: "FOMC Press Release", market: "US", url: "https://example.com/fomc" },
+      { date: "2026-07-20", event: "H.10 Foreign Exchange Rates", market: "US", url: "https://example.com/fx" },
+      { date: "2026-07-20", event: "H.15 Selected Interest Rates", market: "US", url: "https://example.com/rates" },
+    ],
+  }), { contentType: "KOREA_MARKET_CLOSE_US_PREVIEW" });
+  const scheduleBody = String(applied.result.fullDraft);
+
+  assert.match(scheduleBody, /통화정책 신호/);
+  assert.match(scheduleBody, /달러 흐름이 원·달러 환율/);
+  assert.match(scheduleBody, /단기·장기 금리의 방향/);
+});
+
 test("혼합 강약 목록을 섹터가 아닌 시장 항목으로 명확히 표시한다", () => {
   const applied = applyVerifiedSchedule(writerResult([
     { heading: "강세/약세 섹터", body: "강세 섹터에는 통신과 지수가 포함됩니다. 약세 섹터도 확인합니다." },

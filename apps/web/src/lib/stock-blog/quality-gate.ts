@@ -151,6 +151,10 @@ export function inspectNextWeekEditorialContract(body: string) {
   };
 }
 
+export function hasValidStockBlogBodyLength(body: string) {
+  return body.length >= 2000 && body.length <= 3200;
+}
+
 function clean(value?: string | null) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -380,13 +384,13 @@ export function evaluateStockBlogPublishQuality(input: {
   if (d.bulletItemCount < 5) reasons.push("투자자 체크리스트/불릿 5개 이상 필요");
   if (requireReal && d.distinctUrlCount < 5) reasons.push("최종 본문용 실제 URL 5개 이상 필요");
   if (nextWeekPreview && editorialContract) {
-    if (editorialContract.bodyCharacterCount < 2000 || editorialContract.bodyCharacterCount > 3200) reasons.push("다음 주 전망 공개 본문은 공백 포함 2000~3200자 필요");
+    if (!hasValidStockBlogBodyLength(body)) reasons.push("다음 주 전망 공개 본문은 공백 포함 2000~3200자 필요");
     if (editorialContract.articleEntryCount !== 3 || editorialContract.articleUrlCount !== 3) reasons.push("함께 확인한 기사 3개와 원문 링크 3개 필요");
     if (editorialContract.outsideArticleUrlCount > 0) reasons.push("함께 확인한 기사 밖의 본문 중간 링크 노출 금지");
     if (editorialContract.disclaimerCount !== 1) reasons.push("지정 투자 유의문구 정확히 1회 필요");
     if (editorialContract.missingOrOutOfOrderHeadings.length > 0) reasons.push(`주간 전망 섹션 누락 또는 순서 오류: ${editorialContract.missingOrOutOfOrderHeadings.join(", ")}`);
     if (editorialContract.forbiddenTerms.length > 0) reasons.push("내부·시스템·기계적 용어가 공개 본문에 포함됨");
-  } else if (d.bodyLength < 2000) reasons.push("최종 본문 길이 2000자 이상 필요");
+  } else if (!hasValidStockBlogBodyLength(body)) reasons.push("최종 본문은 공백 포함 2000~3200자 필요");
   if (!d.hasDisclaimer) reasons.push("투자 유의문구 누락");
   if (d.hasMockPhrase) reasons.push("mock/수동 확인 문구가 최종 본문에 포함됨");
   if (d.hasImagePromptLeak) reasons.push("이미지 프롬프트가 최종 본문에 섞임");

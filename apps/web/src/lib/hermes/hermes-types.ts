@@ -25,6 +25,9 @@ export type ContentWriterHermesInput = ContentPlannerHermesInput & {
   marketingResult?: Record<string, unknown>;
   referenceBundle?: ReferenceBundle;
   blogImagePrompts?: BlogImagePrompt[];
+  revisionAttempt?: number;
+  previousWriterResult?: Record<string, unknown>;
+  qaRevisionFeedback?: Record<string, unknown>;
 };
 
 export type QaAuditHermesInput = ContentPlannerHermesInput & {
@@ -105,6 +108,9 @@ export type HermesContentWriterPayload = {
     prohibitedPhrases?: string[];
     blogImagePrompts?: BlogImagePrompt[];
     referencePolicy?: string[];
+    revisionAttempt?: number;
+    previousWriterResult?: Record<string, unknown>;
+    qaRevisionFeedback?: Record<string, unknown>;
   };
   context: {
     company: "BG Company";

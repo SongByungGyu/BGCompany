@@ -444,7 +444,76 @@ def build_content_writer_prompt(payload: dict[str, Any]) -> str:
     market_json = compact_json(compact_market_snapshot(input_data))
     references_json = compact_json(compact_reference_context(input_data))
     competitors_json = compact_json(compact_competitor_context(input_data))
-    body_structure_json = compact_json(input_data.get("bodyStructure") or [])
+    revision_attempt_raw = input_data.get("revisionAttempt")
+    revision_attempt = revision_attempt_raw if isinstance(revision_attempt_raw, int) and revision_attempt_raw > 1 else 1
+    previous_writer_source = input_data.get("previousWriterResult") if isinstance(input_data.get("previousWriterResult"), dict) else {}
+    previous_writer_result = {
+        key: previous_writer_source[key]
+        for key in ("finalTitle", "metaDescription", "introduction", "sections", "conclusion", "cta", "usedSeoKeywords")
+        if key in previous_writer_source
+    }
+    qa_feedback_source = input_data.get("qaRevisionFeedback") if isinstance(input_data.get("qaRevisionFeedback"), dict) else {}
+    qa_revision_feedback = {
+        key: qa_feedback_source[key]
+        for key in (
+            "qaSummary",
+            "factCheckNotes",
+            "qualityNotes",
+            "riskNotes",
+            "typoAndStyleNotes",
+            "requiredRevisions",
+            "optionalSuggestions",
+            "publishReadiness",
+            "qaScore",
+            "finalRecommendation",
+            "reason",
+        )
+        if key in qa_feedback_source
+    }
+    revision_context = ""
+    if revision_attempt > 1 and previous_writer_result and qa_revision_feedback:
+        revision_context = f"""
+- automatic revision attempt: {revision_attempt}/3
+- previous writer result:
+{compact_json(previous_writer_result)}
+- QA revision feedback:
+{compact_json(qa_revision_feedback)}
+
+자동 수정 지침:
+- 이전 초안 전체를 버리고 새 주제를 만들지 말고, QA의 requiredRevisions와 사실성 지적을 빠짐없이 반영해 같은 글을 교정한다.
+- verified market snapshot과 충돌한 문장은 입력 수치에 맞게 수정한다. QA 의견과 market snapshot이 충돌하면 market snapshot을 우선한다.
+- 이미 기준을 충족한 구조, 기사 3개, 체크리스트, 투자 유의문구, 이미지 연결용 heading은 유지한다.
+- QA가 지적하지 않은 정확한 수치·일정·출처를 임의로 바꾸거나 새로 만들지 않는다.
+- 수정 후에도 아래의 모든 writer 정책과 JSON schema를 다시 충족한다.
+""".strip()
+    body_structure_source = input_data.get("bodyStructure")
+    body_structure = [
+        str(item).strip()
+        for item in body_structure_source
+        if isinstance(item, str) and str(item).strip()
+    ] if isinstance(body_structure_source, list) else []
+    if not body_structure:
+        body_structure = [
+            "1. 최근 시장은 어땠을까",
+            "2. 한국 증시 흐름과 전망",
+            "3. 미국 증시와 글로벌 변수",
+            "4. 금리·환율·핵심 일정",
+            "5. 눈여겨볼 기회와 위험",
+            "6. 개인 투자자가 확인할 것",
+            "함께 확인한 기사",
+        ]
+    body_structure_json = compact_json(body_structure)
+    section_schema_json = json.dumps([
+        {
+            "heading": heading,
+            "body": (
+                "기사 3개를 번호·제목·언론사·발행일과 다음 줄 원문 링크로 작성"
+                if heading == "함께 확인한 기사"
+                else "2~4문장 문단을 작성하고, 필요한 경우 빈 줄 또는 '- ' 불릿으로 구분"
+            ),
+        }
+        for heading in body_structure
+    ], ensure_ascii=False, indent=2)
     benchmark_guidelines_json = compact_json(input_data.get("editorialBenchmarkGuidelines") or [])
     reference_bundle = input_data.get("referenceBundle") if isinstance(input_data.get("referenceBundle"), dict) else {}
     next_week_preview = (
@@ -452,43 +521,43 @@ def build_content_writer_prompt(payload: dict[str, Any]) -> str:
         or "다음 주" in f"{topic} {title}"
         or "다음주" in f"{topic} {title}"
     )
-    writer_policy = """
+    schedule_policy = "" if next_week_preview else """
+- verified market snapshot의 upcoming 날짜·이벤트명은 변경할 수 없는 원문 값이다. 요일이나 관행으로 날짜를 보정하거나 하루 앞뒤로 옮기지 말고 입력값을 그대로 사용한다.
+- 발표 시각이 입력에 없으면 임의로 만들지 않는다. 입력에 없는 일정을 억지로 추가하지 않는다.
+- "오늘"처럼 기준일을 흐리는 표현 대신 "최근 거래일 기준" 또는 입력에 확인된 날짜를 사용한다.
+""".strip()
+    writer_policy = f"""
 - 개인 투자자가 운영하는 네이버 주식 블로그의 전문 에디터처럼, 꾸준히 시장을 본 사람이 독자에게 설명하는 자연스러운 존댓말로 쓴다.
-- 최근 움직임 → 데이터와 기사에 근거한 이유 → 다음 주 영향 → 투자자가 확인할 항목의 흐름으로 연결하고 수치·기사를 나열하는 보고서체를 피한다.
+- 최근 움직임 → 데이터와 기사에 근거한 이유 → 이어질 시장 영향 → 투자자가 확인할 항목의 흐름으로 연결하고 수치·기사를 나열하는 보고서체를 피한다.
 - 근거가 부족한 해석은 "가능성이 있습니다", "주의해서 볼 필요가 있습니다", "시장의 반응을 확인해야 합니다", "변동성이 커질 수 있습니다"처럼 조건부로 표현한다.
 - 입력 ReferenceBundle과 verified market snapshot에서 확인되지 않은 일정·수치·기사 내용은 만들지 않는다. 수급 단위가 불확실하거나 값이 비정상적이면 숫자를 쓰지 말고 외국인·기관·개인의 방향성만 설명한다.
+- 외국인·기관·개인 수급 금액은 원본 단위 환산 오류를 막기 위해 공개 본문에 숫자로 쓰지 않는다. 단위가 제공되더라도 "외국인은 순매수, 기관은 순매도"처럼 시장별 방향만 설명한다.
+- 코스피와 코스닥의 외국인·기관·개인 수급 방향이 서로 다르면 시장별로 분리해 설명하고, 서로 다른 시장의 순매수를 한 문장으로 합쳐 전체 수급처럼 표현하지 않는다.
 - 본문에는 API 주소, 원문 데이터 URL, JSON 필드명, asOf, 데이터 수집 과정, 내부 분석 과정, "AI 활용 설정", "사진 설명을 입력하세요", "제목과 짧은 설명을 바탕으로 재구성했습니다", 기계적인 "시장 영향" 항목명을 쓰지 않는다.
-- 별도의 "데이터 기준" 블록을 만들지 않고 시장 데이터의 의미를 자연스러운 문장에 녹인다.
-- 신뢰할 수 있고 전망과 직접 관련된 뉴스 기사 정확히 3개만 선택해 핵심 내용을 본문 문장에 재서술한다. 기사 제목·설명을 복사하지 않는다.
+- 별도의 "데이터 기준" 블록을 만들지 않고 기준일과 시장 데이터의 의미를 자연스러운 문장에 녹인다.
+- verified market snapshot의 provider가 kis-fred이고 degradedMode가 fred_unavailable이 아니면 첫 핵심 수치 문단의 "한국투자증권·FRED 최근 거래일 자료 기준"은 올바른 독자용 출처 표기다. degradedMode가 fred_unavailable이면 FRED를 빼고 실제 제공된 출처만 쓴다. API, provider, sourceLabel 같은 시스템 표현이나 URL은 공개하지 않는다.
+- 신뢰할 수 있고 전망과 직접 관련된 뉴스 기사 정확히 3개만 선택해 핵심 내용을 본문에 재서술한다. 기사 제목·설명을 그대로 복사하지 않는다.
 - URL은 마지막 "함께 확인한 기사" 섹션의 기사 3개에만 각각 1개씩 표시한다. 일정·시장 데이터·본문 중간에는 URL을 쓰지 않는다.
-- sections는 다음 순서와 heading을 지킨다: "1. 지난주 시장은 어땠을까", "2. 다음 주 한국 증시 전망", "3. 다음 주 미국 증시 전망", "4. 다음 주 핵심 일정", "5. 이번 주에 눈여겨볼 기회와 위험", "6. 개인 투자자가 확인할 것", "함께 확인한 기사".
-- 지난주 섹션은 투자심리, 수급, 환율·금리, 강약 업종, 민감 재료를 3~5개 자연스러운 문단으로 설명한다.
-- 한국 전망은 경제지표·정책·수급·원달러 환율·반도체 대형주·코스닥 성장주를 상승 조건과 하락 위험으로 나누어 연결한다.
-- 미국 전망은 실적 시즌·대형 기술주 가이던스·2년물과 10년물 금리·달러·연준 기대·글로벌 일정·성장주와 경기민감주의 상대 흐름을 해석한다.
-- 핵심 일정은 검증된 일정만 날짜별로 간단히 쓰고 각 일정이 중요한 이유를 한 문장으로 덧붙인다. 일정을 억지로 채우지 않는다.
-- 기회와 위험은 각각 2~3개이며 각 항목을 2~3문장으로 설명한다. 개인 투자자 체크리스트는 4~6개로 제한한다.
-- conclusion은 앞 문장을 반복하지 말고 한국 GDP·원달러 환율·기업 실적·국채금리처럼 다음 주 핵심 변수를 구체적으로 다시 연결한다.
+- sections는 required body structure의 heading을 한 글자도 바꾸지 말고 정확한 순서로 모두 작성한다. introduction, conclusion, cta는 sections에 중복해서 넣지 않는다.
+- introduction과 각 sections의 body는 한 덩어리 장문으로 쓰지 않는다. 2~4문장 단위 문단을 빈 줄(\\n\\n)로 나눠 공개 본문 전체에 내용 있는 문단 블록을 10개 이상 만든다.
+- 일정, 기회·위험, 개인 투자자 체크리스트에서는 각 항목을 새 줄의 "- "로 시작한다. 공개 본문 전체의 "- " 불릿은 최소 5개이며 개인 투자자 체크리스트는 4~6개다.
+- 한국 시장은 수급·원달러 환율·반도체 대형주·코스닥 성장주를 상승 조건과 하락 위험으로 나누어 연결한다.
+- 미국 시장의 실적·대형 기술주 가이던스·금리·달러·연준 기대 중 ReferenceBundle이나 verified market snapshot에 실제 근거가 있는 변수만 해석한다. 입력에 실적·가이던스 근거가 없으면 이를 전망 근거로 언급하지 않는다.
+- 핵심 일정은 검증된 일정만 쓰고 각 일정 아래에 중요한 이유를 한 문장으로 덧붙인다. 일정을 억지로 채우지 않는다.
+- 기회와 위험은 각각 2~3개를 구분하고 단순 단어 나열이 아닌 의미 있는 설명을 붙인다.
+- conclusion은 앞 문장을 반복하지 말고 해당 글에서 확인된 환율·기업 실적·국채금리·수급 같은 핵심 변수를 구체적으로 다시 연결한다.
 - cta에는 "본 글은 시장 정보를 정리한 투자 참고 자료이며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 최종 투자 판단과 책임은 투자자 본인에게 있습니다."를 정확히 한 번만 쓴다.
-- 전체 공개 본문은 공백 포함 약 2,000~3,000자로 작성하고, 한 문단은 2~4문장으로 구성한다. 같은 어미와 "관찰됐습니다", "확인했습니다", "전망입니다"를 연속 반복하지 않는다.
-- "함께 확인한 기사"는 정확히 다음 형식으로 작성한다: 번호. 기사 제목 – 언론사, 발행일 다음 줄에 원문 링크. 이 섹션에는 실제 활용한 기사 3개만 둔다.
-""".strip() if next_week_preview else """
-- 모든 구체 수치와 일정은 제공된 시장 스냅샷 또는 실제 참고자료에서 확인되는 경우에만 사용한다.
-- 참고자료 URL과 데이터 기준일을 독자가 확인할 수 있게 분리한다.
-- 첫 번째 sections 항목의 heading은 반드시 "데이터 기준"으로 작성하고, body에 한국 지수·수급, 미국 지수·환율·금리의 각 asOf 날짜와 원문 URL을 직접 적는다.
-- 수급 값에는 market snapshot의 unit을 반드시 함께 적고, unit이 없으면 수치를 본문에 쓰지 않는다.
-- 다음 주 일정은 각 항목의 날짜와 원문 URL을 함께 적는다. 발표 시각이 입력에 없으면 임의 생성하지 말고 "발표 시각은 원문 일정에서 확인"이라고 명시한다.
-- verified market snapshot의 upcoming 날짜·이벤트명·URL은 변경할 수 없는 원문 값이다. 요일이나 관행을 근거로 날짜를 보정하거나 하루 앞뒤로 옮기지 말고 입력값을 정확히 복사한다.
-- market snapshot의 strongSectors·weakSectors에는 순수 업종 외 지수·테마·상품이 섞일 수 있으므로 모두를 "섹터"로 단정하지 말고 "시장 강약 항목"으로 표현하고 포함 범위를 고지한다.
-- "오늘", "오늘 장"처럼 기준일을 흐리는 표현을 쓰지 말고 "최근 거래일 기준", "이번 브리핑 기준"으로 바꾼다.
-- 전망과 해석은 "가능성", "관찰 포인트", "확인 필요" 중심으로 쓰고 사실 문장과 분리한다.
+- introduction, sections, conclusion, cta를 합친 모델 초안은 공백 포함 2,000~2,700자로 작성한다. 이후 검증 일정이 추가되어도 최종 공개 본문이 3,000자를 넘지 않도록 간결하게 쓴다.
+- 같은 문장을 반복하지 않고, 같은 어미와 "관찰됐습니다", "확인했습니다", "전망입니다"를 연속 사용하지 않는다.
+- 숫자 뒤의 한국어 조사와 띄어쓰기를 최종 교정한다. 예를 들어 "6,516.27으로"가 아니라 "6,516.27로"처럼 쓴다.
+- "함께 확인한 기사"는 정확히 다음 형식으로 작성한다: 번호. 기사 제목 – 언론사, 발행일 다음 줄에 원문 링크. 실제 활용한 기사 3개만 둔다.
+{schedule_policy}
 """.strip()
-    strict_writer_rules = """
-- sections는 위에서 지정한 7개 heading을 정확한 순서로 가진다.
-- introduction, sections의 body, conclusion, cta를 합친 공개 본문은 공백 포함 약 2,000~3,000자다.
+    strict_writer_rules = f"""
+- sections 배열 길이는 정확히 {len(body_structure)}개이며 required body structure와 heading·순서가 완전히 같아야 한다.
+- 모델 초안은 공백 포함 2,000~2,700자, 내용 있는 문단 블록 10개 이상, 줄바꿈 15개 이상, "- " 불릿 5개 이상이어야 한다.
 - "함께 확인한 기사" 외부의 URL은 0개이고, 해당 섹션에는 서로 다른 실제 기사 URL이 정확히 3개다.
-""".strip() if next_week_preview else """
-- sections는 최소 6개 이상이며 각 항목은 서로 다른 heading과 body를 가진다.
-- introduction, sections의 body, conclusion을 합친 본문은 공백 제외 2500자 이상이 되도록 작성하고 같은 문장을 반복하지 않는다.
+- 지정 투자 유의문구는 cta에 정확히 한 번만 있으며 sections나 conclusion에 반복하지 않는다.
 """.strip()
     return f"""
 너는 BG Company의 content-writer AI 직원이다.
@@ -507,6 +576,7 @@ content-planner의 기획안과 marketing-manager의 검토안을 바탕으로 {
 - competitor structure benchmark: {competitors_json}
 - accumulated safe editorial guidelines: {benchmark_guidelines_json}
 - required body structure: {body_structure_json}
+{revision_context}
 
 역할:
 - 기획 의도와 마케팅 검토를 반영해 실제 게시 가능한 본문 초안을 작성한다.
@@ -529,11 +599,7 @@ content-planner의 기획안과 marketing-manager의 검토안을 바탕으로 {
   "finalTitle": "최종 게시 제목",
   "metaDescription": "검색/공유용 메타 설명",
   "introduction": "도입부 문단",
-  "sections": [
-    {{ "heading": "섹션 제목 1", "body": "섹션 본문 1" }},
-    {{ "heading": "섹션 제목 2", "body": "섹션 본문 2" }},
-    {{ "heading": "섹션 제목 3", "body": "섹션 본문 3" }}
-  ],
+  "sections": {section_schema_json},
   "conclusion": "마무리 문단",
   "cta": "행동 유도 문구",
   "usedSeoKeywords": ["키워드 1", "키워드 2"]
@@ -593,22 +659,25 @@ def build_qa_audit_prompt(payload: dict[str, Any]) -> str:
         or "다음 주" in f"{topic} {title}"
         or "다음주" in f"{topic} {title}"
     )
-    qa_policy = """
-- 글이 최근 움직임 → 근거에 기반한 이유 → 다음 주 영향 → 투자자 확인사항의 흐름으로 자연스럽게 이어지는지 확인한다.
-- 공개 본문이 공백 포함 약 2,000~3,000자이고 지정된 7개 section heading, 4~6개 개인 투자자 체크리스트, 기회·위험 각각 2~3개를 갖췄는지 확인한다.
+    qa_schedule_policy = "" if next_week_preview else """
+- scheduleValidation.ok가 true이면 서버가 market snapshot의 upcoming으로 날짜와 이벤트를 대조한 결과다. 요일 추론이나 발표 관행으로 날짜를 임의 보정하지 않는다.
+- 입력에 없는 발표 시각이나 한국 일정을 새로 만들라고 요구하지 않는다.
+""".strip()
+    qa_policy = f"""
+- 글이 최근 움직임 → 근거에 기반한 이유 → 이어질 시장 영향 → 투자자 확인사항의 흐름으로 자연스럽게 이어지는지 확인한다.
+- 공개 본문이 공백 포함 2,000~3,000자, section heading 6개 이상, 내용 있는 문단 10개 이상, 줄바꿈 15개 이상, "- " 불릿 5개 이상인지 확인한다.
+- 개인 투자자 체크리스트가 4~6개이고 기회·위험이 각각 2~3개인지 확인한다.
 - "함께 확인한 기사"에 실제 활용한 신뢰 가능한 기사 정확히 3개와 서로 다른 원문 링크 3개만 있고, 링크가 본문 중간·일정·시장 데이터 문단에 노출되지 않았는지 확인한다.
 - API 주소, JSON 필드명, asOf, 데이터 수집·내부 분석 과정, AI 설정, 이미지 설명 문구, 기계적인 "시장 영향" 항목명이 노출되면 필수 수정으로 판정한다.
 - 수급 단위가 불확실하거나 비정상적인 값은 숫자 대신 방향성으로 설명했는지, 확인되지 않은 일정·수치·기사를 만들지 않았는지 검사한다.
+- market snapshot provider가 kis-fred이고 degradedMode가 fred_unavailable이 아니면 "한국투자증권·FRED 최근 거래일 자료 기준"을 정확한 출처 표기로 인정한다. referenceBundle provider가 naver-search라는 이유로 시장 데이터 출처를 네이버만으로 판단하지 않는다. degradedMode가 fred_unavailable일 때만 FRED 표기를 필수 수정으로 본다.
 - 검증 일정의 날짜와 이벤트가 scheduleValidation으로 대조되었다면 URL을 공개 본문에 쓰라고 요구하지 않는다. 숨은 verifiedSchedule의 URL은 검증 메타데이터일 뿐 공개 문구가 아니다.
-- conclusion이 한국 GDP·원달러 환율·기업 실적·국채금리 등 구체 변수를 다시 연결하고, 지정된 투자 유의 문구가 cta에 정확히 한 번만 있는지 확인한다.
-- 기사 제목·설명을 그대로 복사하거나 경쟁 글 문장·비유·체크리스트를 베끼지 않았는지 확인한다.
-""".strip() if next_week_preview else """
-- 데이터 기준 블록, 지표별 asOf, 수급 단위, 일정별 날짜·원문 URL을 확인한다.
-- 일정 입력에 발표 시각이 없으면 "발표 시각은 원문 일정에서 확인"이라는 고지를 정답으로 인정하고, 존재하지 않는 시각 생성을 요구하지 않는다.
-- scheduleValidation.ok가 true이면 서버가 market snapshot의 upcoming으로 일정 블록을 재조립하고 날짜·이벤트명·URL을 코드로 대조한 결과다. 이 고정 블록의 날짜를 요일 추론이나 일반적인 발표 관행으로 다시 보정하지 않는다.
-- 고정 일정 블록에 검증 범위와 누락 시장 고지가 있으면 입력 데이터의 범위를 정확히 밝힌 것으로 인정한다. 검증되지 않은 한국 일정을 임의로 추가하라고 요구하지 않는다.
-- strongSectors·weakSectors를 "시장 강약 항목"으로 표시하고 지수·테마·상품 포함 가능성을 고지했다면 섹터 오분류로 판단하지 않는다.
-- 수치·URL·단위가 입력과 일치하고 강한 전망 표현이 완화되었으면 선택 개선 의견만으로 needs_revision을 주지 않는다.
+- conclusion이 환율·기업 실적·국채금리·수급 등 글에서 확인된 구체 변수를 다시 연결하고, 지정된 투자 유의 문구가 cta에 정확히 한 번만 있는지 확인한다.
+- 같은 문장 반복, 한 덩어리 장문, 같은 어미의 연속 사용, 기사 제목·설명 복사, 경쟁 글 문장·비유·체크리스트 복제가 없는지 확인한다.
+- 모든 필수 조건을 충족하고 사실성 문제와 requiredRevisions가 없으면 qaScore를 90점 이상, publishReadiness=ready, finalRecommendation=approve로 판정한다. 선택 개선 의견만으로 90점 미만을 주지 않는다.
+- requiredRevisions가 비어 있고 게시를 막을 사실성 문제가 없으면 90~100점을 사용한다. 실제 필수 수정이 하나 이상일 때만 89점 이하와 needs_revision/revise를 사용한다.
+- 입력에 없는 실적·가이던스·일정은 필수 수정으로 지적하되, 단순히 일반적으로 확인하면 좋은 변수를 새 필수 조건으로 만들지 않는다.
+{qa_schedule_policy}
 """.strip()
     return f"""
 너는 BG Company의 qa-auditor AI 직원이다.
@@ -658,9 +727,9 @@ content-planner, marketing-manager, content-writer가 만든 결과를 바탕으
   "typoAndStyleNotes": ["문장/스타일 개선 1"],
   "requiredRevisions": ["필수 수정 1"],
   "optionalSuggestions": ["선택 개선 1"],
-  "publishReadiness": "needs_revision",
-  "qaScore": 88,
-  "finalRecommendation": "revise",
+  "publishReadiness": "ready",
+  "qaScore": 92,
+  "finalRecommendation": "approve",
   "reason": "최종 판단 이유"
 }}
 """.strip()
