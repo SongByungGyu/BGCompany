@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/db";
 import { listContentPipelines } from "@/lib/content-pipeline/content-pipeline-service";
 import { getHermesUsageSummary } from "@/lib/hermes/hermes-usage";
-import { listNaverDraftJobs } from "@/lib/naver-drafts/naver-draft-jobs";
 import { getStockBlogScheduleItems } from "@/lib/stock-blog/stock-blog-workflow";
 import { getStockBlogSchedulerStatus } from "@/lib/stock-blog/stock-blog-scheduler";
 import {
@@ -24,7 +23,7 @@ function buildHeadline(input: { errorTasks: number; waitingApprovals: number; na
   return "오늘 운영 상태는 안정적입니다.";
 }
 
-function getLatestNaverStatus(naverJobs: Awaited<ReturnType<typeof listNaverDraftJobs>>) {
+function getLatestNaverStatus(naverJobs: Array<{ status: string }>) {
   return naverJobs[0]?.status ?? null;
 }
 
@@ -84,7 +83,11 @@ export async function buildDashboardSummary(): Promise<DashboardSummary> {
       },
     }),
     listContentPipelines(),
-    listNaverDraftJobs(),
+    prisma.naverDraftJob.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      select: { status: true },
+    }),
     getHermesUsageSummary({ recentLimit: 6 }),
     getStockBlogSchedulerStatus(),
   ]);

@@ -65,6 +65,7 @@ export function getHermesBridgeConfig() {
     baseUrl: process.env.HERMES_BRIDGE_BASE_URL?.trim() || "http://hermes-bridge:8787",
     apiKey: process.env.BRIDGE_API_KEY?.trim() || process.env.HERMES_BRIDGE_API_KEY?.trim() || "",
     timeoutMs: Number(process.env.HERMES_BRIDGE_TIMEOUT_MS ?? process.env.HERMES_TIMEOUT_MS ?? "45000"),
+    healthTimeoutMs: Number(process.env.HERMES_BRIDGE_HEALTH_TIMEOUT_MS ?? "3000"),
   };
 }
 
@@ -165,7 +166,7 @@ export async function checkHermesBridgeHealth(): Promise<HermesHealthResult> {
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), Number.isFinite(config.timeoutMs) ? config.timeoutMs : 45000);
+  const timeout = setTimeout(() => controller.abort(), Number.isFinite(config.healthTimeoutMs) ? config.healthTimeoutMs : 3000);
 
   try {
     const response = await fetch(`${config.baseUrl.replace(/\/$/, "")}/health`, {
