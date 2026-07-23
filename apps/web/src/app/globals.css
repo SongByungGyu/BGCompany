@@ -2310,6 +2310,26 @@
 .control-room .portfolio-alert button { min-height: 26px; }
 .control-room .portfolio-alert.error { color: #ffc3bb; background: #46251f; border: 1px solid #7a443c; }
 .control-room .portfolio-alert.success { color: #aaf0d8; background: #123b38; border: 1px solid #286a63; }
+.control-room .portfolio-account-sync {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 12px;
+  padding: 13px 15px;
+  background: linear-gradient(120deg, #0c2635, #0a1d2e);
+  border: 1px solid #2f596e;
+  border-radius: 12px;
+}
+.control-room .portfolio-account-sync.ready { border-color: #267166; box-shadow: inset 3px 0 #55d9c7; }
+.control-room .portfolio-account-sync.missing { border-color: #795947; box-shadow: inset 3px 0 #e2a66c; }
+.control-room .portfolio-account-sync > div { min-width: 0; flex: 1; }
+.control-room .portfolio-account-sync span { display: block; color: #5bdccf; font-size: 8px; letter-spacing: .12em; }
+.control-room .portfolio-account-sync strong { display: block; margin-top: 4px; color: #e2edf4; font-size: 12px; }
+.control-room .portfolio-account-sync p { margin: 4px 0 0; color: #7f9aac; font-size: 9.5px; }
+.control-room .portfolio-account-sync dl { display: flex; gap: 18px; margin: 0; }
+.control-room .portfolio-account-sync dl div { min-width: 92px; }
+.control-room .portfolio-account-sync dt { color: #6f899b; font-size: 8px; }
+.control-room .portfolio-account-sync dd { margin: 4px 0 0; color: #c7d8e2; font-size: 9.5px; }
 .control-room .portfolio-inline-form,
 .control-room .portfolio-holding-form,
 .control-room .portfolio-dividend-form {
@@ -2482,6 +2502,7 @@
 .control-room .portfolio-row-actions button { min-height: 26px; padding: 0 7px; font-size: 8.5px; }
 .control-room .portfolio-row-actions select { min-width: 58px; height: 26px; padding-left: 6px; font-size: 8.5px; }
 .control-room .portfolio-row-actions .danger { color: #ffb0a5; border-color: #6b4039; background: #3c2522; }
+.control-room .portfolio-readonly-badge { display: inline-flex; align-items: center; min-height: 24px; padding: 0 8px; color: #73d9cc; font-size: 8.5px; background: #153936; border: 1px solid #28675f; border-radius: 7px; white-space: nowrap; }
 .control-room .portfolio-empty-copy { margin: 12px 0 0; padding: 14px; color: #728ca1; font-size: 10px; text-align: center; background: #091b2b; border: 1px dashed #29465e; border-radius: 10px; }
 .control-room .portfolio-allocation-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .control-room .portfolio-allocation-card { min-width: 0; padding: 13px; background: #091b2b; border: 1px solid #203b52; border-radius: 11px; }
@@ -2593,6 +2614,8 @@
 }
 @media (max-width: 720px) {
   .control-room .portfolio-workspace { padding: 10px; }
+  .control-room .portfolio-account-sync { align-items: flex-start; flex-direction: column; }
+  .control-room .portfolio-account-sync dl { width: 100%; flex-wrap: wrap; }
   .control-room .portfolio-summary-grid,
   .control-room .portfolio-two-column,
   .control-room .portfolio-allocation-grid,

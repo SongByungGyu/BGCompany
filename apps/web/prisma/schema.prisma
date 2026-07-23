@@ -191,13 +191,18 @@ model NaverDraftJob {
 }
 
 model PortfolioAccount {
-  id           String   @id @default(cuid())
-  name         String
-  baseCurrency String   @default("KRW")
-  description  String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                 String    @id @default(cuid())
+  name               String
+  baseCurrency       String    @default("KRW")
+  description        String?
+  source             String    @default("manual")
+  externalAccountRef String?
+  lastSyncedAt       DateTime?
+  lastSyncStatus     String?
+  lastSyncMessage    String?
+  isActive           Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   holdings       PortfolioHolding[]
   valuations     PortfolioValuationSnapshot[]
@@ -205,26 +210,29 @@ model PortfolioAccount {
   reports        PortfolioReport[]
   holdingChanges PortfolioHoldingChange[]
 
+  @@unique([source, externalAccountRef])
   @@index([isActive])
   @@index([createdAt])
 }
 
 model PortfolioHolding {
-  id                      String   @id @default(cuid())
+  id                      String    @id @default(cuid())
   portfolioAccountId      String
   market                  String
   symbol                  String
   name                    String
   assetType               String
-  quantity                Decimal  @db.Decimal(28, 8)
-  averagePrice            Decimal  @db.Decimal(28, 8)
+  quantity                Decimal   @db.Decimal(28, 8)
+  averagePrice            Decimal   @db.Decimal(28, 8)
   currency                String
   sector                  String
   note                    String?
-  dividendTrackingEnabled Boolean  @default(false)
-  isActive                Boolean  @default(true)
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  source                  String    @default("manual")
+  lastSyncedAt            DateTime?
+  dividendTrackingEnabled Boolean   @default(false)
+  isActive                Boolean   @default(true)
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   portfolioAccount PortfolioAccount         @relation(fields: [portfolioAccountId], references: [id], onDelete: Restrict)
   riskSignals      PortfolioRiskSignal[]

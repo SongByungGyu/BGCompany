@@ -113,5 +113,19 @@ export function parseDividendInput(value: unknown) {
 }
 
 export function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "요청을 처리하지 못했습니다.";
+  const message = error instanceof Error ? error.message : "";
+  const known: Record<string, string> = {
+    KIS_ACCOUNT_SYNC_DISABLED: "실계좌 읽기 전용 동기화 기능이 비활성화되어 있습니다.",
+    KIS_ACCOUNT_SYNC_REQUIRES_KIS_PRICE_PROVIDER: "실계좌 동기화에는 KIS 시세 제공자 설정이 필요합니다.",
+    KIS_REAL_ACCOUNT_HOST_REQUIRED: "실전 KIS Open API 주소가 필요합니다.",
+    KIS_ACCOUNT_NUMBER_MISSING: "운영 서버에 KIS 계좌번호 앞 8자리가 설정되지 않았습니다.",
+    KIS_ACCOUNT_PRODUCT_CODE_MISSING: "운영 서버에 KIS 계좌 상품코드 2자리가 설정되지 않았습니다.",
+    KIS_ACCOUNT_MARKETS_INVALID: "동기화 대상 시장 설정이 올바르지 않습니다.",
+    KIS_CREDENTIALS_MISSING: "KIS 앱키 또는 앱시크릿 설정이 없습니다.",
+    KIS_AUTH_FAILED: "KIS 인증에 실패했습니다.",
+    KIS_RATE_LIMITED: "KIS 조회 한도를 초과했습니다. 잠시 후 다시 시도하세요.",
+    KIS_RESPONSE_ERROR: "KIS가 잔고조회 요청을 거절했습니다. 계좌번호와 Open API 연결 상태를 확인하세요.",
+    KIS_QUERY_NOT_ALLOWLISTED: "허용되지 않은 KIS 요청이 차단되었습니다.",
+  };
+  return known[message] ?? (message || "요청을 처리하지 못했습니다.");
 }

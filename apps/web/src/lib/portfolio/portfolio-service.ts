@@ -14,6 +14,7 @@ import {
   type CalculationQuote,
 } from "./portfolio-calculations";
 import { portfolioConfig, PORTFOLIO_TEAM } from "./portfolio-config";
+import { fetchKisAccountHoldings, getKisAccountConfig, getKisAccountSyncPublicConfig } from "./kis-account-provider";
 import { getPortfolioPriceProvider } from "./portfolio-price-provider";
 import { ruleBasedPortfolioReportWriter } from "./portfolio-report-writer";
 import type {
@@ -38,11 +39,20 @@ function iso(value: Date | null | undefined) {
 }
 
 function accountDto(account: {
-  id: string; name: string; baseCurrency: string; description: string | null; isActive: boolean; createdAt: Date; updatedAt: Date;
+  id: string; name: string; baseCurrency: string; description: string | null; source: string; externalAccountRef: string | null;
+  lastSyncedAt: Date | null; lastSyncStatus: string | null; lastSyncMessage: string | null;
+  isActive: boolean; createdAt: Date; updatedAt: Date;
 }): PortfolioAccountDto {
   return {
-    ...account,
+    id: account.id,
+    name: account.name,
     baseCurrency: account.baseCurrency as PortfolioCurrency,
+    description: account.description,
+    source: account.source as PortfolioAccountDto["source"],
+    lastSyncedAt: iso(account.lastSyncedAt),
+    lastSyncStatus: account.lastSyncStatus,
+    lastSyncMessage: account.lastSyncMessage,
+    isActive: account.isActive,
     createdAt: account.createdAt.toISOString(),
     updatedAt: account.updatedAt.toISOString(),
   };
@@ -51,7 +61,7 @@ function accountDto(account: {
 function holdingDto(holding: {
   id: string; portfolioAccountId: string; market: string; symbol: string; name: string; assetType: string;
   quantity: Prisma.Decimal; averagePrice: Prisma.Decimal; currency: string; sector: string; note: string | null;
-  dividendTrackingEnabled: boolean; isActive: boolean; createdAt: Date; updatedAt: Date;
+  source: string; lastSyncedAt: Date | null; dividendTrackingEnabled: boolean; isActive: boolean; createdAt: Date; updatedAt: Date;
 }): PortfolioHoldingDto {
   return {
     ...holding,
@@ -60,6 +70,8 @@ function holdingDto(holding: {
     quantity: holding.quantity.toString(),
     averagePrice: holding.averagePrice.toString(),
     currency: holding.currency as PortfolioCurrency,
+    source: holding.source as PortfolioHoldingDto["source"],
+    lastSyncedAt: iso(holding.lastSyncedAt),
     createdAt: holding.createdAt.toISOString(),
     updatedAt: holding.updatedAt.toISOString(),
   };
@@ -239,6 +251,17 @@ export async function getPortfolioDashboard(accountId?: string | null): Promise<
   const accountsRaw = await prisma.portfolioAccount.findMany({ where: { isActive: true }, orderBy: { createdAt: "asc" } });
   const account = accountId ? accountsRaw.find((candidate) => candidate.id === accountId) ?? null : accountsRaw[0] ?? null;
   const accounts = accountsRaw.map(accountDto);
+  const syncConfig = getKisAccountSyncPublicConfig();
+  const accountSync: PortfolioDashboard["accountSync"] = {
+    enabled: syncConfig.enabled,
+    configured: syncConfig.configured,
+    provider: "kis",
+    readOnly: true,
+    maskedAccount: syncConfig.maskedAccount,
+    lastSyncedAt: iso(account?.lastSyncedAt),
+    lastSyncStatus: account?.lastSyncStatus ?? null,
+    lastSyncMessage: account?.lastSyncMessage ?? null,
+  };
   const baseCurrency = (account?.baseCurrency ?? "KRW") as PortfolioCurrency;
   if (!account) {
     return {
@@ -247,6 +270,7 @@ export async function getPortfolioDashboard(accountId?: string | null): Promise<
       dataAsOf: null,
       account: null,
       accounts,
+      accountSync,
       holdings: [],
       summary: {
         baseCurrency,
@@ -267,7 +291,9 @@ export async function getPortfolioDashboard(accountId?: string | null): Promise<
       news: [],
       risks: [],
       reports: [],
-      briefing: "계좌 그룹을 만든 뒤 보유 종목을 등록하세요. 실제 보유 종목은 자동으로 생성하지 않습니다.",
+      briefing: syncConfig.enabled
+        ? "KIS 실계좌 읽기 전용 동기화를 실행하면 실제 보유 종목을 불러옵니다."
+        : "계좌 그룹을 만든 뒤 보유 종목을 등록하세요.",
       team: PORTFOLIO_TEAM.map((member) => ({ ...member })),
     };
   }
@@ -403,6 +429,7 @@ export async function getPortfolioDashboard(accountId?: string | null): Promise<
     dataAsOf,
     account: accountDto(account),
     accounts,
+    accountSync,
     holdings: calculated.map((item) => {
       const holding = holdings.find((candidate) => candidate.id === item.holding.id)!;
       const price = prices.get(`${holding.market}:${holding.symbol}`) ?? unavailablePrice(holding);
@@ -514,6 +541,212 @@ async function recordPortfolioTask(accountId: string, summary: string, dataQuali
   } catch {
     // Portfolio valuation remains usable even when the optional office activity bridge is unavailable.
   }
+}
+
+export async function syncKisPortfolioAccount() {
+  let fetched: Awaited<ReturnType<typeof fetchKisAccountHoldings>>;
+  try {
+    fetched = await fetchKisAccountHoldings();
+  } catch (error) {
+    try {
+      const config = getKisAccountConfig();
+      await prisma.portfolioAccount.updateMany({
+        where: { source: "kis", externalAccountRef: config.externalAccountRef },
+        data: {
+          lastSyncStatus: "failed",
+          lastSyncMessage: "KIS 읽기 전용 잔고조회에 실패했습니다.",
+        },
+      });
+    } catch {
+      // A missing or invalid account config may mean no linked account exists yet.
+    }
+    throw error;
+  }
+  if (fetched.holdings.length > portfolioConfig().maxSymbols) {
+    throw new Error(`KIS 보유 종목 ${fetched.holdings.length}개가 현재 한도 ${portfolioConfig().maxSymbols}개를 초과했습니다.`);
+  }
+  const now = new Date();
+  const syncMessage = `KIS 읽기 전용 동기화 완료 · 국내 ${fetched.domesticCount}개 · 해외 ${fetched.overseasCount}개`;
+  const result = await prisma.$transaction(async (tx) => {
+    let account = await tx.portfolioAccount.findFirst({
+      where: { source: "kis", externalAccountRef: fetched.config.externalAccountRef },
+    });
+    if (!account) {
+      account = await tx.portfolioAccount.create({
+        data: {
+          name: fetched.config.accountLabel,
+          baseCurrency: "KRW",
+          description: "한국투자증권 Open API 읽기 전용 보유잔고",
+          source: "kis",
+          externalAccountRef: fetched.config.externalAccountRef,
+          lastSyncedAt: now,
+          lastSyncStatus: "success",
+          lastSyncMessage: syncMessage,
+        },
+      });
+    } else {
+      account = await tx.portfolioAccount.update({
+        where: { id: account.id },
+        data: {
+          name: fetched.config.accountLabel,
+          isActive: true,
+          lastSyncedAt: now,
+          lastSyncStatus: "success",
+          lastSyncMessage: syncMessage,
+        },
+      });
+    }
+
+    const existing = await tx.portfolioHolding.findMany({ where: { portfolioAccountId: account.id } });
+    const existingByKey = new Map(existing.map((holding) => [`${holding.market}:${holding.symbol}`, holding]));
+    const remoteKeys = new Set<string>();
+    let created = 0;
+    let updated = 0;
+    let deactivated = 0;
+
+    for (const remote of fetched.holdings) {
+      const key = `${remote.market}:${remote.symbol}`;
+      remoteKeys.add(key);
+      const previous = existingByKey.get(key);
+      const after = {
+        market: remote.market,
+        symbol: remote.symbol,
+        name: remote.name,
+        assetType: remote.assetType,
+        quantity: remote.quantity,
+        averagePrice: remote.averagePrice,
+        currency: remote.currency,
+        sector: previous?.sector || remote.sector,
+        source: "kis",
+        lastSyncedAt: now.toISOString(),
+        isActive: true,
+      };
+      if (!previous) {
+        const holding = await tx.portfolioHolding.create({
+          data: {
+            portfolioAccountId: account.id,
+            market: remote.market,
+            symbol: remote.symbol,
+            name: remote.name,
+            assetType: remote.assetType,
+            quantity: remote.quantity,
+            averagePrice: remote.averagePrice,
+            currency: remote.currency,
+            sector: remote.sector,
+            note: "KIS 실계좌 읽기 전용 동기화",
+            source: "kis",
+            lastSyncedAt: now,
+          },
+        });
+        await tx.portfolioHoldingChange.create({
+          data: { portfolioAccountId: account.id, holdingId: holding.id, changeType: "kis_synced_created", after },
+        });
+        if (remote.currentPrice) {
+          await tx.portfolioPriceSnapshot.create({
+            data: {
+              market: remote.market,
+              symbol: remote.symbol,
+              price: remote.currentPrice,
+              currency: remote.currency,
+              marketDate: now,
+              observedAt: now,
+              collectedAt: now,
+              provider: "한국투자증권 Open API · 실계좌 잔고조회",
+              sourceUrl: "https://github.com/koreainvestment/open-trading-api",
+              freshnessStatus: "fresh",
+            },
+          });
+        }
+        created += 1;
+        continue;
+      }
+      const changed = previous.quantity.toString() !== remote.quantity
+        || previous.averagePrice.toString() !== remote.averagePrice
+        || previous.name !== remote.name
+        || !previous.isActive
+        || previous.source !== "kis";
+      const holding = await tx.portfolioHolding.update({
+        where: { id: previous.id },
+        data: {
+          name: remote.name,
+          assetType: remote.assetType,
+          quantity: remote.quantity,
+          averagePrice: remote.averagePrice,
+          currency: remote.currency,
+          source: "kis",
+          lastSyncedAt: now,
+          isActive: true,
+        },
+      });
+      if (changed) {
+        await tx.portfolioHoldingChange.create({
+          data: {
+            portfolioAccountId: account.id,
+            holdingId: holding.id,
+            changeType: "kis_synced_updated",
+            before: {
+              name: previous.name,
+              quantity: previous.quantity.toString(),
+              averagePrice: previous.averagePrice.toString(),
+              source: previous.source,
+              isActive: previous.isActive,
+            },
+            after,
+          },
+        });
+        updated += 1;
+      }
+      if (remote.currentPrice) {
+        await tx.portfolioPriceSnapshot.create({
+          data: {
+            market: remote.market,
+            symbol: remote.symbol,
+            price: remote.currentPrice,
+            currency: remote.currency,
+            marketDate: now,
+            observedAt: now,
+            collectedAt: now,
+            provider: "한국투자증권 Open API · 실계좌 잔고조회",
+            sourceUrl: "https://github.com/koreainvestment/open-trading-api",
+            freshnessStatus: "fresh",
+          },
+        });
+      }
+    }
+
+    for (const holding of existing) {
+      if (holding.source !== "kis" || !holding.isActive) continue;
+      if (!fetched.config.markets.includes(holding.market as PortfolioMarket)) continue;
+      if (remoteKeys.has(`${holding.market}:${holding.symbol}`)) continue;
+      await tx.portfolioHolding.update({
+        where: { id: holding.id },
+        data: { isActive: false, lastSyncedAt: now },
+      });
+      await tx.portfolioHoldingChange.create({
+        data: {
+          portfolioAccountId: account.id,
+          holdingId: holding.id,
+          changeType: "kis_synced_deactivated",
+          before: { quantity: holding.quantity.toString(), isActive: true },
+          after: { quantity: "0", isActive: false, lastSyncedAt: now.toISOString() },
+        },
+      });
+      deactivated += 1;
+    }
+    return { accountId: account.id, created, updated, deactivated };
+  });
+  const dashboard = await refreshPortfolio(result.accountId);
+  return {
+    dashboard,
+    result: {
+      ...result,
+      domesticCount: fetched.domesticCount,
+      overseasCount: fetched.overseasCount,
+      totalCount: fetched.holdings.length,
+      syncedAt: now.toISOString(),
+      readOnly: true as const,
+    },
+  };
 }
 
 export async function refreshPortfolio(accountId?: string | null) {
