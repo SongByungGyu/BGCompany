@@ -42,3 +42,22 @@ export async function refreshPortfolio(accountId: string) {
     body: JSON.stringify({ accountId }),
   }));
 }
+
+export async function syncKisPortfolioAccount() {
+  return json<{
+    dashboard: PortfolioDashboard;
+    result: {
+      created: number;
+      updated: number;
+      deactivated: number;
+      domesticCount: number;
+      overseasCount: number;
+      totalCount: number;
+      syncedAt: string;
+      readOnly: true;
+    };
+  }>(await fetch("/api/portfolio/account-sync", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+  }));
+}

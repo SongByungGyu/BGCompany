@@ -1,6 +1,11 @@
 import "server-only";
 import type { FreshnessStatus, PortfolioCurrency, PortfolioMarket, PortfolioPriceDto } from "./portfolio-types";
 import { portfolioConfig } from "./portfolio-config";
+import {
+  KIS_PROHIBITED_CAPABILITIES,
+  KIS_READ_ONLY_ENDPOINTS,
+  isKisReadOnlyRequestAllowed,
+} from "./kis-readonly-policy";
 
 type PriceRequest = {
   market: PortfolioMarket;
@@ -17,13 +22,6 @@ type PriceProvider = {
 
 const KIS_ALLOWED_HOSTS = new Set(["openapi.koreainvestment.com", "openapivts.koreainvestment.com"]);
 const KIS_SOURCE_URL = "https://github.com/koreainvestment/open-trading-api";
-const KIS_READ_ONLY_ENDPOINTS = new Map([
-  ["/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100"],
-  ["/uapi/overseas-price/v1/quotations/price", "HHDFS00000300"],
-  ["/uapi/overseas-price/v1/quotations/dailyprice", "HHDFS76240000"],
-  ["/uapi/overseas-price/v1/quotations/inquire-daily-chartprice", "FHKST03030100"],
-]);
-
 type TokenCache = { token: string; expiresAt: number };
 let tokenCache: TokenCache | null = null;
 
@@ -61,8 +59,8 @@ async function accessToken() {
   return tokenCache.token;
 }
 
-async function kisGet(path: string, trId: string, params: Record<string, string>) {
-  if (KIS_READ_ONLY_ENDPOINTS.get(path) !== trId) throw new Error("KIS_QUERY_NOT_ALLOWLISTED");
+export async function kisReadOnlyGet(path: string, trId: string, params: Record<string, string>, trCont = "") {
+  if (!isKisReadOnlyRequestAllowed("GET", path, trId)) throw new Error("KIS_QUERY_NOT_ALLOWLISTED");
   const { appKey, appSecret } = credentials();
   const url = new URL(path, kisBaseUrl());
   Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
@@ -72,6 +70,7 @@ async function kisGet(path: string, trId: string, params: Record<string, string>
       appkey: appKey,
       appsecret: appSecret,
       tr_id: trId,
+      ...(trCont ? { tr_cont: trCont } : {}),
       custtype: "P",
     },
     signal: AbortSignal.timeout(timeoutMs()),
@@ -79,7 +78,11 @@ async function kisGet(path: string, trId: string, params: Record<string, string>
   if (!response.ok) throw new Error(response.status === 429 ? "KIS_RATE_LIMITED" : `KIS_HTTP_${response.status}`);
   const body = await response.json() as Record<string, unknown>;
   if (body.rt_cd !== "0") throw new Error("KIS_RESPONSE_ERROR");
-  return body;
+  return { body, trCont: response.headers.get("tr_cont") ?? "" };
+}
+
+async function kisGet(path: string, trId: string, params: Record<string, string>) {
+  return (await kisReadOnlyGet(path, trId, params)).body;
 }
 
 function record(value: unknown) {
@@ -114,9 +117,10 @@ function unavailable(request: PriceRequest, sourceName = "한국투자증권 Ope
   };
 }
 
-function overseasExchangeCode() {
+function overseasExchangeCodes() {
   const code = process.env.KIS_OVERSEAS_EXCHANGE_CODE?.trim().toUpperCase() || "NAS";
-  return new Set(["NAS", "NYS", "AMS"]).has(code) ? code : "NAS";
+  const preferred = new Set(["NAS", "NYS", "AMS"]).has(code) ? code : "NAS";
+  return Array.from(new Set([preferred, "NAS", "NYS", "AMS"]));
 }
 
 const kisProvider: PriceProvider = {
@@ -170,13 +174,22 @@ const kisProvider: PriceProvider = {
             freshnessStatus: freshness(observedAt),
           });
         } else {
-          const body = await kisGet("/uapi/overseas-price/v1/quotations/price", "HHDFS00000300", {
-            AUTH: "",
-            EXCD: overseasExchangeCode(),
-            SYMB: request.symbol,
-          });
-          const output = record(body.output);
-          const price = stringValue(output.last);
+          let output: Record<string, unknown> = {};
+          let price: string | null = null;
+          for (const exchangeCode of overseasExchangeCodes()) {
+            try {
+              const body = await kisGet("/uapi/overseas-price/v1/quotations/price", "HHDFS00000300", {
+                AUTH: "",
+                EXCD: exchangeCode,
+                SYMB: request.symbol,
+              });
+              output = record(body.output);
+              price = stringValue(output.last);
+              if (price) break;
+            } catch {
+              continue;
+            }
+          }
           if (!price) {
             results.push(unavailable(request));
             continue;
@@ -283,6 +296,7 @@ export function getPortfolioPriceProvider(): PriceProvider {
 
 export const PORTFOLIO_KIS_READ_ONLY_POLICY = {
   tokenEndpoint: "/oauth2/tokenP",
-  quoteEndpoints: Array.from(KIS_READ_ONLY_ENDPOINTS.keys()),
-  prohibitedCapabilities: ["order", "balance", "account", "position", "buy", "sell", "transfer", "cancel", "amend"],
+  allowedGetEndpoints: Object.keys(KIS_READ_ONLY_ENDPOINTS),
+  allowedAccountCapabilities: ["domestic_holdings", "overseas_holdings"],
+  prohibitedCapabilities: KIS_PROHIBITED_CAPABILITIES,
 } as const;

@@ -13,6 +13,7 @@ import {
   fetchPortfolio,
   refreshPortfolio,
   savePortfolioHolding,
+  syncKisPortfolioAccount,
 } from "./api";
 
 type SortKey = "marketValue" | "profitLoss" | "returnPercent" | "weightPercent" | "name";
@@ -274,6 +275,19 @@ export function PortfolioView() {
     finally { setWorking(false); }
   };
 
+  const onAccountSync = async () => {
+    if (!dashboard?.accountSync.configured) return;
+    if (!window.confirm("KIS 실계좌의 국내·해외 보유잔고를 읽기 전용으로 동기화할까요? 주문이나 계좌 제어는 실행하지 않습니다.")) return;
+    setWorking(true); setError(null); setNotice(null);
+    try {
+      const data = await syncKisPortfolioAccount();
+      setResponse(data.dashboard);
+      if (data.dashboard.account) setAccountId(data.dashboard.account.id);
+      setNotice(`실계좌 동기화 완료 · 국내 ${data.result.domesticCount}개 · 해외 ${data.result.overseasCount}개 · 신규 ${data.result.created}개 · 갱신 ${data.result.updated}개`);
+    } catch (requestError) { setError(errorText(requestError)); }
+    finally { setWorking(false); }
+  };
+
   const exportCsv = () => {
     if (!dashboard) return;
     const headers = ["market", "symbol", "name", "assetType", "quantity", "averagePrice", "currency", "sector", "note", "dividendTrackingEnabled", "isActive"];
@@ -325,17 +339,19 @@ export function PortfolioView() {
 
   return <section className="portfolio-workspace">
     <header className="portfolio-hero">
-      <div><span>PHASE 2-P.1 · READ ONLY</span><h1>보유 종목·배당·리스크 대시보드</h1><p>등록한 보유 종목을 조회·계산·보고합니다. 주문, 계좌 제어, 매매 추천은 수행하지 않습니다.</p></div>
+      <div><span>PHASE 2-P.1 · READ ONLY</span><h1>보유 종목·배당·리스크 대시보드</h1><p>수동 등록 또는 KIS 실계좌의 실제 보유잔고를 조회·계산·보고합니다. 주문, 계좌 제어, 매매 추천은 수행하지 않습니다.</p></div>
       <div className="portfolio-hero-actions">
         {dashboard?.accounts.length ? <select value={accountId ?? ""} onChange={(event) => { setAccountId(event.target.value); void load(event.target.value); }}>{dashboard.accounts.map((account) => <option key={account.id} value={account.id}>{account.name} · {account.baseCurrency}</option>)}</select> : null}
         <button onClick={() => setShowAccountForm((value) => !value)}>계좌 그룹</button>
+        {dashboard?.accountSync.enabled ? <button className="primary" disabled={working || !dashboard.accountSync.configured} onClick={() => void onAccountSync()}>{working ? "처리 중" : "실계좌 동기화"}</button> : null}
         <button className="primary" disabled={working || !dashboard?.account} onClick={() => void onRefresh()}>{working ? "처리 중" : "수동 새로고침"}</button>
       </div>
     </header>
     {error ? <div className="portfolio-alert error"><strong>처리 실패</strong><span>{error}</span><button onClick={() => setError(null)}>닫기</button></div> : null}
     {notice ? <div className="portfolio-alert success"><strong>완료</strong><span>{notice}</span><button onClick={() => setNotice(null)}>닫기</button></div> : null}
+    {dashboard?.accountSync.enabled ? <section className={`portfolio-account-sync ${dashboard.accountSync.configured ? "ready" : "missing"}`}><div><span>KIS REAL ACCOUNT · READ ONLY</span><strong>{dashboard.accountSync.configured ? `${dashboard.accountSync.maskedAccount} 연결 준비 완료` : "운영 서버에 계좌번호 설정 필요"}</strong><p>보유잔고 조회만 허용됩니다. 주문·정정·취소·이체·주문가능금액 조회는 코드에서 차단합니다.</p></div><dl><div><dt>마지막 동기화</dt><dd>{formatDate(dashboard.accountSync.lastSyncedAt, true)}</dd></div><div><dt>상태</dt><dd>{dashboard.accountSync.lastSyncStatus ?? "대기"}</dd></div></dl></section> : null}
     {showAccountForm ? <form className="portfolio-inline-form" onSubmit={submitAccount}><label>계좌 별칭<input required value={accountForm.name} onChange={(event) => setAccountForm({ ...accountForm, name: event.target.value })} placeholder="예: 장기 투자" /></label><label>기준 통화<select value={accountForm.baseCurrency} onChange={(event) => setAccountForm({ ...accountForm, baseCurrency: event.target.value })}><option>KRW</option><option>USD</option></select></label><label className="wide">설명<input value={accountForm.description} onChange={(event) => setAccountForm({ ...accountForm, description: event.target.value })} placeholder="선택 입력" /></label><button className="primary" disabled={working}>생성</button></form> : null}
-    {!dashboard?.account ? <section className="portfolio-first-step"><b>01</b><div><h2>첫 계좌 그룹을 만드세요</h2><p>실제 보유 종목이나 금액은 자동으로 생성하지 않습니다.</p></div><button onClick={() => setShowAccountForm(true)}>계좌 그룹 만들기</button></section> : <>
+    {!dashboard?.account ? <section className="portfolio-first-step"><b>01</b><div><h2>{dashboard?.accountSync.enabled ? "KIS 실계좌를 동기화하세요" : "첫 계좌 그룹을 만드세요"}</h2><p>{dashboard?.accountSync.enabled ? "실제 보유잔고를 읽어 전용 계좌 그룹과 종목을 자동 생성합니다. 거래 기능은 없습니다." : "실제 보유 종목이나 금액은 자동으로 생성하지 않습니다."}</p></div>{dashboard?.accountSync.enabled ? <button className="primary" disabled={working || !dashboard.accountSync.configured} onClick={() => void onAccountSync()}>실계좌 동기화</button> : <button onClick={() => setShowAccountForm(true)}>계좌 그룹 만들기</button>}</section> : <>
       <div className="portfolio-summary-grid">
         <SummaryCard label="총 평가금액" value={formatAmount(dashboard.summary.totalMarketValue, dashboard.summary.baseCurrency)} detail={dashboard.summary.dataQuality === "verified" ? "확인 가능한 최신 데이터" : "잠정값 포함"} />
         <SummaryCard label="총 원가" value={formatAmount(dashboard.summary.totalCostBasis, dashboard.summary.baseCurrency)} />
@@ -361,7 +377,7 @@ export function PortfolioView() {
           <label className="portfolio-check"><input type="checkbox" checked={holdingForm.dividendTrackingEnabled} onChange={(event) => setHoldingForm({ ...holdingForm, dividendTrackingEnabled: event.target.checked })} />배당 추적</label>
           <div><button type="button" onClick={resetHoldingForm}>취소</button><button className="primary" disabled={working}>{editingHoldingId ? "수정 저장" : "종목 추가"}</button></div>
         </form> : null}
-        <div className="portfolio-table-wrap"><table><thead><tr><th>시장</th><th><button onClick={() => selectSort("name")}>종목명</button></th><th>수량</th><th>평균단가</th><th>현재가</th><th><button onClick={() => selectSort("marketValue")}>평가금액</button></th><th><button onClick={() => selectSort("profitLoss")}>손익</button></th><th><button onClick={() => selectSort("returnPercent")}>수익률</button></th><th><button onClick={() => selectSort("weightPercent")}>비중</button></th><th>예상 배당</th><th>상태</th><th>관리</th></tr></thead><tbody>{sortedHoldings.length ? sortedHoldings.map((item) => <tr key={item.holding.id}><td><b className={`portfolio-market ${item.holding.market.toLowerCase()}`}>{item.holding.market}</b></td><td><strong>{item.holding.name}</strong><small>{item.holding.symbol} · {item.holding.sector}</small></td><td>{formatNumber(item.holding.quantity, 8)}</td><td>{formatAmount(item.holding.averagePrice, item.holding.currency)}</td><td>{formatAmount(item.price.currentPrice, item.price.currency)}<small>{formatDate(item.price.observedAt, true)}</small></td><td>{formatAmount(item.baseMarketValue, dashboard.summary.baseCurrency)}</td><td className={(number(item.baseProfitLoss) ?? 0) >= 0 ? "gain" : "loss"}>{formatAmount(item.baseProfitLoss, dashboard.summary.baseCurrency)}{item.holding.currency === "USD" ? <small>USD {formatAmount(item.nativeProfitLoss, "USD")}</small> : null}</td><td className={(number(item.returnPercent) ?? 0) >= 0 ? "gain" : "loss"}>{formatPercent(item.returnPercent)}</td><td>{formatPercent(item.weightPercent)}</td><td>{formatAmount(item.expectedAnnualDividend, item.holding.currency)}<small>{item.dividendStatus}</small></td><td><span className={`portfolio-freshness ${item.price.freshnessStatus}`}>{item.price.freshnessStatus}</span>{item.provisional ? <small>잠정 평가</small> : null}</td><td><div className="portfolio-row-actions"><button onClick={() => editHolding(item.holding)}>수정</button>{dashboard.accounts.length > 1 ? <select aria-label={`${item.holding.name} 계좌 이동`} value="" onChange={(event) => void moveHolding(item.holding.id, event.target.value)}><option value="">이동</option>{dashboard.accounts.filter((account) => account.id !== dashboard.account?.id).map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select> : null}<button className="danger" onClick={() => void deactivateHolding(item.holding)}>비활성화</button></div></td></tr>) : <tr><td colSpan={12}><p className="portfolio-empty-copy">등록된 활성 보유 종목이 없습니다. 종목 추가 또는 CSV 가져오기를 사용하세요.</p></td></tr>}</tbody></table></div>
+        <div className="portfolio-table-wrap"><table><thead><tr><th>시장</th><th><button onClick={() => selectSort("name")}>종목명</button></th><th>수량</th><th>평균단가</th><th>현재가</th><th><button onClick={() => selectSort("marketValue")}>평가금액</button></th><th><button onClick={() => selectSort("profitLoss")}>손익</button></th><th><button onClick={() => selectSort("returnPercent")}>수익률</button></th><th><button onClick={() => selectSort("weightPercent")}>비중</button></th><th>예상 배당</th><th>상태</th><th>관리</th></tr></thead><tbody>{sortedHoldings.length ? sortedHoldings.map((item) => <tr key={item.holding.id}><td><b className={`portfolio-market ${item.holding.market.toLowerCase()}`}>{item.holding.market}</b></td><td><strong>{item.holding.name}</strong><small>{item.holding.symbol} · {item.holding.sector} · {item.holding.source === "kis" ? "KIS 실계좌" : "수동"}</small></td><td>{formatNumber(item.holding.quantity, 8)}</td><td>{formatAmount(item.holding.averagePrice, item.holding.currency)}</td><td>{formatAmount(item.price.currentPrice, item.price.currency)}<small>{formatDate(item.price.observedAt, true)}</small></td><td>{formatAmount(item.baseMarketValue, dashboard.summary.baseCurrency)}</td><td className={(number(item.baseProfitLoss) ?? 0) >= 0 ? "gain" : "loss"}>{formatAmount(item.baseProfitLoss, dashboard.summary.baseCurrency)}{item.holding.currency === "USD" ? <small>USD {formatAmount(item.nativeProfitLoss, "USD")}</small> : null}</td><td className={(number(item.returnPercent) ?? 0) >= 0 ? "gain" : "loss"}>{formatPercent(item.returnPercent)}</td><td>{formatPercent(item.weightPercent)}</td><td>{formatAmount(item.expectedAnnualDividend, item.holding.currency)}<small>{item.dividendStatus}</small></td><td><span className={`portfolio-freshness ${item.price.freshnessStatus}`}>{item.price.freshnessStatus}</span>{item.provisional ? <small>잠정 평가</small> : null}</td><td>{item.holding.source === "kis" ? <span className="portfolio-readonly-badge">동기화 전용</span> : <div className="portfolio-row-actions"><button onClick={() => editHolding(item.holding)}>수정</button>{dashboard.accounts.length > 1 ? <select aria-label={`${item.holding.name} 계좌 이동`} value="" onChange={(event) => void moveHolding(item.holding.id, event.target.value)}><option value="">이동</option>{dashboard.accounts.filter((account) => account.id !== dashboard.account?.id).map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select> : null}<button className="danger" onClick={() => void deactivateHolding(item.holding)}>비활성화</button></div>}</td></tr>) : <tr><td colSpan={12}><p className="portfolio-empty-copy">등록된 활성 보유 종목이 없습니다. 실계좌 동기화, 종목 추가 또는 CSV 가져오기를 사용하세요.</p></td></tr>}</tbody></table></div>
       </section>
 
       <section className="portfolio-section"><header><div><span>ALLOCATION</span><h2>자산 배분</h2><p>확인 가능한 평가금액만 비중 계산에 포함합니다.</p></div></header><div className="portfolio-allocation-grid"><AllocationBars title="종목별" items={dashboard.allocations.holdings} /><AllocationBars title="섹터별" items={dashboard.allocations.sectors} /><AllocationBars title="시장별" items={dashboard.allocations.markets} /><AllocationBars title="통화별" items={dashboard.allocations.currencies} /></div></section>
