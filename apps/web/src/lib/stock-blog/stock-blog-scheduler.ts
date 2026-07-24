@@ -6,6 +6,10 @@ import { HermesDailyLimitExceededError, getHermesUsageSummary } from "@/lib/herm
 import { createNaverDraftJobFromPipeline, getPublishCircuitBreaker } from "@/lib/naver-drafts/naver-draft-jobs";
 import type { StockBlogQualityGateResult } from "@/features/content-pipeline/content-pipeline-types";
 import { evaluateStockBlogPublishQuality } from "@/lib/stock-blog/quality-gate";
+import {
+  evaluateStockBlogSchedulerRetry,
+  isStockReferencePreflightFailure,
+} from "@/lib/stock-blog/stock-blog-scheduler-policy";
 import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
 import { resolveApproval } from "@/lib/repositories/approval-actions";
 import {
@@ -410,21 +414,53 @@ function eventPayload(value: Prisma.JsonValue): Record<string, Prisma.JsonValue>
     : {};
 }
 
-function retryState(existing: Awaited<ReturnType<typeof prisma.eventLog.findUnique>>, now: Date, config: StockBlogSchedulerConfig) {
-  if (!existing) return { allowed: true, attempt: 1 };
+async function clearMatchingReferencePreflightCircuitBreaker(scheduleKey: string) {
+  const existing = await prisma.eventLog.findUnique({
+    where: { id: PUBLISH_CIRCUIT_BREAKER_EVENT_ID },
+  });
+  if (!existing) return false;
+
   const payload = eventPayload(existing.payload);
-  const status = typeof payload.status === "string" ? payload.status : "";
-  const previousAttempt = typeof payload.attempt === "number" ? payload.attempt : 1;
-  if (status !== "failed") return { allowed: false, attempt: previousAttempt, reason: "이미 처리된 스케줄입니다." };
-  const maxAttempts = config.autoPublish ? 1 + config.autoPublishRetryLimit : config.maxRetries;
-  if (previousAttempt >= maxAttempts) return { allowed: false, attempt: previousAttempt, reason: `실패 재시도 한도 ${Math.max(0, maxAttempts - 1)}회에 도달했습니다.` };
-  const elapsedMs = now.getTime() - existing.timestamp.getTime();
-  const delayMs = config.retryDelayMinutes * 60 * 1000;
-  if (elapsedMs < delayMs) {
-    const waitMinutes = Math.max(1, Math.ceil((delayMs - elapsedMs) / 60000));
-    return { allowed: false, attempt: previousAttempt, reason: `실패 재시도 대기 중 · 약 ${waitMinutes}분 후 가능` };
+  const blockedScheduleKey = typeof payload.scheduleKey === "string"
+    ? payload.scheduleKey
+    : "";
+  const reason = typeof payload.reason === "string" ? payload.reason : "";
+  if (
+    payload.active !== true
+    || blockedScheduleKey !== scheduleKey
+    || !isStockReferencePreflightFailure(reason)
+  ) {
+    return false;
   }
-  return { allowed: true, attempt: previousAttempt + 1 };
+
+  await prisma.eventLog.update({
+    where: { id: PUBLISH_CIRCUIT_BREAKER_EVENT_ID },
+    data: {
+      timestamp: new Date(),
+      summary: "시장 참고자료 사전검증 실패로 잘못 활성화된 자동 발행 차단을 해제했습니다.",
+      payload: {
+        ...payload,
+        active: false,
+        status: "reference_preflight_recovered",
+        clearedAt: new Date().toISOString(),
+      } as Prisma.InputJsonObject,
+    },
+  });
+  return true;
+}
+
+function retryState(existing: Awaited<ReturnType<typeof prisma.eventLog.findUnique>>, now: Date, config: StockBlogSchedulerConfig) {
+  const payload = existing ? eventPayload(existing.payload) : {};
+  return evaluateStockBlogSchedulerRetry({
+    exists: Boolean(existing),
+    status: typeof payload.status === "string" ? payload.status : "",
+    previousAttempt: typeof payload.attempt === "number" ? payload.attempt : 1,
+    elapsedMs: existing ? now.getTime() - existing.timestamp.getTime() : 0,
+    autoPublish: config.autoPublish,
+    autoPublishRetryLimit: config.autoPublishRetryLimit,
+    maxRetries: config.maxRetries,
+    retryDelayMinutes: config.retryDelayMinutes,
+  });
 }
 
 export function buildStockBlogSchedulerPlan(now = new Date(), config = getStockBlogSchedulerConfig()): StockBlogSchedulerPlanItem[] {
@@ -485,6 +521,7 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
   const publishKey = `${contentType}:${marketDate}:${definition.scheduledTime}`;
 
   if (config.autoPublish) {
+    await clearMatchingReferencePreflightCircuitBreaker(key);
     const circuit = await getPublishCircuitBreaker();
     if (circuit.active) {
       return { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "skipped", reason: circuit.message ?? "자동 발행 circuit breaker 활성화" };
@@ -613,6 +650,7 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
     return result;
   } catch (error) {
     const reason = error instanceof HermesDailyLimitExceededError ? error.message : error instanceof Error ? error.message : "알 수 없는 스케줄러 오류";
+    const referencePreflightFailure = isStockReferencePreflightFailure(reason);
     const result: StockBlogSchedulerRunResult = { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "failed", attempt, reason };
     await writeSchedulerEvent({
       key,
@@ -620,9 +658,15 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
       scheduledFor,
       status: "failed",
       summary: `${contentType} 자동 실행 실패`,
-      payload: result as unknown as Prisma.InputJsonObject,
+      payload: {
+        ...(result as unknown as Prisma.InputJsonObject),
+        failurePhase: referencePreflightFailure ? "reference_preflight" : "runtime",
+        retryable: referencePreflightFailure,
+      },
     });
-    if (config.autoPublish) await activateSchedulerPublishCircuitBreaker({ status: "failed", reason, scheduleKey: key });
+    if (config.autoPublish && !referencePreflightFailure) {
+      await activateSchedulerPublishCircuitBreaker({ status: "failed", reason, scheduleKey: key });
+    }
     return result;
   }
 }
@@ -639,6 +683,50 @@ export async function runStockBlogSchedulerTick(now = new Date()) {
     if (definition) results.push(await runOneSchedule(definition, now, config));
   }
   return { ok: true, status: "processed" as const, config, results };
+}
+
+export async function runStockBlogSchedulerRecovery(scheduleId: string, now = new Date()) {
+  const config = getStockBlogSchedulerConfig();
+  if (!config.enabled) {
+    return {
+      ok: true,
+      status: "disabled" as const,
+      config,
+      results: [] as StockBlogSchedulerRunResult[],
+    };
+  }
+
+  const definition = STOCK_BLOG_SCHEDULE_DEFINITIONS.find(
+    (candidate) => candidate.scheduleId === scheduleId,
+  );
+  if (!definition) {
+    return {
+      ok: false,
+      status: "invalid_schedule" as const,
+      error: "알 수 없는 stock blog scheduleId입니다.",
+      config,
+      results: [] as StockBlogSchedulerRunResult[],
+    };
+  }
+
+  const parts = getZonedParts(now, config.timezone);
+  const scheduledAt = getScheduledAtForParts(definition, parts, config.timezone);
+  if (!appliesOnWeekday(definition, parts.weekday) || scheduledAt > now) {
+    return {
+      ok: true,
+      status: "not_due" as const,
+      config,
+      results: [] as StockBlogSchedulerRunResult[],
+    };
+  }
+
+  const result = await runOneSchedule(definition, now, config);
+  return {
+    ok: true,
+    status: "processed" as const,
+    config,
+    results: [result],
+  };
 }
 
 export function verifyStockBlogSchedulerKey(value: string | null) {
