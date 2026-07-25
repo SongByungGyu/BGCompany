@@ -13,9 +13,13 @@ if ! flock -n 9; then
 fi
 
 cd "$ROOT_DIR"
-set -a
-. ./.env
-set +a
+AGENT_API_KEY="$(sed -n 's/^AGENT_API_KEY=//p' .env | tail -n 1)"
+AGENT_API_KEY="${AGENT_API_KEY%\"}"
+AGENT_API_KEY="${AGENT_API_KEY#\"}"
+if [[ -z "$AGENT_API_KEY" ]]; then
+  printf '[%s] AGENT_API_KEY is missing\n' "$(date --iso-8601=seconds)" >>"$LOG_FILE"
+  exit 1
+fi
 
 {
   printf '[%s] portfolio sync tick start\n' "$(date --iso-8601=seconds)"
