@@ -1,4 +1,5 @@
 import type { PortfolioAssetType, PortfolioCurrency, PortfolioMarket } from "./portfolio-types";
+import { getPortfolioHoldingProfile } from "./portfolio-holding-profiles.ts";
 
 export type TossSyncedHolding = {
   market: PortfolioMarket;
@@ -10,6 +11,8 @@ export type TossSyncedHolding = {
   currency: PortfolioCurrency;
   sector: string;
   currentPrice: string | null;
+  analysis: string | null;
+  dividendTrackingEnabled: boolean;
 };
 
 function record(value: unknown) {
@@ -56,17 +59,21 @@ export function normalizeTossHoldings(value: unknown): TossSyncedHolding[] {
     if (!symbol || Number(quantity) <= 0) return [];
     if (market !== "KR" && market !== "US") return [];
     if (currency !== "KRW" && currency !== "USD") return [];
-    const name = stringValue(row, "name") || symbol;
+    const profile = getPortfolioHoldingProfile(market as PortfolioMarket, symbol);
+    const responseName = stringValue(row, "name");
+    const name = profile?.name ?? (responseName || symbol);
     return [{
       market: market as PortfolioMarket,
       symbol,
       name,
-      assetType: assetType(name),
+      assetType: profile?.assetType ?? assetType(name),
       quantity,
       averagePrice: decimalValue(row, "averagePurchasePrice"),
       currency: currency as PortfolioCurrency,
-      sector: "미분류",
+      sector: profile?.sector ?? "미분류",
       currentPrice: positiveDecimalValue(row, "lastPrice"),
+      analysis: profile?.analysis ?? null,
+      dividendTrackingEnabled: Boolean(profile),
     }];
   });
 }

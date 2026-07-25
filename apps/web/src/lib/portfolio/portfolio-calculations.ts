@@ -221,9 +221,21 @@ export function evaluatePortfolioRisks(
   return risks;
 }
 
-export function annualDividend(quantity: DecimalInput, amountPerShare: DecimalInput | null, status: DividendStatus) {
+export function annualDividend(
+  quantity: DecimalInput,
+  amountPerShare: DecimalInput | null,
+  status: DividendStatus,
+  dividendType = "annual",
+) {
   if (amountPerShare == null || status === "unavailable") return null;
-  return decimal(quantity).mul(decimal(amountPerShare));
+  const multiplier = dividendType === "weekly"
+    ? 52
+    : dividendType === "monthly"
+      ? 12
+      : dividendType === "quarterly"
+        ? 4
+        : 1;
+  return decimal(quantity).mul(decimal(amountPerShare)).mul(multiplier);
 }
 
 export function dedupeNews<T extends { url: string; title: string; sourceName: string }>(items: T[]) {

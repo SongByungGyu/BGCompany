@@ -66,6 +66,12 @@ test("배당 상태를 유지하고 미확인 배당을 계산하지 않는다",
   assert.equal(annualDividend("10", null, "unavailable"), null);
 });
 
+test("주간·월간·분기 분배금을 연환산한다", () => {
+  assert.equal(annualDividend("2", "0.5", "estimated", "weekly")?.toString(), "52");
+  assert.equal(annualDividend("2", "0.5", "estimated", "monthly")?.toString(), "12");
+  assert.equal(annualDividend("2", "0.5", "confirmed", "quarterly")?.toString(), "4");
+});
+
 test("뉴스 URL 중복을 제거한다", () => {
   const item = { url: "https://example.com/a", title: "기사", sourceName: "출처" };
   assert.equal(dedupeNews([item, { ...item }]).length, 1);

@@ -15,6 +15,7 @@ import {
 } from "./portfolio-calculations";
 import { portfolioConfig, PORTFOLIO_TEAM } from "./portfolio-config";
 import { getPortfolioPriceProvider } from "./portfolio-price-provider";
+import { dividendFrequencyMultiplier, getPortfolioHoldingProfile } from "./portfolio-holding-profiles";
 import { ruleBasedPortfolioReportWriter } from "./portfolio-report-writer";
 import { fetchTossAccountHoldings, getTossAccountSyncPublicConfig } from "./toss-account-provider";
 import type {
@@ -318,7 +319,11 @@ export async function getPortfolioDashboard(accountId?: string | null): Promise<
   }));
   const dividendRows = holdings.length ? await prisma.dividendEvent.findMany({
     where: { OR: holdings.map((holding) => ({ market: holding.market, symbol: holding.symbol })) },
-    orderBy: [{ exDividendDate: "asc" }, { paymentDate: "asc" }],
+    orderBy: [
+      { exDividendDate: { sort: "desc", nulls: "last" } },
+      { paymentDate: { sort: "desc", nulls: "last" } },
+      { createdAt: "desc" },
+    ],
     take: Math.max(holdings.length * 5, 20),
   }) : [];
   const holdingBySymbol = new Map(holdings.map((holding) => [`${holding.market}:${holding.symbol}`, holding]));
@@ -329,7 +334,12 @@ export async function getPortfolioDashboard(accountId?: string | null): Promise<
   }
   const dividendDtos = dividendRows.map((event) => {
     const holding = holdingBySymbol.get(`${event.market}:${event.symbol}`);
-    const expected = holding ? annualDividend(holding.quantity, event.amountPerShare, event.status as DividendStatus) : null;
+    const expected = holding
+      ? annualDividend(holding.quantity, event.amountPerShare, event.status as DividendStatus, event.dividendType)
+      : null;
+    const annualizedPerShare = event.amountPerShare
+      ? event.amountPerShare.mul(dividendFrequencyMultiplier(event.dividendType))
+      : null;
     return {
       id: event.id,
       market: event.market as PortfolioMarket,
@@ -337,9 +347,13 @@ export async function getPortfolioDashboard(accountId?: string | null): Promise<
       name: holding?.name ?? event.symbol,
       exDividendDate: iso(event.exDividendDate),
       paymentDate: iso(event.paymentDate),
+      dividendType: event.dividendType,
+      amountPerShare: event.amountPerShare?.toString() ?? null,
+      annualizedAmountPerShare: annualizedPerShare?.toString() ?? null,
       expectedAmount: expected?.toString() ?? null,
       currency: event.currency as PortfolioCurrency,
       status: event.status as DividendStatus,
+      dataQuality: event.dataQuality,
       sourceName: event.sourceName,
       sourceUrl: event.sourceUrl,
     };
@@ -390,7 +404,7 @@ export async function getPortfolioDashboard(accountId?: string | null): Promise<
   const expectedAnnualDividend = holdings.reduce((sum, holding) => {
     const event = latestDividendBySymbol.get(`${holding.market}:${holding.symbol}`);
     if (!event) return sum;
-    const amount = annualDividend(holding.quantity, event.amountPerShare, event.status as DividendStatus);
+    const amount = annualDividend(holding.quantity, event.amountPerShare, event.status as DividendStatus, event.dividendType);
     if (!amount) return sum;
     if (event.currency === baseCurrency) return sum.add(amount);
     if (event.currency === "USD" && baseCurrency === "KRW" && exchangeRate) return sum.add(amount.mul(exchangeRate.value));
@@ -434,7 +448,9 @@ export async function getPortfolioDashboard(accountId?: string | null): Promise<
       const holding = holdings.find((candidate) => candidate.id === item.holding.id)!;
       const price = prices.get(`${holding.market}:${holding.symbol}`) ?? unavailablePrice(holding);
       const event = latestDividendBySymbol.get(`${holding.market}:${holding.symbol}`);
-      const dividend = event ? annualDividend(holding.quantity, event.amountPerShare, event.status as DividendStatus) : null;
+      const dividend = event
+        ? annualDividend(holding.quantity, event.amountPerShare, event.status as DividendStatus, event.dividendType)
+        : null;
       return {
         holding,
         price,
@@ -611,7 +627,8 @@ export async function syncTossPortfolioAccount() {
         quantity: remote.quantity,
         averagePrice: remote.averagePrice,
         currency: remote.currency,
-        sector: previous?.sector || remote.sector,
+        sector: previous?.sector && previous.sector !== "미분류" ? previous.sector : remote.sector,
+        note: remote.analysis,
         source: "toss",
         lastSyncedAt: now.toISOString(),
         isActive: true,
@@ -628,9 +645,10 @@ export async function syncTossPortfolioAccount() {
             averagePrice: remote.averagePrice,
             currency: remote.currency,
             sector: remote.sector,
-            note: "토스증권 공식 Open API 읽기 전용 동기화",
+            note: remote.analysis ?? "토스증권 공식 Open API 읽기 전용 동기화",
             source: "toss",
             lastSyncedAt: now,
+            dividendTrackingEnabled: remote.dividendTrackingEnabled,
           },
         });
         await tx.portfolioHoldingChange.create({
@@ -668,8 +686,11 @@ export async function syncTossPortfolioAccount() {
           quantity: remote.quantity,
           averagePrice: remote.averagePrice,
           currency: remote.currency,
+          sector: previous.sector === "미분류" ? remote.sector : previous.sector,
+          note: remote.analysis ?? previous.note,
           source: "toss",
           lastSyncedAt: now,
+          dividendTrackingEnabled: remote.dividendTrackingEnabled || previous.dividendTrackingEnabled,
           isActive: true,
         },
       });
@@ -727,6 +748,37 @@ export async function syncTossPortfolioAccount() {
         },
       });
       deactivated += 1;
+    }
+    for (const remote of fetched.holdings) {
+      const profile = getPortfolioHoldingProfile(remote.market, remote.symbol);
+      if (!profile) continue;
+      const dividend = profile.dividend;
+      const exDividendDate = dividend.exDividendDate ? new Date(`${dividend.exDividendDate}T00:00:00.000Z`) : null;
+      const existingDividend = await tx.dividendEvent.findFirst({
+        where: {
+          market: profile.market,
+          symbol: profile.symbol,
+          sourceUrl: dividend.sourceUrl,
+          exDividendDate,
+        },
+      });
+      if (existingDividend) continue;
+      await tx.dividendEvent.create({
+        data: {
+          market: profile.market,
+          symbol: profile.symbol,
+          dividendType: dividend.dividendType,
+          amountPerShare: dividend.amountPerShare,
+          currency: dividend.currency,
+          exDividendDate,
+          recordDate: dividend.recordDate ? new Date(`${dividend.recordDate}T00:00:00.000Z`) : null,
+          paymentDate: dividend.paymentDate ? new Date(`${dividend.paymentDate}T00:00:00.000Z`) : null,
+          status: dividend.status,
+          sourceName: dividend.sourceName,
+          sourceUrl: dividend.sourceUrl,
+          dataQuality: dividend.dataQuality,
+        },
+      });
     }
     return { accountId: account.id, created, updated, deactivated };
   });

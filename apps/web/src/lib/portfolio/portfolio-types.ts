@@ -86,9 +86,13 @@ export type DividendEventDto = {
   name: string;
   exDividendDate: string | null;
   paymentDate: string | null;
+  dividendType: string;
+  amountPerShare: string | null;
+  annualizedAmountPerShare: string | null;
   expectedAmount: string | null;
   currency: PortfolioCurrency;
   status: DividendStatus;
+  dataQuality: string;
   sourceName: string | null;
   sourceUrl: string | null;
 };

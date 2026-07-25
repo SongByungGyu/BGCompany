@@ -36,6 +36,8 @@ test("normalizes official Toss holdings and removes zero balances", () => {
     currency: "KRW",
     sector: "미분류",
     currentPrice: "81000",
+    analysis: null,
+    dividendTrackingEnabled: false,
   }]);
   assert.equal("accountNo" in result[0], false);
 });
@@ -54,5 +56,23 @@ test("normalizes a US ETF without retaining unknown response fields", () => {
   assert.equal(holding.symbol, "SPY");
   assert.equal(holding.assetType, "ETF");
   assert.equal(holding.quantity, "1.25");
+  assert.equal(holding.dividendTrackingEnabled, false);
   assert.equal("profitLoss" in holding, false);
+});
+
+test("classifies a known leveraged ETF from its official profile", () => {
+  const [holding] = normalizeTossHoldings([{
+    symbol: "SOXL",
+    name: "SOXL",
+    marketCountry: "US",
+    currency: "USD",
+    quantity: "2",
+    lastPrice: "150",
+    averagePurchasePrice: "100",
+  }]);
+  assert.equal(holding.assetType, "ETF");
+  assert.equal(holding.name, "Direxion Daily Semiconductor Bull 3X ETF");
+  assert.equal(holding.sector, "반도체 3배 레버리지 ETF");
+  assert.equal(holding.dividendTrackingEnabled, true);
+  assert.match(holding.analysis ?? "", /일일 재설정/);
 });
