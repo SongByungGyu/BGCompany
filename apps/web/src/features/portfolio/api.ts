@@ -43,7 +43,7 @@ export async function refreshPortfolio(accountId: string) {
   }));
 }
 
-export async function syncKisPortfolioAccount() {
+export async function syncTossPortfolioAccount() {
   return json<{
     dashboard: PortfolioDashboard;
     result: {

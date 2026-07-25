@@ -14,9 +14,9 @@ import {
   type CalculationQuote,
 } from "./portfolio-calculations";
 import { portfolioConfig, PORTFOLIO_TEAM } from "./portfolio-config";
-import { fetchKisAccountHoldings, getKisAccountConfig, getKisAccountSyncPublicConfig } from "./kis-account-provider";
 import { getPortfolioPriceProvider } from "./portfolio-price-provider";
 import { ruleBasedPortfolioReportWriter } from "./portfolio-report-writer";
+import { fetchTossAccountHoldings, getTossAccountSyncPublicConfig } from "./toss-account-provider";
 import type {
   DividendStatus,
   FreshnessStatus,
@@ -251,11 +251,11 @@ export async function getPortfolioDashboard(accountId?: string | null): Promise<
   const accountsRaw = await prisma.portfolioAccount.findMany({ where: { isActive: true }, orderBy: { createdAt: "asc" } });
   const account = accountId ? accountsRaw.find((candidate) => candidate.id === accountId) ?? null : accountsRaw[0] ?? null;
   const accounts = accountsRaw.map(accountDto);
-  const syncConfig = getKisAccountSyncPublicConfig();
+  const syncConfig = getTossAccountSyncPublicConfig();
   const accountSync: PortfolioDashboard["accountSync"] = {
     enabled: syncConfig.enabled,
     configured: syncConfig.configured,
-    provider: "kis",
+    provider: "toss",
     readOnly: true,
     maskedAccount: syncConfig.maskedAccount,
     lastSyncedAt: iso(account?.lastSyncedAt),
@@ -292,7 +292,7 @@ export async function getPortfolioDashboard(accountId?: string | null): Promise<
       risks: [],
       reports: [],
       briefing: syncConfig.enabled
-        ? "KIS 실계좌 읽기 전용 동기화를 실행하면 실제 보유 종목을 불러옵니다."
+        ? "토스증권 공식 Open API 읽기 전용 동기화를 실행하면 실제 보유 종목을 불러옵니다."
         : "계좌 그룹을 만든 뒤 보유 종목을 등록하세요.",
       team: PORTFOLIO_TEAM.map((member) => ({ ...member })),
     };
@@ -543,41 +543,36 @@ async function recordPortfolioTask(accountId: string, summary: string, dataQuali
   }
 }
 
-export async function syncKisPortfolioAccount() {
-  let fetched: Awaited<ReturnType<typeof fetchKisAccountHoldings>>;
+export async function syncTossPortfolioAccount() {
+  let fetched: Awaited<ReturnType<typeof fetchTossAccountHoldings>>;
   try {
-    fetched = await fetchKisAccountHoldings();
+    fetched = await fetchTossAccountHoldings();
   } catch (error) {
-    try {
-      const config = getKisAccountConfig();
-      await prisma.portfolioAccount.updateMany({
-        where: { source: "kis", externalAccountRef: config.externalAccountRef },
-        data: {
-          lastSyncStatus: "failed",
-          lastSyncMessage: "KIS 읽기 전용 잔고조회에 실패했습니다.",
-        },
-      });
-    } catch {
-      // A missing or invalid account config may mean no linked account exists yet.
-    }
+    await prisma.portfolioAccount.updateMany({
+      where: { source: "toss" },
+      data: {
+        lastSyncStatus: "failed",
+        lastSyncMessage: "토스증권 읽기 전용 보유종목 조회에 실패했습니다.",
+      },
+    }).catch(() => undefined);
     throw error;
   }
   if (fetched.holdings.length > portfolioConfig().maxSymbols) {
-    throw new Error(`KIS 보유 종목 ${fetched.holdings.length}개가 현재 한도 ${portfolioConfig().maxSymbols}개를 초과했습니다.`);
+    throw new Error(`토스증권 보유 종목 ${fetched.holdings.length}개가 현재 한도 ${portfolioConfig().maxSymbols}개를 초과했습니다.`);
   }
   const now = new Date();
-  const syncMessage = `KIS 읽기 전용 동기화 완료 · 국내 ${fetched.domesticCount}개 · 해외 ${fetched.overseasCount}개`;
+  const syncMessage = `토스증권 읽기 전용 동기화 완료 · 국내 ${fetched.domesticCount}개 · 해외 ${fetched.overseasCount}개`;
   const result = await prisma.$transaction(async (tx) => {
     let account = await tx.portfolioAccount.findFirst({
-      where: { source: "kis", externalAccountRef: fetched.config.externalAccountRef },
+      where: { source: "toss", externalAccountRef: fetched.config.externalAccountRef },
     });
     if (!account) {
       account = await tx.portfolioAccount.create({
         data: {
           name: fetched.config.accountLabel,
           baseCurrency: "KRW",
-          description: "한국투자증권 Open API 읽기 전용 보유잔고",
-          source: "kis",
+          description: `토스증권 공식 Open API 읽기 전용 보유종목 · ${fetched.config.maskedAccount}`,
+          source: "toss",
           externalAccountRef: fetched.config.externalAccountRef,
           lastSyncedAt: now,
           lastSyncStatus: "success",
@@ -617,7 +612,7 @@ export async function syncKisPortfolioAccount() {
         averagePrice: remote.averagePrice,
         currency: remote.currency,
         sector: previous?.sector || remote.sector,
-        source: "kis",
+        source: "toss",
         lastSyncedAt: now.toISOString(),
         isActive: true,
       };
@@ -633,13 +628,13 @@ export async function syncKisPortfolioAccount() {
             averagePrice: remote.averagePrice,
             currency: remote.currency,
             sector: remote.sector,
-            note: "KIS 실계좌 읽기 전용 동기화",
-            source: "kis",
+            note: "토스증권 공식 Open API 읽기 전용 동기화",
+            source: "toss",
             lastSyncedAt: now,
           },
         });
         await tx.portfolioHoldingChange.create({
-          data: { portfolioAccountId: account.id, holdingId: holding.id, changeType: "kis_synced_created", after },
+          data: { portfolioAccountId: account.id, holdingId: holding.id, changeType: "toss_synced_created", after },
         });
         if (remote.currentPrice) {
           await tx.portfolioPriceSnapshot.create({
@@ -651,8 +646,8 @@ export async function syncKisPortfolioAccount() {
               marketDate: now,
               observedAt: now,
               collectedAt: now,
-              provider: "한국투자증권 Open API · 실계좌 잔고조회",
-              sourceUrl: "https://github.com/koreainvestment/open-trading-api",
+              provider: "토스증권 공식 Open API · 보유 주식 조회",
+              sourceUrl: "https://developers.tossinvest.com/docs",
               freshnessStatus: "fresh",
             },
           });
@@ -664,7 +659,7 @@ export async function syncKisPortfolioAccount() {
         || previous.averagePrice.toString() !== remote.averagePrice
         || previous.name !== remote.name
         || !previous.isActive
-        || previous.source !== "kis";
+        || previous.source !== "toss";
       const holding = await tx.portfolioHolding.update({
         where: { id: previous.id },
         data: {
@@ -673,7 +668,7 @@ export async function syncKisPortfolioAccount() {
           quantity: remote.quantity,
           averagePrice: remote.averagePrice,
           currency: remote.currency,
-          source: "kis",
+          source: "toss",
           lastSyncedAt: now,
           isActive: true,
         },
@@ -683,7 +678,7 @@ export async function syncKisPortfolioAccount() {
           data: {
             portfolioAccountId: account.id,
             holdingId: holding.id,
-            changeType: "kis_synced_updated",
+            changeType: "toss_synced_updated",
             before: {
               name: previous.name,
               quantity: previous.quantity.toString(),
@@ -706,8 +701,8 @@ export async function syncKisPortfolioAccount() {
             marketDate: now,
             observedAt: now,
             collectedAt: now,
-            provider: "한국투자증권 Open API · 실계좌 잔고조회",
-            sourceUrl: "https://github.com/koreainvestment/open-trading-api",
+            provider: "토스증권 공식 Open API · 보유 주식 조회",
+            sourceUrl: "https://developers.tossinvest.com/docs",
             freshnessStatus: "fresh",
           },
         });
@@ -715,7 +710,7 @@ export async function syncKisPortfolioAccount() {
     }
 
     for (const holding of existing) {
-      if (holding.source !== "kis" || !holding.isActive) continue;
+      if (holding.source !== "toss" || !holding.isActive) continue;
       if (!fetched.config.markets.includes(holding.market as PortfolioMarket)) continue;
       if (remoteKeys.has(`${holding.market}:${holding.symbol}`)) continue;
       await tx.portfolioHolding.update({
@@ -726,7 +721,7 @@ export async function syncKisPortfolioAccount() {
         data: {
           portfolioAccountId: account.id,
           holdingId: holding.id,
-          changeType: "kis_synced_deactivated",
+          changeType: "toss_synced_deactivated",
           before: { quantity: holding.quantity.toString(), isActive: true },
           after: { quantity: "0", isActive: false, lastSyncedAt: now.toISOString() },
         },

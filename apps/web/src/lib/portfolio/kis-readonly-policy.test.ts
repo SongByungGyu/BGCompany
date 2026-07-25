@@ -6,29 +6,34 @@ import {
   isKisReadOnlyRequestAllowed,
 } from "./kis-readonly-policy.ts";
 
-test("allows only the official read-only holdings requests", () => {
+test("allows only the official read-only market-price requests", () => {
   assert.equal(isKisReadOnlyRequestAllowed(
     "GET",
-    "/uapi/domestic-stock/v1/trading/inquire-balance",
-    "TTTC8434R",
+    "/uapi/domestic-stock/v1/quotations/inquire-price",
+    "FHKST01010100",
   ), true);
   assert.equal(isKisReadOnlyRequestAllowed(
     "GET",
-    "/uapi/overseas-stock/v1/trading/inquire-balance",
-    "TTTS3012R",
+    "/uapi/overseas-price/v1/quotations/price",
+    "HHDFS00000300",
   ), true);
 });
 
 test("rejects mutations, mismatched TR IDs, and order paths", () => {
   assert.equal(isKisReadOnlyRequestAllowed(
     "POST",
-    "/uapi/domestic-stock/v1/trading/inquire-balance",
-    "TTTC8434R",
+    "/uapi/domestic-stock/v1/quotations/inquire-price",
+    "FHKST01010100",
+  ), false);
+  assert.equal(isKisReadOnlyRequestAllowed(
+    "GET",
+    "/uapi/domestic-stock/v1/quotations/inquire-price",
+    "TTTC0802U",
   ), false);
   assert.equal(isKisReadOnlyRequestAllowed(
     "GET",
     "/uapi/domestic-stock/v1/trading/inquire-balance",
-    "TTTC0802U",
+    "TTTC8434R",
   ), false);
   assert.equal(isKisReadOnlyRequestAllowed(
     "POST",

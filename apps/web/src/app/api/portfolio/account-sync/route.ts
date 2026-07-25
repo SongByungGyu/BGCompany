@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authorizePortfolioApi } from "@/lib/portfolio/portfolio-api";
-import { assertRefreshRateLimit, syncKisPortfolioAccount } from "@/lib/portfolio/portfolio-service";
+import { assertRefreshRateLimit, syncTossPortfolioAccount } from "@/lib/portfolio/portfolio-service";
 import { errorMessage } from "@/lib/portfolio/portfolio-validation";
 
 export async function POST(request: Request) {
@@ -9,7 +9,7 @@ export async function POST(request: Request) {
   try {
     const clientKey = `account-sync:${request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "admin"}`;
     assertRefreshRateLimit(clientKey);
-    return NextResponse.json(await syncKisPortfolioAccount());
+    return NextResponse.json(await syncTossPortfolioAccount());
   } catch (error) {
     const message = errorMessage(error);
     const status = message === "REFRESH_RATE_LIMITED" ? 429 : 400;

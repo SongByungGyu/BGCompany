@@ -3,8 +3,6 @@ export const KIS_READ_ONLY_ENDPOINTS = {
   "/uapi/overseas-price/v1/quotations/price": "HHDFS00000300",
   "/uapi/overseas-price/v1/quotations/dailyprice": "HHDFS76240000",
   "/uapi/overseas-price/v1/quotations/inquire-daily-chartprice": "FHKST03030100",
-  "/uapi/domestic-stock/v1/trading/inquire-balance": "TTTC8434R",
-  "/uapi/overseas-stock/v1/trading/inquire-balance": "TTTS3012R",
 } as const;
 
 export function isKisReadOnlyRequestAllowed(method: string, path: string, trId: string) {

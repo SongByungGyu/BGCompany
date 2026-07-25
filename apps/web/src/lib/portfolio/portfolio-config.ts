@@ -19,6 +19,7 @@ export function portfolioConfig() {
   return {
     enabled: isPortfolioMonitoringEnabled(process.env),
     priceProvider: process.env.PORTFOLIO_PRICE_PROVIDER?.trim() === "kis" ? "kis" as const : "mock" as const,
+    accountSyncProvider: process.env.PORTFOLIO_ACCOUNT_SYNC_PROVIDER?.trim() === "toss" ? "toss" as const : "none" as const,
     accountSyncEnabled: process.env.PORTFOLIO_ACCOUNT_SYNC_ENABLED === "true",
     newsEnabled: process.env.PORTFOLIO_NEWS_ENABLED === "true",
     dividendEnabled: process.env.PORTFOLIO_DIVIDEND_ENABLED === "true",

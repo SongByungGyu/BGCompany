@@ -115,6 +115,18 @@ export function parseDividendInput(value: unknown) {
 export function errorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : "";
   const known: Record<string, string> = {
+    TOSS_ACCOUNT_SYNC_DISABLED: "토스증권 읽기 전용 동기화 기능이 비활성화되어 있습니다.",
+    TOSS_CREDENTIALS_MISSING: "운영 서버에 토스증권 Open API Client ID 또는 Client Secret이 설정되지 않았습니다.",
+    TOSS_ACCOUNT_SEQ_INVALID: "토스증권 계좌 식별자 설정이 올바르지 않습니다.",
+    TOSS_HOST_NOT_ALLOWED: "토스증권 공식 Open API 주소만 사용할 수 있습니다.",
+    TOSS_AUTH_FAILED: "토스증권 Open API 인증에 실패했습니다. 발급값을 확인하세요.",
+    TOSS_IP_NOT_ALLOWED: "토스증권 Open API에 운영 서버 IP가 허용되어 있지 않습니다.",
+    TOSS_ACCOUNTS_EMPTY: "조회 가능한 토스증권 종합매매 계좌가 없습니다.",
+    TOSS_ACCOUNT_SELECTION_REQUIRED: "토스증권 종합매매 계좌가 여러 개입니다. 운영 설정에 계좌 식별자를 지정하세요.",
+    TOSS_ACCOUNT_NOT_FOUND: "설정한 토스증권 계좌 식별자를 찾지 못했습니다.",
+    TOSS_RATE_LIMITED: "토스증권 조회 한도를 초과했습니다. 잠시 후 다시 시도하세요.",
+    TOSS_RESPONSE_ERROR: "토스증권이 계좌 조회 요청을 거절했습니다.",
+    TOSS_QUERY_NOT_ALLOWLISTED: "허용되지 않은 토스증권 요청이 코드에서 차단되었습니다.",
     KIS_ACCOUNT_SYNC_DISABLED: "실계좌 읽기 전용 동기화 기능이 비활성화되어 있습니다.",
     KIS_ACCOUNT_SYNC_REQUIRES_KIS_PRICE_PROVIDER: "실계좌 동기화에는 KIS 시세 제공자 설정이 필요합니다.",
     KIS_REAL_ACCOUNT_HOST_REQUIRED: "실전 KIS Open API 주소가 필요합니다.",

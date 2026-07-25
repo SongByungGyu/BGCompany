@@ -11,7 +11,7 @@ export type PortfolioAccountDto = {
   name: string;
   baseCurrency: PortfolioCurrency;
   description: string | null;
-  source: "manual" | "kis";
+  source: "manual" | "kis" | "toss";
   lastSyncedAt: string | null;
   lastSyncStatus: string | null;
   lastSyncMessage: string | null;
@@ -32,7 +32,7 @@ export type PortfolioHoldingDto = {
   currency: PortfolioCurrency;
   sector: string;
   note: string | null;
-  source: "manual" | "kis";
+  source: "manual" | "kis" | "toss";
   lastSyncedAt: string | null;
   dividendTrackingEnabled: boolean;
   isActive: boolean;
@@ -135,7 +135,7 @@ export type PortfolioDashboard = {
   accountSync: {
     enabled: boolean;
     configured: boolean;
-    provider: "kis";
+    provider: "toss";
     readOnly: true;
     maskedAccount: string | null;
     lastSyncedAt: string | null;
