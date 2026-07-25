@@ -62,8 +62,8 @@ const STOCK_BRIEFING_TEMPLATE_CONFIGS: Record<StockBriefingTemplate, StockBriefi
   },
   WEEKLY_MARKET_REVIEW: {
     type: "WEEKLY_MARKET_REVIEW",
-    label: "금요일 16:00 KST · 금주 한국/미국 주식시장 정리",
-    recommendedSchedule: "금요일 16:00 KST 또는 토요일 오전 발행 권장",
+    label: "토요일 09:00 KST · 금주 한국/미국 주식시장 정리",
+    recommendedSchedule: "토요일 09:00 KST 발행",
     recommendedCategory: "주간 시장 정리",
     requiredSections: ["이번 주 시장 한 줄 요약", "코스피·코스닥 흐름", "S&P500·나스닥 흐름", "주요 상승/하락 섹터", "주요 뉴스/이벤트", "다음 주로 이어질 포인트", "리스크 요인", "투자자 체크리스트"],
     defaultTags: ["BGMarketNote", "주식시장", "증시브리핑", "투자공부", "주간증시", "시장정리", "섹터흐름", "다음주증시", "경제지표", "한국주식", "미국주식"],

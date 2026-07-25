@@ -75,7 +75,7 @@ Default tags:
 
 ## 3. WEEKLY_MARKET_REVIEW
 
-- Schedule: Friday 16:00 KST or Saturday morning
+- Schedule: Saturday 09:00 KST
 - Purpose: weekly Korea/US stock-market review
 - Recommended Naver category: 주간 시장 정리
 

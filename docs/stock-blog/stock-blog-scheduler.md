@@ -6,10 +6,10 @@ Phase 1-S scheduler prepares stock-market blog drafts on a fixed KST schedule.
 
 | Content type | Cadence | Time |
 |---|---:|---:|
-| KOREA_DAILY_PREVIEW | Daily | 08:30 KST |
-| KOREA_MARKET_CLOSE_US_PREVIEW | Daily | 17:00 KST |
-| WEEKLY_MARKET_REVIEW | Friday | 16:00 KST |
-| NEXT_WEEK_MARKET_PREVIEW | Saturday | 09:00 KST |
+| KOREA_DAILY_PREVIEW | Weekdays | 08:30 KST |
+| KOREA_MARKET_CLOSE_US_PREVIEW | Weekdays | 17:00 KST |
+| WEEKLY_MARKET_REVIEW | Saturday | 09:00 KST |
+| NEXT_WEEK_MARKET_PREVIEW | Sunday | 19:00 KST |
 
 ## Flow
 
