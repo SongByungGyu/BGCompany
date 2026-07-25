@@ -31,6 +31,7 @@ import type {
   PortfolioRiskDto,
 } from "./portfolio-types";
 import { searchNaverNewsReferences } from "@/lib/stock-blog/references/naver-search-reference-adapter";
+import { getPortfolioAutoSyncStatus } from "./portfolio-sync-scheduler";
 
 const ZERO = new Prisma.Decimal(0);
 const refreshWindows = new Map<string, number[]>();
@@ -263,6 +264,7 @@ export async function getPortfolioDashboard(accountId?: string | null): Promise<
     lastSyncStatus: account?.lastSyncStatus ?? null,
     lastSyncMessage: account?.lastSyncMessage ?? null,
   };
+  const autoSync = await getPortfolioAutoSyncStatus();
   const baseCurrency = (account?.baseCurrency ?? "KRW") as PortfolioCurrency;
   if (!account) {
     return {
@@ -272,6 +274,7 @@ export async function getPortfolioDashboard(accountId?: string | null): Promise<
       account: null,
       accounts,
       accountSync,
+      autoSync,
       holdings: [],
       summary: {
         baseCurrency,
@@ -444,6 +447,7 @@ export async function getPortfolioDashboard(accountId?: string | null): Promise<
     account: accountDto(account),
     accounts,
     accountSync,
+    autoSync,
     holdings: calculated.map((item) => {
       const holding = holdings.find((candidate) => candidate.id === item.holding.id)!;
       const price = prices.get(`${holding.market}:${holding.symbol}`) ?? unavailablePrice(holding);
@@ -518,7 +522,7 @@ export function assertRefreshRateLimit(key: string, now = Date.now()) {
   refreshWindows.set(key, attempts);
 }
 
-async function recordPortfolioTask(accountId: string, summary: string, dataQuality: string) {
+async function recordPortfolioTask(accountId: string, summary: string, dataQuality: string, triggerSource = "manual-refresh") {
   try {
     const employee = await prisma.employee.findUnique({ where: { id: "stock-monitor" }, select: { id: true } });
     if (!employee) return;
@@ -538,7 +542,7 @@ async function recordPortfolioTask(accountId: string, summary: string, dataQuali
         model: "rules",
         currentStep: "portfolio-qa-auditor 검증 완료",
         recentOutput: summary,
-        nextAction: dataQuality === "verified" ? "다음 수동 갱신 대기" : "누락·오래된 데이터 확인",
+        nextAction: dataQuality === "verified" ? "다음 포트폴리오 갱신 대기" : "누락·오래된 데이터 확인",
       },
     });
     await prisma.agentRun.create({
@@ -547,7 +551,7 @@ async function recordPortfolioTask(accountId: string, summary: string, dataQuali
         employeeId: employee.id,
         mode: "portfolio-monitoring-rules",
         status: "completed",
-        triggerSource: "manual-refresh",
+        triggerSource,
         startedAt: now,
         completedAt: now,
         resultSummary: summary,
@@ -559,7 +563,7 @@ async function recordPortfolioTask(accountId: string, summary: string, dataQuali
   }
 }
 
-export async function syncTossPortfolioAccount() {
+export async function syncTossPortfolioAccount(options: { refresh?: boolean } = {}) {
   let fetched: Awaited<ReturnType<typeof fetchTossAccountHoldings>>;
   try {
     fetched = await fetchTossAccountHoldings();
@@ -782,7 +786,9 @@ export async function syncTossPortfolioAccount() {
     }
     return { accountId: account.id, created, updated, deactivated };
   });
-  const dashboard = await refreshPortfolio(result.accountId);
+  const dashboard = options.refresh === false
+    ? await getPortfolioDashboard(result.accountId)
+    : await refreshPortfolio(result.accountId);
   return {
     dashboard,
     result: {
@@ -796,7 +802,14 @@ export async function syncTossPortfolioAccount() {
   };
 }
 
-export async function refreshPortfolio(accountId?: string | null) {
+export async function refreshPortfolio(
+  accountId?: string | null,
+  options: {
+    forcePriceRefresh?: boolean;
+    snapshotDate?: string;
+    triggerSource?: string;
+  } = {},
+) {
   const account = accountId
     ? await prisma.portfolioAccount.findFirst({ where: { id: accountId, isActive: true } })
     : await prisma.portfolioAccount.findFirst({ where: { isActive: true }, orderBy: { createdAt: "asc" } });
@@ -815,7 +828,7 @@ export async function refreshPortfolio(accountId?: string | null) {
       where: { market: holding.market, symbol: holding.symbol, collectedAt: { gte: cutoff } },
       orderBy: { collectedAt: "desc" },
     });
-    if (!cached) requests.push({
+    if (options.forcePriceRefresh || !cached) requests.push({
       market: holding.market as PortfolioMarket,
       symbol: holding.symbol,
       assetType: holding.assetType,
@@ -848,7 +861,7 @@ export async function refreshPortfolio(accountId?: string | null) {
       where: { market: "FX", symbol: "USD/KRW", collectedAt: { gte: cutoff } },
       orderBy: { collectedAt: "desc" },
     });
-    if (!cachedFx) {
+    if (options.forcePriceRefresh || !cachedFx) {
       const fx = await provider.getUsdKrw();
       if (fx?.currentPrice && fx.observedAt) await prisma.portfolioPriceSnapshot.create({
         data: {
@@ -871,9 +884,16 @@ export async function refreshPortfolio(accountId?: string | null) {
   }
   await collectPortfolioNews(holdings.map(holdingDto));
   const dashboard = await getPortfolioDashboard(account.id);
-  await prisma.portfolioValuationSnapshot.create({
-    data: {
+  const snapshotDate = options.snapshotDate ?? new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  const snapshotId = `portfolio-valuation-${account.id}-${snapshotDate}`;
+  const snapshotData = {
       portfolioAccountId: account.id,
+      evaluatedAt: new Date(),
       baseCurrency: dashboard.summary.baseCurrency,
       totalMarketValue: dashboard.summary.totalMarketValue,
       totalCostBasis: dashboard.summary.totalCostBasis,
@@ -882,7 +902,11 @@ export async function refreshPortfolio(accountId?: string | null) {
       exchangeRate: dashboard.summary.exchangeRate,
       dataQuality: dashboard.summary.dataQuality,
       missingItems: dashboard.summary.missingItems,
-    },
+  };
+  await prisma.portfolioValuationSnapshot.upsert({
+    where: { id: snapshotId },
+    create: { id: snapshotId, ...snapshotData },
+    update: snapshotData,
   });
   await prisma.portfolioRiskSignal.deleteMany({ where: { portfolioAccountId: account.id, resolvedAt: null } });
   if (dashboard.risks.length) await prisma.portfolioRiskSignal.createMany({
@@ -907,6 +931,6 @@ export async function refreshPortfolio(accountId?: string | null) {
       status: report.status,
     })),
   });
-  await recordPortfolioTask(account.id, dashboard.briefing, dashboard.summary.dataQuality);
+  await recordPortfolioTask(account.id, dashboard.briefing, dashboard.summary.dataQuality, options.triggerSource);
   return getPortfolioDashboard(account.id);
 }

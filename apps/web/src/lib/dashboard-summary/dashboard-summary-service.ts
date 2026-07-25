@@ -3,6 +3,7 @@ import { listContentPipelines } from "@/lib/content-pipeline/content-pipeline-se
 import { getHermesUsageSummary } from "@/lib/hermes/hermes-usage";
 import { getStockBlogScheduleItems } from "@/lib/stock-blog/stock-blog-workflow";
 import { getStockBlogSchedulerStatus } from "@/lib/stock-blog/stock-blog-scheduler";
+import { getPortfolioAutoSyncStatus } from "@/lib/portfolio/portfolio-sync-scheduler";
 import {
   getHermesUsageSeverity,
   getNaverDraftSeverity,
@@ -46,7 +47,7 @@ function activityStatusLabel(status: string) {
 }
 
 export async function buildDashboardSummary(): Promise<DashboardSummary> {
-  const [activeTasks, activeTaskRows, waitingApprovals, errorTasks, recentAgentRuns, contentPipelines, naverJobs, hermesUsage, stockBlogScheduler] = await Promise.all([
+  const [activeTasks, activeTaskRows, waitingApprovals, errorTasks, recentAgentRuns, contentPipelines, naverJobs, hermesUsage, stockBlogScheduler, portfolioAutoSync] = await Promise.all([
     prisma.task.count({ where: { status: { in: unfinishedTaskStatuses } } }),
     prisma.task.findMany({
       where: { status: { in: unfinishedTaskStatuses } },
@@ -90,6 +91,7 @@ export async function buildDashboardSummary(): Promise<DashboardSummary> {
     }),
     getHermesUsageSummary({ recentLimit: 6 }),
     getStockBlogSchedulerStatus(),
+    getPortfolioAutoSyncStatus(),
   ]);
 
   const latestPipeline = contentPipelines[0] ?? null;
@@ -139,6 +141,22 @@ export async function buildDashboardSummary(): Promise<DashboardSummary> {
         : "등록된 다음 자동 실행이 없습니다.",
       severity: stockBlogScheduler.publishCircuitBreaker.active ? "warning" : stockBlogScheduler.enabled ? "good" : "info",
       actionLabel: "스케줄 확인",
+    },
+    {
+      id: "portfolio-auto-sync",
+      title: "포트폴리오 자동 동기화",
+      value: portfolioAutoSync.enabled ? portfolioAutoSync.status.toUpperCase() : "OFF",
+      description: portfolioAutoSync.error
+        ? `최근 오류: ${portfolioAutoSync.error}`
+        : portfolioAutoSync.freshnessWarning
+          ? portfolioAutoSync.freshnessWarning
+          : `다음 예정 ${new Intl.DateTimeFormat("ko-KR", { timeZone: portfolioAutoSync.timezone, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(portfolioAutoSync.nextRunAt))} · 변경 ${portfolioAutoSync.changedCount}종목`,
+      severity: portfolioAutoSync.error || portfolioAutoSync.freshnessWarning
+        ? "warning"
+        : portfolioAutoSync.enabled && portfolioAutoSync.status === "succeeded"
+          ? "good"
+          : "info",
+      actionLabel: "주식 화면 확인",
     },
   ];
 
@@ -192,6 +210,11 @@ export async function buildDashboardSummary(): Promise<DashboardSummary> {
         : stockBlogScheduler.enabled
           ? "주식 블로그 스케줄러가 켜져 있습니다. Local Naver Draft Agent 실행 상태를 유지하세요."
           : "자동 생성은 아직 꺼져 있습니다. 운영 준비 후 STOCK_BLOG_SCHEDULER_ENABLED=true로 전환하세요.",
+      portfolioAutoSync.error
+        ? "주식 화면에서 포트폴리오 자동 동기화 오류 원인을 확인하세요. 마지막 정상 데이터는 유지됩니다."
+        : portfolioAutoSync.enabled
+          ? "포트폴리오 자동 동기화 상태와 다음 실행 시각을 확인하세요."
+          : "포트폴리오 자동 동기화는 승인 전까지 꺼져 있습니다.",
     ],
     metrics: {
       activeTasks,

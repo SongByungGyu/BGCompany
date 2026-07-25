@@ -146,6 +146,23 @@ export type PortfolioDashboard = {
     lastSyncStatus: string | null;
     lastSyncMessage: string | null;
   };
+  autoSync: {
+    enabled: boolean;
+    cron: string;
+    timezone: string;
+    retryLimit: number;
+    status: string;
+    lastAccountSyncedAt: string | null;
+    lastPriceRefreshedAt: string | null;
+    changedCount: number;
+    createdCount: number;
+    updatedCount: number;
+    deactivatedCount: number;
+    nextRunAt: string;
+    error: string | null;
+    freshnessWarning: string | null;
+    lastAttempt: number;
+  };
   holdings: HoldingValuationDto[];
   summary: {
     baseCurrency: PortfolioCurrency;

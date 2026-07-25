@@ -2326,10 +2326,14 @@
 .control-room .portfolio-account-sync span { display: block; color: #5bdccf; font-size: 8px; letter-spacing: .12em; }
 .control-room .portfolio-account-sync strong { display: block; margin-top: 4px; color: #e2edf4; font-size: 12px; }
 .control-room .portfolio-account-sync p { margin: 4px 0 0; color: #7f9aac; font-size: 9.5px; }
-.control-room .portfolio-account-sync dl { display: flex; gap: 18px; margin: 0; }
+.control-room .portfolio-account-sync dl { display: grid; grid-template-columns: repeat(3, minmax(110px, 1fr)); gap: 10px 18px; margin: 0; max-width: 720px; }
 .control-room .portfolio-account-sync dl div { min-width: 92px; }
 .control-room .portfolio-account-sync dt { color: #6f899b; font-size: 8px; }
 .control-room .portfolio-account-sync dd { margin: 4px 0 0; color: #c7d8e2; font-size: 9.5px; }
+.control-room .portfolio-account-sync .portfolio-sync-error,
+.control-room .portfolio-account-sync .portfolio-sync-warning { grid-column: 1 / -1; }
+.control-room .portfolio-account-sync .portfolio-sync-error dd { color: #ffc3bb; }
+.control-room .portfolio-account-sync .portfolio-sync-warning dd { color: #f0ca86; }
 .control-room .portfolio-inline-form,
 .control-room .portfolio-holding-form,
 .control-room .portfolio-dividend-form {
