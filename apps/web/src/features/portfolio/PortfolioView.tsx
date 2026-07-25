@@ -4,9 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AllocationDto,
   HoldingValuationDto,
+  PortfolioDashboard,
   PortfolioHoldingDto,
   PortfolioResponse,
 } from "@/lib/portfolio/portfolio-types";
+import type {
+  PortfolioDailyAssistantDisabled,
+  PortfolioDailyAssistantView,
+  PortfolioPerformanceResponse,
+} from "@/lib/portfolio/portfolio-daily-assistant-types";
 import {
   createDividendEvent,
   createPortfolioAccount,
@@ -14,9 +20,23 @@ import {
   refreshPortfolio,
   savePortfolioHolding,
   syncTossPortfolioAccount,
+  fetchPortfolioDailyAssistant,
+  fetchPortfolioPerformance,
 } from "./api";
 
 type SortKey = "marketValue" | "profitLoss" | "returnPercent" | "weightPercent" | "name";
+type PortfolioTab = "summary" | "holdings" | "performance" | "dividend" | "schedule" | "news" | "risk" | "settings";
+
+const PORTFOLIO_TABS: Array<{ id: PortfolioTab; label: string }> = [
+  { id: "summary", label: "요약" },
+  { id: "holdings", label: "보유종목" },
+  { id: "performance", label: "성과" },
+  { id: "dividend", label: "배당" },
+  { id: "schedule", label: "일정" },
+  { id: "news", label: "뉴스" },
+  { id: "risk", label: "위험" },
+  { id: "settings", label: "설정" },
+];
 
 const EMPTY_HOLDING = {
   market: "KR",
@@ -112,6 +132,77 @@ function AllocationBars({ title, items }: { title: string; items: AllocationDto[
   return <section className="portfolio-allocation-card"><header><h3>{title}</h3><span>{items.length}개 구간</span></header>{items.length ? <div className="portfolio-bars">{items.map((item) => <div key={item.key}><div><strong>{item.label}</strong><span>{formatPercent(item.weightPercent)}</span></div><i><b style={{ width: `${Math.min(number(item.weightPercent) ?? 0, 100)}%` }} /></i></div>)}</div> : <p className="portfolio-empty-copy">확인 가능한 평가금액이 있을 때 표시합니다.</p>}</section>;
 }
 
+function DailyAssistantSummary({
+  assistant,
+  dashboard,
+}: {
+  assistant: PortfolioDailyAssistantView | PortfolioDailyAssistantDisabled | null;
+  dashboard: PortfolioDashboard;
+}) {
+  if (!assistant || !assistant.enabled) {
+    return <>
+      <section className="portfolio-daily-assistant disabled"><span>PHASE 2-P.2 · SAFE DEFAULT</span><h2>오늘의 포트폴리오 비서</h2><p>{assistant?.message ?? "일일 포트폴리오 비서를 확인하고 있습니다."}</p><code>PORTFOLIO_DAILY_ASSISTANT_ENABLED=false</code></section>
+      <div className="portfolio-summary-grid">
+        <SummaryCard label="총 평가금액" value={formatAmount(dashboard.summary.totalMarketValue, dashboard.summary.baseCurrency)} detail={dashboard.summary.dataQuality === "verified" ? "확인 가능한 최신 데이터" : "잠정값 포함"} />
+        <SummaryCard label="총 원가" value={formatAmount(dashboard.summary.totalCostBasis, dashboard.summary.baseCurrency)} />
+        <SummaryCard label="평가손익" value={formatAmount(dashboard.summary.totalProfitLoss, dashboard.summary.baseCurrency)} tone={(number(dashboard.summary.totalProfitLoss) ?? 0) >= 0 ? "positive" : "negative"} />
+        <SummaryCard label="전체 수익률" value={formatPercent(dashboard.summary.totalReturnPercent)} tone={(number(dashboard.summary.totalReturnPercent) ?? 0) >= 0 ? "positive" : "negative"} />
+        <SummaryCard label="예상 연간 배당" value={formatAmount(dashboard.summary.expectedAnnualDividend, dashboard.summary.baseCurrency)} />
+        <SummaryCard label="데이터 기준 시각" value={formatDate(dashboard.dataAsOf, true)} />
+      </div>
+    </>;
+  }
+  const snapshot = assistant.snapshot;
+  return <>
+    <section className={`portfolio-daily-assistant ${assistant.status}`}>
+      <div><span>DAILY PORTFOLIO ASSISTANT · RULES</span><h2>{assistant.headline}</h2><p>{assistant.summary}</p><small>{snapshot?.comparisonLabel ?? "데이터 축적 중"} · 평가 스냅샷 기준 변화이며, 매수금 유입과 보유수량 변경 효과가 포함됩니다.</small></div>
+      <b>{assistant.status}</b>
+    </section>
+    <div className="portfolio-summary-grid assistant-kpis">
+      <SummaryCard label="전체 평가금액" value={formatAmount(snapshot?.totalMarketValue ?? dashboard.summary.totalMarketValue, dashboard.summary.baseCurrency)} />
+      <SummaryCard label="이전 Snapshot 대비" value={formatAmount(snapshot?.totalChange, dashboard.summary.baseCurrency)} tone={(number(snapshot?.totalChange) ?? 0) >= 0 ? "positive" : "negative"} />
+      <SummaryCard label="보유수량 변경" value={`${assistant.changes.filter((item) => ["added", "quantity_increased", "quantity_decreased", "inactive"].includes(item.changeType)).length}종목`} />
+      <SummaryCard label="데이터 최신성" value={snapshot?.freshnessStatus ?? "축적 중"} detail={snapshot?.dataQuality ?? "비교 데이터 없음"} />
+      <SummaryCard label="마지막 동기화" value={formatDate(dashboard.autoSync.lastAccountSyncedAt, true)} />
+      <SummaryCard label="다음 자동 동기화" value={formatDate(dashboard.autoSync.nextRunAt, true)} />
+    </div>
+    <div className="portfolio-assistant-grid">
+      <section className="portfolio-section compact"><header><div><span>CHANGES</span><h2>오늘 변경사항</h2></div></header><div className="portfolio-change-list">{assistant.changes.length ? assistant.changes.map((item) => <article key={item.holdingId}><b>{item.symbol}</b><span>{item.changeType}</span><p>{item.name} · 수량 변화 {formatNumber(item.quantityChange, 8)}</p></article>) : <p className="portfolio-empty-copy">오늘 확인된 보유수량 및 평균단가 변화는 없습니다.</p>}</div></section>
+      <section className="portfolio-section compact"><header><div><span>ATTRIBUTION</span><h2>평가금액 변화 원인</h2></div></header>{assistant.attribution ? <div className="portfolio-effect-grid"><SummaryCard label="수량 영향" value={formatAmount(assistant.attribution.quantityEffect, dashboard.summary.baseCurrency)} /><SummaryCard label="주가 영향" value={formatAmount(assistant.attribution.priceEffect, dashboard.summary.baseCurrency)} /><SummaryCard label="환율 영향" value={formatAmount(assistant.attribution.fxEffect, dashboard.summary.baseCurrency)} /><SummaryCard label="전체 변화" value={formatAmount(assistant.attribution.totalChange, dashboard.summary.baseCurrency)} /></div> : <p className="portfolio-empty-copy">비교 가능한 정상 Snapshot이 쌓이면 변화 원인을 표시합니다.</p>}<small>변화 원인 분리는 수량 → 가격 → 환율 순서로 계산한 추정 기여도입니다.</small></section>
+    </div>
+    <div className="portfolio-assistant-grid">
+      <section className="portfolio-section compact"><header><div><span>CONTRIBUTORS</span><h2>상승·하락 기여 종목</h2></div></header><div className="portfolio-contributors"><div><b>상승 기여 상위</b>{assistant.topContributors.positive.map((item) => <p key={item.holdingId}>{item.symbol} <span>{formatAmount(item.totalMarketValueChange, dashboard.summary.baseCurrency)}</span>{item.quantityChanged ? <small>수량 변화 포함</small> : null}</p>)}</div><div><b>하락 기여 상위</b>{assistant.topContributors.negative.map((item) => <p key={item.holdingId}>{item.symbol} <span>{formatAmount(item.totalMarketValueChange, dashboard.summary.baseCurrency)}</span>{item.quantityChanged ? <small>수량 변화 포함</small> : null}</p>)}</div></div></section>
+      <section className="portfolio-section compact"><header><div><span>CHECKLIST</span><h2>오늘 확인할 항목</h2></div></header><div className="portfolio-alert-list">{assistant.alerts.length ? assistant.alerts.map((alert, index) => <article key={`${alert.type}-${alert.symbol ?? index}`} className={alert.severity}><b>{alert.symbol ?? alert.type}</b><p>{alert.message}</p></article>) : <p className="portfolio-empty-copy">중요한 변화나 데이터 경고가 없습니다.</p>}</div></section>
+    </div>
+  </>;
+}
+
+function PerformancePanel({
+  performance,
+  range,
+  onRange,
+  currency,
+}: {
+  performance: PortfolioPerformanceResponse | null;
+  range: PortfolioPerformanceResponse["range"];
+  onRange: (range: PortfolioPerformanceResponse["range"]) => void;
+  currency: string;
+}) {
+  const values = performance?.points.map((point) => number(point.totalMarketValue) ?? 0) ?? [];
+  const minimum = values.length ? Math.min(...values) : 0;
+  const maximum = values.length ? Math.max(...values) : 0;
+  const span = Math.max(maximum - minimum, 1);
+  const polyline = values.map((value, index) => `${values.length === 1 ? 50 : index / (values.length - 1) * 100},${92 - (value - minimum) / span * 78}`).join(" ");
+  return <section className="portfolio-performance">
+    <header><div><span>PERFORMANCE SNAPSHOTS</span><h2>평가 스냅샷 추이</h2><p>보유수량 변경과 신규 매수 효과가 포함된 평가 스냅샷 추이입니다.</p></div><div>{(["7d", "30d", "3m", "ytd", "all"] as const).map((item) => <button key={item} className={range === item ? "active" : ""} onClick={() => onRange(item)}>{item === "3m" ? "3개월" : item === "ytd" ? "연초 이후" : item === "all" ? "전체" : item.replace("d", "일")}</button>)}</div></header>
+    {!performance?.sufficient ? <div className="portfolio-performance-empty"><strong>데이터 축적 중</strong><p>{performance?.message ?? "일일 Snapshot을 불러오고 있습니다."}</p></div> : <>
+      <div className="portfolio-line-chart"><svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="전체 평가금액 추이"><polyline points={polyline} /></svg></div>
+      <div className="portfolio-performance-table">{performance.points.map((point) => <article key={point.snapshotId}><span>{point.marketDate}</span><strong>{formatAmount(point.totalMarketValue, currency)}</strong><small>원가 {formatAmount(point.totalCostBasis, currency)} · 미실현 손익 {formatAmount(point.totalUnrealizedProfitLoss, currency)} · 수량 변화 {point.quantityChangeCount}종목</small></article>)}</div>
+    </>}
+    <p className="portfolio-performance-note">입출금과 정기매수 영향을 제거한 순수 투자수익률이 아닙니다.</p>
+  </section>;
+}
+
 export function PortfolioView() {
   const [response, setResponse] = useState<PortfolioResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -128,6 +219,10 @@ export function PortfolioView() {
   const [editingHoldingId, setEditingHoldingId] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("marketValue");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [activeTab, setActiveTab] = useState<PortfolioTab>("summary");
+  const [assistant, setAssistant] = useState<PortfolioDailyAssistantView | PortfolioDailyAssistantDisabled | null>(null);
+  const [performance, setPerformance] = useState<PortfolioPerformanceResponse | null>(null);
+  const [performanceRange, setPerformanceRange] = useState<PortfolioPerformanceResponse["range"]>("30d");
   const importRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async (nextAccountId?: string | null) => {
@@ -136,18 +231,33 @@ export function PortfolioView() {
     try {
       const data = await fetchPortfolio(nextAccountId);
       setResponse(data);
-      if (data.enabled && data.account) setAccountId(data.account.id);
+      if (data.enabled && data.account) {
+        setAccountId(data.account.id);
+        const [daily, trend] = await Promise.all([
+          fetchPortfolioDailyAssistant(data.account.id),
+          fetchPortfolioPerformance(performanceRange, data.account.id),
+        ]);
+        setAssistant(daily);
+        setPerformance(trend);
+      } else {
+        setAssistant(null);
+        setPerformance(null);
+      }
     } catch (requestError) {
       setError(errorText(requestError));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [performanceRange]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  const changePerformanceRange = (range: PortfolioPerformanceResponse["range"]) => {
+    setPerformanceRange(range);
+  };
 
   const dashboard = response?.enabled ? response : null;
   const sortedHoldings = useMemo(() => {
@@ -271,6 +381,7 @@ export function PortfolioView() {
       const data = await refreshPortfolio(dashboard.account.id);
       setResponse(data);
       setNotice("조회 전용 시세·위험 신호·규칙 보고서를 갱신했습니다.");
+      await load(data.account?.id);
     } catch (requestError) { setError(errorText(requestError)); }
     finally { setWorking(false); }
   };
@@ -282,7 +393,10 @@ export function PortfolioView() {
     try {
       const data = await syncTossPortfolioAccount();
       setResponse(data.dashboard);
-      if (data.dashboard.account) setAccountId(data.dashboard.account.id);
+      if (data.dashboard.account) {
+        setAccountId(data.dashboard.account.id);
+        await load(data.dashboard.account.id);
+      }
       setNotice(`실계좌 동기화 완료 · 국내 ${data.result.domesticCount}개 · 해외 ${data.result.overseasCount}개 · 신규 ${data.result.created}개 · 갱신 ${data.result.updated}개`);
     } catch (requestError) { setError(errorText(requestError)); }
     finally { setWorking(false); }
@@ -339,7 +453,7 @@ export function PortfolioView() {
 
   return <section className="portfolio-workspace">
     <header className="portfolio-hero">
-      <div><span>PHASE 2-P.1 · READ ONLY</span><h1>보유 종목·배당·리스크 대시보드</h1><p>토스증권 공식 Open API 또는 CSV로 실제 보유자산을 조회·계산·보고합니다. 주문, 계좌 제어, 매매 추천은 수행하지 않습니다.</p></div>
+      <div><span>PHASE 2-P.2 · READ ONLY</span><h1>일일 포트폴리오 비서</h1><p>토스증권 읽기 전용 동기화 결과로 오늘의 변화와 평가 Snapshot 추이를 설명합니다. 주문, 계좌 제어, 직접적인 매매 권고는 수행하지 않습니다.</p></div>
       <div className="portfolio-hero-actions">
         {dashboard?.accounts.length ? <select value={accountId ?? ""} onChange={(event) => { setAccountId(event.target.value); void load(event.target.value); }}>{dashboard.accounts.map((account) => <option key={account.id} value={account.id}>{account.name} · {account.baseCurrency}</option>)}</select> : null}
         <button onClick={() => setShowAccountForm((value) => !value)}>계좌 그룹</button>
@@ -352,6 +466,10 @@ export function PortfolioView() {
     {dashboard?.accountSync.enabled ? <section className={`portfolio-account-sync ${dashboard.accountSync.configured ? "ready" : "missing"}`}><div><span>TOSS SECURITIES · OFFICIAL API · READ ONLY</span><strong>{dashboard.accountSync.configured ? `${dashboard.accountSync.maskedAccount} 연결 준비 완료` : "운영 서버에 Open API 발급값 설정 필요"}</strong><p>계좌목록과 보유종목 GET만 허용됩니다. 주문·정정·취소·이체 경로는 코드에서 차단합니다.</p></div><dl><div><dt>마지막 계좌 동기화</dt><dd>{formatDate(dashboard.autoSync.lastAccountSyncedAt, true)}</dd></div><div><dt>마지막 가격 갱신</dt><dd>{formatDate(dashboard.autoSync.lastPriceRefreshedAt, true)}</dd></div><div><dt>자동 상태</dt><dd>{dashboard.autoSync.enabled ? dashboard.autoSync.status : "승인 대기 · OFF"}</dd></div><div><dt>변경 종목</dt><dd>{dashboard.autoSync.changedCount}개 · 추가 {dashboard.autoSync.createdCount} / 수량변경 {dashboard.autoSync.updatedCount} / 비활성 {dashboard.autoSync.deactivatedCount}</dd></div><div><dt>다음 예정</dt><dd>{formatDate(dashboard.autoSync.nextRunAt, true)}</dd></div>{dashboard.autoSync.error ? <div className="portfolio-sync-error"><dt>오류 원인</dt><dd>{dashboard.autoSync.error}</dd></div> : null}{dashboard.autoSync.freshnessWarning ? <div className="portfolio-sync-warning"><dt>최신성 경고</dt><dd>{dashboard.autoSync.freshnessWarning}</dd></div> : null}</dl></section> : null}
     {showAccountForm ? <form className="portfolio-inline-form" onSubmit={submitAccount}><label>계좌 별칭<input required value={accountForm.name} onChange={(event) => setAccountForm({ ...accountForm, name: event.target.value })} placeholder="예: 장기 투자" /></label><label>기준 통화<select value={accountForm.baseCurrency} onChange={(event) => setAccountForm({ ...accountForm, baseCurrency: event.target.value })}><option>KRW</option><option>USD</option></select></label><label className="wide">설명<input value={accountForm.description} onChange={(event) => setAccountForm({ ...accountForm, description: event.target.value })} placeholder="선택 입력" /></label><button className="primary" disabled={working}>생성</button></form> : null}
     {!dashboard?.account ? <section className="portfolio-first-step"><b>01</b><div><h2>{dashboard?.accountSync.enabled ? "토스증권 실계좌를 동기화하세요" : "첫 계좌 그룹을 만드세요"}</h2><p>{dashboard?.accountSync.enabled ? "공식 API로 실제 보유종목을 읽어 전용 계좌 그룹과 종목을 자동 생성합니다. 거래 기능은 없습니다." : "실제 보유 종목이나 금액은 자동으로 생성하지 않습니다."}</p></div>{dashboard?.accountSync.enabled ? <button className="primary" disabled={working || !dashboard.accountSync.configured} onClick={() => void onAccountSync()}>실계좌 동기화</button> : <button onClick={() => setShowAccountForm(true)}>계좌 그룹 만들기</button>}</section> : <>
+      <nav className="portfolio-tabs" aria-label="포트폴리오 화면">{PORTFOLIO_TABS.map((tab) => <button key={tab.id} className={activeTab === tab.id ? "active" : ""} onClick={() => setActiveTab(tab.id)}>{tab.label}</button>)}</nav>
+      {activeTab === "summary" ? <DailyAssistantSummary assistant={assistant} dashboard={dashboard} /> : null}
+      {activeTab === "performance" ? <PerformancePanel performance={performance} range={performanceRange} onRange={changePerformanceRange} currency={dashboard.summary.baseCurrency} /> : null}
+      <div className="portfolio-legacy-detail" hidden={activeTab === "summary" || activeTab === "performance"}>
       <div className="portfolio-summary-grid">
         <SummaryCard label="총 평가금액" value={formatAmount(dashboard.summary.totalMarketValue, dashboard.summary.baseCurrency)} detail={dashboard.summary.dataQuality === "verified" ? "확인 가능한 최신 데이터" : "잠정값 포함"} />
         <SummaryCard label="총 원가" value={formatAmount(dashboard.summary.totalCostBasis, dashboard.summary.baseCurrency)} />
@@ -393,6 +511,7 @@ export function PortfolioView() {
       </div>
 
       <section className="portfolio-section portfolio-team"><header><div><span>MONITORING TEAM</span><h2>주식 모니터링팀 작업선</h2><p>기존 주식 담당 직원 토큰의 Task·AgentRun에 수동 갱신 결과를 연결하며 3D 좌표는 변경하지 않습니다.</p></div></header><div>{dashboard.team.map((member, index) => <article key={member.id}><b>{String(index + 1).padStart(2, "0")}</b><div><strong>{member.id}</strong><p>{member.role}</p></div><span>{member.status}</span></article>)}</div></section>
+      </div>
     </>}
   </section>;
 }

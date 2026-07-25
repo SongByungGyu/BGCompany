@@ -4,6 +4,7 @@ import { getHermesUsageSummary } from "@/lib/hermes/hermes-usage";
 import { getStockBlogScheduleItems } from "@/lib/stock-blog/stock-blog-workflow";
 import { getStockBlogSchedulerStatus } from "@/lib/stock-blog/stock-blog-scheduler";
 import { getPortfolioAutoSyncStatus } from "@/lib/portfolio/portfolio-sync-scheduler";
+import { getPortfolioDailyAssistant } from "@/lib/portfolio/portfolio-daily-assistant-service";
 import {
   getHermesUsageSeverity,
   getNaverDraftSeverity,
@@ -47,7 +48,7 @@ function activityStatusLabel(status: string) {
 }
 
 export async function buildDashboardSummary(): Promise<DashboardSummary> {
-  const [activeTasks, activeTaskRows, waitingApprovals, errorTasks, recentAgentRuns, contentPipelines, naverJobs, hermesUsage, stockBlogScheduler, portfolioAutoSync] = await Promise.all([
+  const [activeTasks, activeTaskRows, waitingApprovals, errorTasks, recentAgentRuns, contentPipelines, naverJobs, hermesUsage, stockBlogScheduler, portfolioAutoSync, portfolioDailyAssistant] = await Promise.all([
     prisma.task.count({ where: { status: { in: unfinishedTaskStatuses } } }),
     prisma.task.findMany({
       where: { status: { in: unfinishedTaskStatuses } },
@@ -92,6 +93,7 @@ export async function buildDashboardSummary(): Promise<DashboardSummary> {
     getHermesUsageSummary({ recentLimit: 6 }),
     getStockBlogSchedulerStatus(),
     getPortfolioAutoSyncStatus(),
+    getPortfolioDailyAssistant(),
   ]);
 
   const latestPipeline = contentPipelines[0] ?? null;
@@ -158,6 +160,18 @@ export async function buildDashboardSummary(): Promise<DashboardSummary> {
           : "info",
       actionLabel: "주식 화면 확인",
     },
+    {
+      id: "portfolio-daily-assistant",
+      title: "오늘의 포트폴리오",
+      value: portfolioDailyAssistant.enabled ? portfolioDailyAssistant.status.toUpperCase() : "OFF",
+      description: portfolioDailyAssistant.enabled
+        ? portfolioDailyAssistant.summary
+        : "일일 Snapshot·변화 분석은 사용자 승인 전까지 비활성화되어 있습니다.",
+      severity: portfolioDailyAssistant.enabled
+        ? portfolioDailyAssistant.status === "ready" ? "good" : portfolioDailyAssistant.status === "partial" || portfolioDailyAssistant.status === "needs_data" ? "warning" : "info"
+        : "info",
+      actionLabel: "포트폴리오 요약",
+    },
   ];
 
   const headline = buildHeadline({ errorTasks, waitingApprovals, naverDraftPending, hermesRemaining: hermesUsage.remaining });
@@ -215,6 +229,11 @@ export async function buildDashboardSummary(): Promise<DashboardSummary> {
         : portfolioAutoSync.enabled
           ? "포트폴리오 자동 동기화 상태와 다음 실행 시각을 확인하세요."
           : "포트폴리오 자동 동기화는 승인 전까지 꺼져 있습니다.",
+      portfolioDailyAssistant.enabled
+        ? portfolioDailyAssistant.alerts.length
+          ? `포트폴리오 확인 항목 ${portfolioDailyAssistant.alerts.length}건을 주식 화면에서 검토하세요.`
+          : "오늘 포트폴리오 Snapshot과 변화 분석이 정상입니다."
+        : "일일 포트폴리오 비서는 승인 후 기능 플래그를 활성화할 수 있습니다.",
     ],
     metrics: {
       activeTasks,

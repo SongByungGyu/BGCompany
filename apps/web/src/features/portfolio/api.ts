@@ -1,4 +1,5 @@
 import type { PortfolioDashboard, PortfolioResponse } from "@/lib/portfolio/portfolio-types";
+import type { PortfolioDailyAssistantDisabled, PortfolioDailyAssistantView, PortfolioPerformanceResponse } from "@/lib/portfolio/portfolio-daily-assistant-types";
 
 async function json<T>(response: Response) {
   const body = await response.json() as T & { error?: string };
@@ -60,4 +61,22 @@ export async function syncTossPortfolioAccount() {
     method: "POST",
     headers: { "content-type": "application/json" },
   }));
+}
+
+export async function fetchPortfolioDailyAssistant(accountId?: string | null) {
+  const query = accountId ? `?accountId=${encodeURIComponent(accountId)}` : "";
+  return json<PortfolioDailyAssistantView | PortfolioDailyAssistantDisabled>(
+    await fetch(`/api/portfolio/daily-assistant${query}`, { cache: "no-store" }),
+  );
+}
+
+export async function fetchPortfolioPerformance(
+  range: PortfolioPerformanceResponse["range"],
+  accountId?: string | null,
+) {
+  const params = new URLSearchParams({ range });
+  if (accountId) params.set("accountId", accountId);
+  return json<PortfolioPerformanceResponse>(
+    await fetch(`/api/portfolio/performance?${params}`, { cache: "no-store" }),
+  );
 }

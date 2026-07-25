@@ -2334,6 +2334,76 @@
 .control-room .portfolio-account-sync .portfolio-sync-warning { grid-column: 1 / -1; }
 .control-room .portfolio-account-sync .portfolio-sync-error dd { color: #ffc3bb; }
 .control-room .portfolio-account-sync .portfolio-sync-warning dd { color: #f0ca86; }
+.control-room .portfolio-tabs {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 6px;
+  overflow-x: auto;
+  background: #091a29;
+  border: 1px solid #233e55;
+  border-radius: 12px;
+}
+.control-room .portfolio-tabs button { min-width: 72px; white-space: nowrap; }
+.control-room .portfolio-tabs button.active { color: #061823; background: #59ded0; border-color: #59ded0; }
+.control-room .portfolio-daily-assistant {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 12px;
+  padding: 20px;
+  background: radial-gradient(circle at 90% 0, rgba(74, 211, 196, .15), transparent 32%), linear-gradient(135deg, #0d2a38, #0a1c2c);
+  border: 1px solid #32736f;
+  border-radius: 16px;
+}
+.control-room .portfolio-daily-assistant.partial,
+.control-room .portfolio-daily-assistant.needs_data { border-color: #8b6541; }
+.control-room .portfolio-daily-assistant.disabled { display: block; border-color: #40566a; }
+.control-room .portfolio-daily-assistant span { color: #59ded0; font-size: 8px; font-weight: 800; letter-spacing: .14em; }
+.control-room .portfolio-daily-assistant h2 { margin: 7px 0 0; color: #edf8fb; font-size: 18px; }
+.control-room .portfolio-daily-assistant p { max-width: 960px; margin: 9px 0 0; color: #afc5d1; font-size: 11px; line-height: 1.75; }
+.control-room .portfolio-daily-assistant small { display: block; margin-top: 9px; color: #7895a6; font-size: 8.5px; }
+.control-room .portfolio-daily-assistant > b { padding: 6px 9px; color: #8ef0df; background: #123d3b; border-radius: 999px; font-size: 9px; text-transform: uppercase; }
+.control-room .portfolio-daily-assistant code { display: inline-block; margin-top: 10px; color: #89a8b8; font-size: 10px; }
+.control-room .assistant-kpis { grid-template-columns: repeat(6, minmax(130px, 1fr)); }
+.control-room .portfolio-assistant-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.control-room .portfolio-change-list { display: grid; gap: 7px; }
+.control-room .portfolio-change-list article { display: grid; grid-template-columns: 70px 140px 1fr; align-items: center; gap: 8px; padding: 9px; background: #0a1c2b; border: 1px solid #213d51; border-radius: 9px; }
+.control-room .portfolio-change-list article b { color: #e8f5f8; font-size: 10px; }
+.control-room .portfolio-change-list article span { color: #63d9cb; font-size: 8px; }
+.control-room .portfolio-change-list article p { margin: 0; color: #819bab; font-size: 9px; }
+.control-room .portfolio-effect-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.control-room .portfolio-effect-grid .portfolio-summary-card { min-height: 80px; }
+.control-room .portfolio-contributors { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.control-room .portfolio-contributors > div { padding: 10px; background: #0a1c2b; border: 1px solid #213d51; border-radius: 9px; }
+.control-room .portfolio-contributors b { color: #b8ced9; font-size: 9px; }
+.control-room .portfolio-contributors p { display: flex; gap: 8px; margin: 8px 0 0; color: #e4f0f4; font-size: 10px; }
+.control-room .portfolio-contributors p span { margin-left: auto; color: #6bdcc9; }
+.control-room .portfolio-contributors p small { color: #d8ad72; }
+.control-room .portfolio-alert-list { display: grid; gap: 7px; }
+.control-room .portfolio-alert-list article { padding: 9px; background: #362a1e; border-left: 3px solid #d69a5d; border-radius: 8px; }
+.control-room .portfolio-alert-list article.critical { background: #3d211f; border-color: #ef8176; }
+.control-room .portfolio-alert-list b { color: #f0d5aa; font-size: 9px; }
+.control-room .portfolio-alert-list p { margin: 4px 0 0; color: #c9b69b; font-size: 9px; }
+.control-room .portfolio-performance { margin-top: 12px; padding: 18px; background: #0b2031; border: 1px solid #29485e; border-radius: 15px; }
+.control-room .portfolio-performance > header { display: flex; justify-content: space-between; gap: 16px; }
+.control-room .portfolio-performance > header span { color: #59ded0; font-size: 8px; letter-spacing: .13em; }
+.control-room .portfolio-performance > header h2 { margin: 5px 0; color: #edf7fa; font-size: 17px; }
+.control-room .portfolio-performance > header p { margin: 0; color: #809baa; font-size: 9px; }
+.control-room .portfolio-performance > header > div:last-child { display: flex; gap: 5px; }
+.control-room .portfolio-performance > header button.active { color: #061823; background: #59ded0; }
+.control-room .portfolio-line-chart { height: 260px; margin-top: 18px; padding: 14px; background: linear-gradient(#0c2738, #081925); border: 1px solid #24485e; border-radius: 12px; }
+.control-room .portfolio-line-chart svg { width: 100%; height: 100%; overflow: visible; }
+.control-room .portfolio-line-chart polyline { fill: none; stroke: #5ee1d0; stroke-width: 1.8; vector-effect: non-scaling-stroke; }
+.control-room .portfolio-performance-table { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; margin-top: 12px; }
+.control-room .portfolio-performance-table article { padding: 10px; background: #0a1b29; border: 1px solid #203c50; border-radius: 9px; }
+.control-room .portfolio-performance-table span,
+.control-room .portfolio-performance-table small { display: block; color: #708c9d; font-size: 8px; }
+.control-room .portfolio-performance-table strong { display: block; margin: 5px 0; color: #e9f4f7; font-size: 11px; }
+.control-room .portfolio-performance-empty { margin-top: 16px; padding: 36px; text-align: center; color: #8ca5b3; background: #091a28; border: 1px dashed #335064; border-radius: 11px; }
+.control-room .portfolio-performance-note { margin: 12px 0 0; color: #d3a66e; font-size: 8.5px; }
+.control-room .portfolio-legacy-detail[hidden] { display: none; }
 .control-room .portfolio-inline-form,
 .control-room .portfolio-holding-form,
 .control-room .portfolio-dividend-form {
@@ -2620,6 +2690,12 @@
   .control-room .portfolio-workspace { padding: 10px; }
   .control-room .portfolio-account-sync { align-items: flex-start; flex-direction: column; }
   .control-room .portfolio-account-sync dl { width: 100%; flex-wrap: wrap; }
+  .control-room .assistant-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .control-room .portfolio-assistant-grid { grid-template-columns: 1fr; }
+  .control-room .portfolio-performance > header { flex-direction: column; }
+  .control-room .portfolio-performance > header > div:last-child { overflow-x: auto; }
+  .control-room .portfolio-change-list article { grid-template-columns: 62px 1fr; }
+  .control-room .portfolio-change-list article p { grid-column: 1 / -1; }
   .control-room .portfolio-summary-grid,
   .control-room .portfolio-two-column,
   .control-room .portfolio-allocation-grid,
