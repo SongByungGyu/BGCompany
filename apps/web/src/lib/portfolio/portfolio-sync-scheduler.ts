@@ -21,6 +21,7 @@ export type PortfolioDailySyncExecution = {
   updated: number;
   deactivated: number;
   totalCount: number;
+  dailySnapshotId?: string;
 };
 
 export type PortfolioAutoSyncStatus = {
@@ -161,7 +162,7 @@ export async function getPortfolioAutoSyncStatus(now = new Date()): Promise<Port
 }
 
 export async function runPortfolioAutoSyncTick(
-  execute: (input: { snapshotDate: string }) => Promise<PortfolioDailySyncExecution>,
+  execute: (input: { snapshotDate: string; sourceSyncRunId: string }) => Promise<PortfolioDailySyncExecution>,
   now = new Date(),
   config: PortfolioAutoSyncConfig = getPortfolioAutoSyncConfig(),
 ) {
@@ -188,7 +189,7 @@ export async function runPortfolioAutoSyncTick(
     payload: { startedAt: now.toISOString() },
   });
   try {
-    const result = await execute({ snapshotDate: schedule.dateKey });
+    const result = await execute({ snapshotDate: schedule.dateKey, sourceSyncRunId: eventId(schedule.dateKey) });
     await writeEvent({
       dateKey: schedule.dateKey,
       scheduledFor: schedule.scheduledAt.toISOString(),
@@ -196,6 +197,16 @@ export async function runPortfolioAutoSyncTick(
       attempt: decision.attempt,
       summary: `포트폴리오 자동 동기화 완료 · 변경 ${result.created + result.updated + result.deactivated}종목`,
       payload: result as unknown as Prisma.InputJsonObject,
+    });
+    await prisma.eventLog.upsert({
+      where: { id: `event-portfolio-sync-completed-${schedule.dateKey}` },
+      create: {
+        id: `event-portfolio-sync-completed-${schedule.dateKey}`,
+        type: "PORTFOLIO_SYNC_COMPLETED",
+        summary: "토스 계좌 읽기 전용 동기화와 포트폴리오 평가 완료",
+        payload: { sourceSyncRunId: eventId(schedule.dateKey), accountId: result.accountId, dailySnapshotId: result.dailySnapshotId ?? null, readOnly: true },
+      },
+      update: { timestamp: new Date(), summary: "토스 계좌 읽기 전용 동기화와 포트폴리오 평가 완료" },
     });
     return { ok: true, status: "succeeded" as const, attempt: decision.attempt, scheduledFor: schedule.scheduledAt.toISOString(), result };
   } catch (error) {
@@ -208,6 +219,18 @@ export async function runPortfolioAutoSyncTick(
       summary: `포트폴리오 자동 동기화 실패 · ${decision.attempt}차`,
       payload: { error: reason, failedAt: new Date().toISOString() },
     });
+    if (config.enabled) {
+      await prisma.eventLog.upsert({
+        where: { id: `event-portfolio-sync-failed-${schedule.dateKey}` },
+        create: {
+          id: `event-portfolio-sync-failed-${schedule.dateKey}`,
+          type: "PORTFOLIO_SYNC_FAILED",
+          summary: "토스 계좌 읽기 전용 동기화 또는 포트폴리오 평가 실패",
+          payload: { sourceSyncRunId: eventId(schedule.dateKey), error: reason, readOnly: true },
+        },
+        update: { timestamp: new Date(), summary: "토스 계좌 읽기 전용 동기화 또는 포트폴리오 평가 실패", payload: { sourceSyncRunId: eventId(schedule.dateKey), error: reason, readOnly: true } },
+      });
+    }
     return { ok: false, status: "failed" as const, attempt: decision.attempt, scheduledFor: schedule.scheduledAt.toISOString(), error: reason };
   }
 }

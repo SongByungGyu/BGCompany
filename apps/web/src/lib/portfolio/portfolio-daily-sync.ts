@@ -3,8 +3,9 @@ import { prisma } from "@/lib/db";
 import { portfolioConfig } from "./portfolio-config";
 import { refreshPortfolio, syncTossPortfolioAccount } from "./portfolio-service";
 import type { PortfolioDailySyncExecution } from "./portfolio-sync-scheduler";
+import { capturePortfolioDailySnapshot } from "./portfolio-daily-assistant-service";
 
-export async function executeDailyPortfolioSync(input: { snapshotDate: string }): Promise<PortfolioDailySyncExecution> {
+export async function executeDailyPortfolioSync(input: { snapshotDate: string; sourceSyncRunId: string }): Promise<PortfolioDailySyncExecution> {
   const config = portfolioConfig();
   if (!config.accountSyncEnabled || config.accountSyncProvider !== "toss") {
     throw new Error("토스증권 읽기 전용 계좌 동기화가 설정되지 않았습니다.");
@@ -14,10 +15,15 @@ export async function executeDailyPortfolioSync(input: { snapshotDate: string })
   }
 
   const synced = await syncTossPortfolioAccount({ refresh: false });
-  await refreshPortfolio(synced.result.accountId, {
+  const dashboard = await refreshPortfolio(synced.result.accountId, {
     forcePriceRefresh: true,
     snapshotDate: input.snapshotDate,
     triggerSource: "portfolio-daily-scheduler",
+  });
+  const daily = await capturePortfolioDailySnapshot({
+    dashboard,
+    sourceSyncRunId: input.sourceSyncRunId,
+    marketDate: input.snapshotDate,
   });
   const latestPrice = await prisma.portfolioPriceSnapshot.findFirst({
     where: { provider: { contains: "KIS" } },
@@ -33,5 +39,6 @@ export async function executeDailyPortfolioSync(input: { snapshotDate: string })
     updated: synced.result.updated,
     deactivated: synced.result.deactivated,
     totalCount: synced.result.totalCount,
+    dailySnapshotId: daily.enabled ? daily.snapshotId : undefined,
   };
 }

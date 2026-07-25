@@ -175,6 +175,7 @@ export type PortfolioDashboard = {
     exchangeRate: string | null;
     exchangeRateAsOf: string | null;
     exchangeRateSource: string | null;
+    exchangeRateFreshness: FreshnessStatus | null;
     dataQuality: "verified" | "provisional" | "unavailable";
     missingItems: string[];
   };
