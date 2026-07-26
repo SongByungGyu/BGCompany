@@ -2590,6 +2590,34 @@
 .control-room .portfolio-bars i { display: block; height: 5px; margin-top: 5px; overflow: hidden; background: #19344b; border-radius: 999px; }
 .control-room .portfolio-bars i b { display: block; height: 100%; background: linear-gradient(90deg, #4f91d9, #60dfcf); border-radius: inherit; box-shadow: 0 0 9px #5edccf55; }
 .control-room .portfolio-two-column { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.control-room .portfolio-legacy-detail [hidden] { display: none !important; }
+.control-room .portfolio-dividend-risk-tabs,
+.control-room .portfolio-news-settings-tabs { grid-template-columns: minmax(0, 1fr); }
+.control-room .portfolio-dividend-risk-tabs > section,
+.control-room .portfolio-news-settings-tabs > section,
+.control-room .portfolio-legacy-detail > .portfolio-team { display: none; }
+.control-room .tab-dividend > .portfolio-dividend-risk-tabs > section:first-child,
+.control-room .tab-risk > .portfolio-dividend-risk-tabs > section:last-child,
+.control-room .tab-news > .portfolio-news-settings-tabs > section:first-child,
+.control-room .tab-settings > .portfolio-news-settings-tabs > section:last-child,
+.control-room .tab-settings > .portfolio-team { display: block; }
+.control-room .portfolio-schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.control-room .portfolio-schedule-grid article {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  background: #091b2b;
+  border: 1px solid #203b52;
+  border-radius: 10px;
+}
+.control-room .portfolio-schedule-grid small { color: #6f899e; font-size: 8.5px; }
+.control-room .portfolio-schedule-grid strong { color: #dbe8f1; font-size: 11px; }
+.control-room .portfolio-schedule-grid p { margin: 0; color: #7f98aa; font-size: 9px; }
 .control-room .portfolio-card-list,
 .control-room .portfolio-risk-list,
 .control-room .portfolio-news-list { display: grid; gap: 8px; margin-top: 12px; }
@@ -2698,6 +2726,7 @@
   .control-room .portfolio-change-list article p { grid-column: 1 / -1; }
   .control-room .portfolio-summary-grid,
   .control-room .portfolio-two-column,
+  .control-room .portfolio-schedule-grid,
   .control-room .portfolio-allocation-grid,
   .control-room .portfolio-team > div { grid-template-columns: 1fr; }
   .control-room .portfolio-section > header { flex-direction: column; }
