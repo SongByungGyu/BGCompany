@@ -5,6 +5,8 @@ import path from "node:path";
 import type { StockBriefingTemplate } from "@/features/content-pipeline/content-pipeline-types";
 import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
 import type { MarketSnapshot, MarketSnapshotMetric } from "@/lib/stock-blog/references/reference-types";
+import { isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
+import { isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
 import { evaluateStockBlogImageQuality } from "@/lib/stock-blog/stock-blog-image-quality";
 import { getStockBlogImagePlacementHeadings } from "@/lib/stock-blog/stock-blog-image-placements";
 import type { StockBlogContentImage, StockBlogImageDataPoint, StockBlogImageQualityAudit } from "@/lib/stock-blog/stock-blog-image-types";
@@ -326,7 +328,17 @@ export async function generateStockBlogImages(input: {
 }): Promise<GeneratedStockBlogImages> {
   const generatedAt = new Date().toISOString();
   const snapshot = input.marketSnapshot;
-  if (!snapshot || snapshot.status !== "ready" || snapshot.dataQuality !== "verified" || snapshot.freshness?.status !== "fresh" || snapshot.fallbackUsed !== false) {
+  if (
+    !snapshot
+    || snapshot.status !== "ready"
+    || (
+      snapshot.dataQuality !== "verified"
+      && !isAllowedFredDegradedSnapshot(snapshot)
+      && !isAllowedKisSectorDegradedSnapshot(snapshot)
+    )
+    || snapshot.freshness?.status !== "fresh"
+    || snapshot.fallbackUsed !== false
+  ) {
     return blockedImageResult(generatedAt, "검증된 최신 MarketSnapshot이 없어 데이터 차트를 생성하지 않았습니다.");
   }
   const id = safeSegment(input.pipelineId);

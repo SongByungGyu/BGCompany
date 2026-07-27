@@ -1,6 +1,7 @@
 import { buildReferenceQueries } from "./reference-query-builder";
 import { analyzeCompetitorBlogReference, summarizeCompetitorStructures } from "./competitor-blog-structure-analyzer";
 import { isAllowedFredDegradedSnapshot } from "./fred-degraded-policy";
+import { isAllowedKisSectorDegradedSnapshot } from "./kis-sector-degraded-policy";
 import { collectMarketSnapshot } from "./market-snapshot-provider";
 import { dedupeReferenceItems, normalizeReferenceItem, sourceNameFromUrl, stripHtml, summarizeReferenceItems } from "./reference-normalizer";
 import type { CompetitorBlogReference, ReferenceAdapter, ReferenceBundle, ReferenceItem, ReferenceSearchInput } from "./reference-types";
@@ -203,7 +204,8 @@ export const naverSearchReferenceAdapter: ReferenceAdapter = {
     if (analyzedCompetitors.length < 3) missingItems.push("경쟁 블로그 참고자료 3개");
     const usableMarketSnapshot = (
       marketSnapshot.status === "ready" && marketSnapshot.dataQuality === "verified"
-    ) || isAllowedFredDegradedSnapshot(marketSnapshot);
+    ) || isAllowedFredDegradedSnapshot(marketSnapshot)
+      || isAllowedKisSectorDegradedSnapshot(marketSnapshot);
     if (!usableMarketSnapshot) missingItems.push(...marketSnapshot.missingItems);
 
     return {

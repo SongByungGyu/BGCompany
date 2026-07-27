@@ -3,6 +3,12 @@ import path from "node:path";
 import { collectFredMacroData, type FredResult } from "./fred-macro-provider";
 import { collectKisMarketData, type KisResult } from "./kis-market-data-provider";
 import { canUseFredDegradedMode, FRED_DEGRADED_DISCLOSURE, FRED_DEGRADED_MODE } from "./fred-degraded-policy";
+import {
+  canUseKisSectorDegradedMode,
+  KIS_SECTOR_DEGRADED_DISCLOSURE,
+  KIS_SECTOR_DEGRADED_MODE,
+  KIS_SECTOR_DEGRADED_PROVIDER,
+} from "./kis-sector-degraded-policy";
 import { aggregateFreshness } from "./market-data-utils";
 import { supplementFredMacroData } from "./official-us-macro-provider";
 import type { MarketSnapshot, ReferenceSearchInput } from "./reference-types";
@@ -111,6 +117,28 @@ export function buildAutomaticMarketSnapshot(kis: KisResult, fred: FredResult, c
       degradedReason: fred.missingItems.join(", ") || "FRED/공식 미국 거시지표 조회 지연",
       disclosures: [FRED_DEGRADED_DISCLOSURE],
       freshness: kisFreshness,
+      sources,
+      korea: kis.korea,
+      us,
+      macro: fred.macro,
+      upcoming: fred.upcoming,
+      missingItems,
+    };
+  }
+  const kisSectorDegraded = canUseKisSectorDegradedMode(kis, fred, freshness);
+  if (kisSectorDegraded) {
+    return {
+      provider: "kis-fred",
+      status: "ready",
+      fallbackUsed: false,
+      marketDate: marketDate(),
+      collectedAt,
+      dataQuality: "partial",
+      degradedMode: KIS_SECTOR_DEGRADED_MODE,
+      degradedProviders: [KIS_SECTOR_DEGRADED_PROVIDER],
+      degradedReason: kis.missingItems.join(", ") || "KIS 업종 등락 자료 조회 지연",
+      disclosures: [KIS_SECTOR_DEGRADED_DISCLOSURE],
+      freshness,
       sources,
       korea: kis.korea,
       us,

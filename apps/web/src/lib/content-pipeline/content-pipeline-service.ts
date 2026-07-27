@@ -10,6 +10,7 @@ import { collectStockBlogReferences } from "@/lib/stock-blog/references/referenc
 import { buildBlogImagePrompts } from "@/lib/stock-blog/references/reference-normalizer";
 import { evaluateStockBlogPublishQuality, evaluateStockBlogReferences, getRealStockReferences } from "@/lib/stock-blog/quality-gate";
 import { FRED_DEGRADED_DISCLOSURE, ensureFredDegradedDisclosure, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
+import { KIS_SECTOR_DEGRADED_DISCLOSURE, ensureKisSectorDegradedDisclosure, isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
 import { generateStockBlogImages, type GeneratedStockBlogImages } from "@/lib/stock-blog/stock-blog-image-generator";
 import { applyVerifiedSchedule, type VerifiedSchedule, type VerifiedScheduleValidation } from "@/lib/stock-blog/verified-schedule";
 import type { HermesRunTelemetry, NormalizedHermesRunResult } from "@/lib/hermes/hermes-types";
@@ -102,18 +103,29 @@ const stockContentTypes = new Set<StockReferenceBriefingTemplate>([
 ]);
 const HERMES_PIPELINE_REQUIRED_RUNS = STOCK_BLOG_MAX_HERMES_RUNS;
 
-function withFredDegradedDisclosure(writer: WriterExecution, referenceBundle?: ReferenceBundle): WriterExecution {
+function withMarketDataDisclosure(writer: WriterExecution, referenceBundle?: ReferenceBundle): WriterExecution {
   const snapshot = referenceBundle?.marketSnapshot;
-  if (!isAllowedFredDegradedSnapshot(snapshot)) return writer;
+  const fredDegraded = isAllowedFredDegradedSnapshot(snapshot);
+  const kisSectorDegraded = isAllowedKisSectorDegradedSnapshot(snapshot);
+  if (!fredDegraded && !kisSectorDegraded) return writer;
 
   const result = { ...writer.result };
   for (const key of ["fullDraft", "markdownDraft"] as const) {
     const value = result[key];
-    if (typeof value === "string") result[key] = ensureFredDegradedDisclosure(value, snapshot);
+    if (typeof value === "string") {
+      const withFred = ensureFredDegradedDisclosure(value, snapshot);
+      result[key] = ensureKisSectorDegradedDisclosure(withFred, snapshot);
+    }
   }
   const htmlDraft = result.htmlDraft;
-  if (typeof htmlDraft === "string" && !htmlDraft.includes(FRED_DEGRADED_DISCLOSURE)) {
-    result.htmlDraft = `${htmlDraft.trimEnd()}\n<p>${FRED_DEGRADED_DISCLOSURE}</p>`;
+  if (typeof htmlDraft === "string") {
+    const disclosures = [
+      fredDegraded ? FRED_DEGRADED_DISCLOSURE : null,
+      kisSectorDegraded ? KIS_SECTOR_DEGRADED_DISCLOSURE : null,
+    ].filter((item): item is string => typeof item === "string" && !htmlDraft.includes(item));
+    if (disclosures.length) {
+      result.htmlDraft = `${htmlDraft.trimEnd()}\n${disclosures.map((item) => `<p>${item}</p>`).join("\n")}`;
+    }
   }
   return { ...writer, result };
 }
@@ -1651,7 +1663,7 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
   let scheduleCheckedWriter = runnerMode === "hermes"
     ? withVerifiedSchedule(rawWriter, data.referenceBundle)
     : rawWriter;
-  let writer = withFredDegradedDisclosure(scheduleCheckedWriter, data.referenceBundle);
+  let writer = withMarketDataDisclosure(scheduleCheckedWriter, data.referenceBundle);
   let qa = await executeQa(data, planner, marketing, writer);
   const writerQaAttempts: WriterQaAttempt[] = [{ attempt: 1, writer, qa }];
 
@@ -1668,7 +1680,7 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
       qaRevisionFeedback: buildStockBlogQaRevisionFeedback(qa.result),
     });
     scheduleCheckedWriter = withVerifiedSchedule(rawWriter, data.referenceBundle);
-    writer = withFredDegradedDisclosure(scheduleCheckedWriter, data.referenceBundle);
+    writer = withMarketDataDisclosure(scheduleCheckedWriter, data.referenceBundle);
     qa = await executeQa(data, planner, marketing, writer);
     writerQaAttempts.push({ attempt: revisionAttempt, writer, qa });
   }

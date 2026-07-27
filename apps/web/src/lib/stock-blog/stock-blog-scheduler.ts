@@ -9,6 +9,7 @@ import { evaluateStockBlogPublishQuality } from "@/lib/stock-blog/quality-gate";
 import {
   evaluateStockBlogSchedulerRetry,
   isStockReferencePreflightFailure,
+  shouldClearReferencePreflightCircuitBreaker,
 } from "@/lib/stock-blog/stock-blog-scheduler-policy";
 import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
 import { resolveApproval } from "@/lib/repositories/approval-actions";
@@ -400,22 +401,18 @@ function eventPayload(value: Prisma.JsonValue): Record<string, Prisma.JsonValue>
     : {};
 }
 
-async function clearMatchingReferencePreflightCircuitBreaker(scheduleKey: string) {
+async function clearStaleReferencePreflightCircuitBreaker(scheduleKey: string) {
   const existing = await prisma.eventLog.findUnique({
     where: { id: PUBLISH_CIRCUIT_BREAKER_EVENT_ID },
   });
   if (!existing) return false;
 
   const payload = eventPayload(existing.payload);
-  const blockedScheduleKey = typeof payload.scheduleKey === "string"
-    ? payload.scheduleKey
-    : "";
   const reason = typeof payload.reason === "string" ? payload.reason : "";
-  if (
-    payload.active !== true
-    || blockedScheduleKey !== scheduleKey
-    || !isStockReferencePreflightFailure(reason)
-  ) {
+  if (!shouldClearReferencePreflightCircuitBreaker({
+    active: payload.active === true,
+    reason,
+  })) {
     return false;
   }
 
@@ -429,6 +426,7 @@ async function clearMatchingReferencePreflightCircuitBreaker(scheduleKey: string
         active: false,
         status: "reference_preflight_recovered",
         clearedAt: new Date().toISOString(),
+        recoveredByScheduleKey: scheduleKey,
       } as Prisma.InputJsonObject,
     },
   });
@@ -437,6 +435,7 @@ async function clearMatchingReferencePreflightCircuitBreaker(scheduleKey: string
 
 function retryState(existing: Awaited<ReturnType<typeof prisma.eventLog.findUnique>>, now: Date, config: StockBlogSchedulerConfig) {
   const payload = existing ? eventPayload(existing.payload) : {};
+  const reason = typeof payload.reason === "string" ? payload.reason : "";
   return evaluateStockBlogSchedulerRetry({
     exists: Boolean(existing),
     status: typeof payload.status === "string" ? payload.status : "",
@@ -446,6 +445,7 @@ function retryState(existing: Awaited<ReturnType<typeof prisma.eventLog.findUniq
     autoPublishRetryLimit: config.autoPublishRetryLimit,
     maxRetries: config.maxRetries,
     retryDelayMinutes: config.retryDelayMinutes,
+    referencePreflightFailure: isStockReferencePreflightFailure(reason),
   });
 }
 
@@ -507,7 +507,7 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
   const publishKey = `${contentType}:${marketDate}:${definition.scheduledTime}`;
 
   if (config.autoPublish) {
-    await clearMatchingReferencePreflightCircuitBreaker(key);
+    await clearStaleReferencePreflightCircuitBreaker(key);
     const circuit = await getPublishCircuitBreaker();
     if (circuit.active) {
       return { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "skipped", reason: circuit.message ?? "자동 발행 circuit breaker 활성화" };

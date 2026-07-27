@@ -124,8 +124,8 @@ export type MarketSnapshot = {
   collectedAt: string;
   dataQuality: "verified" | "partial" | "missing";
   fallbackUsed?: boolean;
-  degradedMode?: "fred_unavailable";
-  degradedProviders?: Array<"fred">;
+  degradedMode?: "fred_unavailable" | "kis_sector_unavailable";
+  degradedProviders?: Array<"fred" | "kis-sector">;
   degradedReason?: string;
   disclosures?: string[];
   freshness?: MarketSnapshotFreshness;

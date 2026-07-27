@@ -1,4 +1,6 @@
 import type { MarketSnapshot } from "@/lib/stock-blog/references/reference-types";
+import { isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
+import { isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
 import type { StockBlogContentImage, StockBlogImageQualityAudit, StockBlogImageQualityIssueCode } from "@/lib/stock-blog/stock-blog-image-types";
 
 function resolveSnapshotValue(snapshot: MarketSnapshot, key: string): unknown {
@@ -42,7 +44,17 @@ export function evaluateStockBlogImageQuality(images: StockBlogContentImage[], s
   }
 
   if (charts.length > 0) {
-    if (!snapshot || snapshot.status !== "ready" || snapshot.dataQuality !== "verified" || snapshot.freshness?.status !== "fresh" || snapshot.fallbackUsed !== false) {
+    if (
+      !snapshot
+      || snapshot.status !== "ready"
+      || (
+        snapshot.dataQuality !== "verified"
+        && !isAllowedFredDegradedSnapshot(snapshot)
+        && !isAllowedKisSectorDegradedSnapshot(snapshot)
+      )
+      || snapshot.freshness?.status !== "fresh"
+      || snapshot.fallbackUsed !== false
+    ) {
       issues.push({ code: "image_data_mismatch", message: "차트에 사용할 검증된 최신 MarketSnapshot이 없습니다." });
     } else {
       for (const chart of charts) {

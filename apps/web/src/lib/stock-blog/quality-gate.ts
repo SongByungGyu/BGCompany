@@ -1,5 +1,6 @@
 import type { ContentPipelineRun } from "@/features/content-pipeline/content-pipeline-types";
 import { FRED_DEGRADED_DISCLOSURE, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
+import { KIS_SECTOR_DEGRADED_DISCLOSURE, isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
 import type { ReferenceBundle, ReferenceItem } from "@/lib/stock-blog/references/reference-types";
 import {
   assessStockBlogEditorialQuality,
@@ -53,6 +54,7 @@ export type StockBlogQualityDiagnostics = {
   marketSnapshotDegradedMode?: string;
   marketSnapshotDisclosures: string[];
   hasFredDegradedDisclosure: boolean;
+  hasKisSectorDegradedDisclosure: boolean;
   staleMarketDataItems: string[];
   manualMarketSnapshot: boolean;
   repeatedPhraseWarnings: string[];
@@ -237,7 +239,9 @@ function diagnostics(input: {
   const paragraphCount = body.split(/\n{2,}/).map((part) => part.trim()).filter((part) => part.length >= 20).length;
   const repeatedPhraseWarnings = REPEATED_PHRASES.filter((phrase) => body.split(phrase).length - 1 >= 3);
   const marketSnapshot = input.bundle?.marketSnapshot;
-  const marketSnapshotDegraded = isAllowedFredDegradedSnapshot(marketSnapshot);
+  const fredDegraded = isAllowedFredDegradedSnapshot(marketSnapshot);
+  const kisSectorDegraded = isAllowedKisSectorDegradedSnapshot(marketSnapshot);
+  const marketSnapshotDegraded = fredDegraded || kisSectorDegraded;
   return {
     referenceProvider: input.bundle?.provider,
     referenceMode: input.bundle?.mode,
@@ -274,6 +278,7 @@ function diagnostics(input: {
     marketSnapshotDegradedMode: marketSnapshot?.degradedMode,
     marketSnapshotDisclosures: marketSnapshot?.disclosures ?? [],
     hasFredDegradedDisclosure: body.includes(FRED_DEGRADED_DISCLOSURE),
+    hasKisSectorDegradedDisclosure: body.includes(KIS_SECTOR_DEGRADED_DISCLOSURE),
     staleMarketDataItems: marketSnapshot?.freshness?.staleItems ?? [],
     manualMarketSnapshot: marketSnapshot?.provider === "manual",
     repeatedPhraseWarnings,
@@ -354,7 +359,14 @@ export function evaluateStockBlogPublishQuality(input: {
     editorialQualityFailedChecks: editorialQuality.failedChecks,
   };
 
-  if (d.marketSnapshotDegraded && !d.hasFredDegradedDisclosure) reasons.push("FRED 제한 모드 고지 문구 누락");
+  if (
+    d.marketSnapshotDegradedMode === "fred_unavailable"
+    && !d.hasFredDegradedDisclosure
+  ) reasons.push("FRED 제한 모드 고지 문구 누락");
+  if (
+    d.marketSnapshotDegradedMode === "kis_sector_unavailable"
+    && !d.hasKisSectorDegradedDisclosure
+  ) reasons.push("KIS 업종 제한 모드 고지 문구 누락");
   if (requireReal && !editorialQuality.passed) {
     reasons.push(`편집 품질 ${STOCK_BLOG_EDITORIAL_QUALITY_TARGET}점 이상 필요: 현재 ${editorialQuality.score}점 · ${editorialQuality.failedChecks.join(", ")}`);
   }

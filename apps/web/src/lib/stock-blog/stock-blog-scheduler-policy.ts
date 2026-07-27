@@ -13,12 +13,20 @@ export type StockBlogSchedulerRetryPolicyInput = {
   autoPublishRetryLimit: number;
   maxRetries: number;
   retryDelayMinutes: number;
+  referencePreflightFailure?: boolean;
 };
 
 const STOCK_REFERENCE_PREFLIGHT_PREFIX = "STOCK_REFERENCE_PREFLIGHT_BLOCKED:";
 
 export function isStockReferencePreflightFailure(reason: string) {
   return reason.trimStart().startsWith(STOCK_REFERENCE_PREFLIGHT_PREFIX);
+}
+
+export function shouldClearReferencePreflightCircuitBreaker(input: {
+  active: boolean;
+  reason: string;
+}) {
+  return input.active && isStockReferencePreflightFailure(input.reason);
 }
 
 export function evaluateStockBlogSchedulerRetry(
@@ -34,7 +42,7 @@ export function evaluateStockBlogSchedulerRetry(
   }
 
   const maxAttempts = input.autoPublish
-    ? 1 + input.autoPublishRetryLimit
+    ? 1 + Math.max(input.autoPublishRetryLimit, input.referencePreflightFailure ? 1 : 0)
     : input.maxRetries;
   if (input.previousAttempt >= maxAttempts) {
     return {

@@ -719,6 +719,7 @@ done
 echo "STOCK_MARKET_DATA_PROVIDER=$(printenv STOCK_MARKET_DATA_PROVIDER)"
 echo "STOCK_MARKET_DATA_ALLOW_MANUAL_FALLBACK=$(printenv STOCK_MARKET_DATA_ALLOW_MANUAL_FALLBACK)"
 echo "STOCK_MARKET_DATA_ALLOW_FRED_DEGRADED=$(printenv STOCK_MARKET_DATA_ALLOW_FRED_DEGRADED)"
+echo "STOCK_MARKET_DATA_ALLOW_KIS_SECTOR_DEGRADED=$(printenv STOCK_MARKET_DATA_ALLOW_KIS_SECTOR_DEGRADED)"
 echo "STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES=$(printenv STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES)"
 '
 ```
@@ -729,10 +730,13 @@ secret 원문, 요청 header, provider 전체 응답은 출력하지 않는다. 
 STOCK_MARKET_DATA_PROVIDER=kis-fred
 STOCK_MARKET_DATA_ALLOW_MANUAL_FALLBACK=false
 STOCK_MARKET_DATA_ALLOW_FRED_DEGRADED=true
+STOCK_MARKET_DATA_ALLOW_KIS_SECTOR_DEGRADED=true
 STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES=false
 ```
 
-`needs_credentials`, `needs_data`, `error`, stale/expired가 발생하면 mock 또는 Manual로 자동 대체하지 않는다. scheduler와 실제 Hermes를 중지한 상태에서 자격증명, provider 상태, 기준 시각을 확인한다. KIS 주문·잔고·계좌 API는 점검 목적으로도 호출하지 않는다.
+KIS 업종 순위만 비어 있고 나머지 KIS 핵심 지표와 FRED 자료가 모두 최신·정상인 경우에는 강세·약세 업종 항목을 제외하고 제한 운영한다. 본문에는 KIS 업종 자료 누락 사실을 자동으로 고지하며, 업종 데이터는 추정하거나 다른 수치로 채우지 않는다. 이 제한 운영은 `STOCK_MARKET_DATA_ALLOW_KIS_SECTOR_DEGRADED=false`로 비활성화할 수 있다.
+
+그 외 `needs_credentials`, `needs_data`, `error`, stale/expired가 발생하면 mock 또는 Manual로 자동 대체하지 않는다. scheduler와 실제 Hermes를 중지한 상태에서 자격증명, provider 상태, 기준 시각을 확인한다. KIS 주문·잔고·계좌 API는 점검 목적으로도 호출하지 않는다.
 
 KIS 읽기 전용 조회의 일시적 `429`, `500`, `502`, `503`, `504` 응답은 `KIS_MAX_RETRIES`(기본 2회)와 `KIS_RETRY_BASE_DELAY_MS`(기본 500ms)에 따라 제한적으로 재시도한다. 재시도 횟수를 2보다 높이지 말고, 반복 실패 시 scheduler와 Hermes를 계속 중지한 채 provider 상태를 확인한다.
 ## FRED 장애 시 주식 브리핑 제한 운영
