@@ -39,7 +39,7 @@ if [[ -z "$AGENT_API_KEY" ]]; then
   echo "AGENT_API_KEY is missing." >&2
   exit 1
 fi
-BASE_URL="${BG_COMPANY_BASE_URL:-http://127.0.0.1:3000}"
+BASE_URL="${BG_COMPANY_BASE_URL:-https://bgcompanyoffice.cloud}"
 
 {
   printf '[%s] scheduler tick start\n' "$(date --iso-8601=seconds)"
