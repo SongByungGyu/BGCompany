@@ -13,9 +13,32 @@ if ! flock -n 9; then
 fi
 
 cd "$ROOT_DIR"
-set -a
-. ./.env
-set +a
+
+read_dotenv_value() {
+  local target="$1"
+  local line
+  local value
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ "$line" == "$target="* ]] || continue
+    value="${line#*=}"
+    value="${value%\"}"
+    value="${value#\"}"
+    value="${value%\'}"
+    value="${value#\'}"
+    printf '%s' "$value"
+    return 0
+  done < "$ROOT_DIR/.env"
+
+  return 1
+}
+
+AGENT_API_KEY="${AGENT_API_KEY:-$(read_dotenv_value AGENT_API_KEY || true)}"
+if [[ -z "$AGENT_API_KEY" ]]; then
+  echo "AGENT_API_KEY is missing." >&2
+  exit 1
+fi
 BASE_URL="${BG_COMPANY_BASE_URL:-http://127.0.0.1:3000}"
 
 {
