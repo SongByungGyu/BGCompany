@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { MarketSnapshot } from "./references/reference-types";
-import { applyVerifiedSchedule } from "./verified-schedule";
+import type { MarketSnapshot } from "./references/reference-types.ts";
+import { applyVerifiedSchedule } from "./verified-schedule.ts";
 
 function snapshot(overrides?: Partial<MarketSnapshot>): MarketSnapshot {
   return {
@@ -67,6 +67,38 @@ test("검증 일정의 원문 URL이 없으면 차단한다", () => {
 
   assert.equal(applied.validation.ok, false);
   assert.match(applied.validation.issues.join("\n"), /원문 URL이 없습니다/);
+});
+
+test("일일 브리핑은 검증 범위 일정이 비어 있으면 일정 섹션을 생략하고 계속한다", () => {
+  const applied = applyVerifiedSchedule(writerResult([
+    { heading: "4. 금리·환율·주요 일정", body: "확인되지 않은 일정을 쓰지 않습니다." },
+    { heading: "함께 확인한 기사", body: "기사 목록" },
+  ]), snapshot({
+    marketDate: "2026-07-28",
+    upcoming: [],
+  }), { contentType: "KOREA_DAILY_PREVIEW" });
+
+  assert.equal(applied.validation.ok, true);
+  assert.equal(applied.validation.checkedEventCount, 0);
+  assert.doesNotMatch(String(applied.result.fullDraft), /Later Event|주요 일정/);
+});
+
+test("다음 주 전망은 검증 범위 일정이 비어 있으면 계속 차단한다", () => {
+  const applied = applyVerifiedSchedule(writerResult([
+    { heading: "4. 다음 주 핵심 일정", body: "확인되지 않은 일정을 쓰지 않습니다." },
+  ]), snapshot({
+    marketDate: "2026-07-28",
+    upcoming: [{
+      date: "2026-08-10",
+      event: "Later Event",
+      market: "US",
+      url: "https://example.com/later",
+    }],
+  }), { contentType: "NEXT_WEEK_MARKET_PREVIEW" });
+
+  assert.equal(applied.validation.ok, false);
+  assert.equal(applied.validation.checkedEventCount, 0);
+  assert.match(applied.validation.issues.join("\n"), /검증 일정이 없습니다/);
 });
 
 test("다음 주 글은 검증 범위 밖 일정을 제외하고 누락 시장을 고지한다", () => {

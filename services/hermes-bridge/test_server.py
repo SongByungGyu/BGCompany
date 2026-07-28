@@ -263,7 +263,7 @@ class VerifiedSchedulePromptTests(unittest.TestCase):
         })
         self.assertIn("개인 투자자가 운영하는 네이버 주식 블로그의 전문 에디터", prompt)
         self.assertIn('URL은 마지막 "함께 확인한 기사"', prompt)
-        self.assertIn("공백 포함 2,000~2,700자", prompt)
+        self.assertIn("공백 포함 2,300~2,800자", prompt)
         self.assertIn("실제 활용한 기사 3개만", prompt)
         self.assertNotIn('첫 번째 sections 항목의 heading은 반드시 "데이터 기준"', prompt)
 

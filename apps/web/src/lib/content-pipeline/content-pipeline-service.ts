@@ -1671,13 +1671,13 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     runnerMode === "hermes"
     && writer.agentRunStatus === "succeeded"
     && qa.agentRunStatus === "succeeded"
-    && shouldRetryStockBlogQa(qa.result, writerQaAttempts.length)
+    && shouldRetryStockBlogQa(qa.result, writerQaAttempts.length, writer.result)
   ) {
     const revisionAttempt = writerQaAttempts.length + 1;
     rawWriter = await executeWriter(data, planner, marketing, {
       revisionAttempt,
       previousWriterResult: writer.result,
-      qaRevisionFeedback: buildStockBlogQaRevisionFeedback(qa.result),
+      qaRevisionFeedback: buildStockBlogQaRevisionFeedback(qa.result, writer.result),
     });
     scheduleCheckedWriter = withVerifiedSchedule(rawWriter, data.referenceBundle);
     writer = withMarketDataDisclosure(scheduleCheckedWriter, data.referenceBundle);

@@ -5,7 +5,7 @@ import {
   shouldRetryStockBlogQa,
   STOCK_BLOG_MAX_HERMES_RUNS,
   STOCK_BLOG_MAX_QA_ATTEMPTS,
-} from "./qa-revision-policy";
+} from "./qa-revision-policy.ts";
 
 test("allows at most three QA attempts and reserves eight Hermes runs", () => {
   assert.equal(STOCK_BLOG_MAX_QA_ATTEMPTS, 3);
@@ -22,6 +22,23 @@ test("stops immediately after QA approval", () => {
     finalRecommendation: "approve",
     requiredRevisions: [],
   }, 1), false);
+});
+
+test("retries an approved draft when the final body is too short", () => {
+  const qa = {
+    ok: true,
+    qaScore: 94,
+    publishReadiness: "ready",
+    finalRecommendation: "approve",
+    requiredRevisions: [],
+  };
+  const writer = { fullDraft: "짧은 본문" };
+
+  assert.equal(shouldRetryStockBlogQa(qa, 1, writer), true);
+  assert.match(
+    buildStockBlogQaRevisionFeedback(qa, writer).requiredRevisions[0] ?? "",
+    /2000~3200자/,
+  );
 });
 
 test("passes only actionable QA fields back to the writer", () => {

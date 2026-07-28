@@ -8,8 +8,9 @@ import type { StockBlogQualityGateResult } from "@/features/content-pipeline/con
 import { evaluateStockBlogPublishQuality } from "@/lib/stock-blog/quality-gate";
 import {
   evaluateStockBlogSchedulerRetry,
+  isStockContentQualityFailure,
   isStockReferencePreflightFailure,
-  shouldClearReferencePreflightCircuitBreaker,
+  shouldClearRecoverablePipelineCircuitBreaker,
 } from "@/lib/stock-blog/stock-blog-scheduler-policy";
 import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
 import { resolveApproval } from "@/lib/repositories/approval-actions";
@@ -401,16 +402,18 @@ function eventPayload(value: Prisma.JsonValue): Record<string, Prisma.JsonValue>
     : {};
 }
 
-async function clearStaleReferencePreflightCircuitBreaker(scheduleKey: string) {
+async function clearRecoverablePipelineCircuitBreaker(scheduleKey: string) {
   const existing = await prisma.eventLog.findUnique({
     where: { id: PUBLISH_CIRCUIT_BREAKER_EVENT_ID },
   });
   if (!existing) return false;
 
   const payload = eventPayload(existing.payload);
+  const status = typeof payload.status === "string" ? payload.status : "";
   const reason = typeof payload.reason === "string" ? payload.reason : "";
-  if (!shouldClearReferencePreflightCircuitBreaker({
+  if (!shouldClearRecoverablePipelineCircuitBreaker({
     active: payload.active === true,
+    status,
     reason,
   })) {
     return false;
@@ -424,7 +427,7 @@ async function clearStaleReferencePreflightCircuitBreaker(scheduleKey: string) {
       payload: {
         ...payload,
         active: false,
-        status: "reference_preflight_recovered",
+        status: "pipeline_recovery_cleared",
         clearedAt: new Date().toISOString(),
         recoveredByScheduleKey: scheduleKey,
       } as Prisma.InputJsonObject,
@@ -436,6 +439,15 @@ async function clearStaleReferencePreflightCircuitBreaker(scheduleKey: string) {
 function retryState(existing: Awaited<ReturnType<typeof prisma.eventLog.findUnique>>, now: Date, config: StockBlogSchedulerConfig) {
   const payload = existing ? eventPayload(existing.payload) : {};
   const reason = typeof payload.reason === "string" ? payload.reason : "";
+  const qualityGate = payload.qualityGate;
+  const qualityGateFailed = Boolean(
+    qualityGate
+      && typeof qualityGate === "object"
+      && !Array.isArray(qualityGate)
+      && qualityGate.ok === false,
+  );
+  const retryableGenerationFailure = qualityGateFailed
+    || isStockContentQualityFailure(reason);
   return evaluateStockBlogSchedulerRetry({
     exists: Boolean(existing),
     status: typeof payload.status === "string" ? payload.status : "",
@@ -446,6 +458,7 @@ function retryState(existing: Awaited<ReturnType<typeof prisma.eventLog.findUniq
     maxRetries: config.maxRetries,
     retryDelayMinutes: config.retryDelayMinutes,
     referencePreflightFailure: isStockReferencePreflightFailure(reason),
+    retryableGenerationFailure,
   });
 }
 
@@ -507,7 +520,7 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
   const publishKey = `${contentType}:${marketDate}:${definition.scheduledTime}`;
 
   if (config.autoPublish) {
-    await clearStaleReferencePreflightCircuitBreaker(key);
+    await clearRecoverablePipelineCircuitBreaker(key);
     const circuit = await getPublishCircuitBreaker();
     if (circuit.active) {
       return { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "skipped", reason: circuit.message ?? "자동 발행 circuit breaker 활성화" };
@@ -571,13 +584,11 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
       || pipeline.qaResult?.finalRecommendation === "block";
     const qualityBlocked = (config.runnerMode === "hermes" && !qualityGate.ok) || qaBlocked;
     if (qualityBlocked) {
-      status = "partial_failed";
-      notes.push(qaBlocked
+      status = "failed";
+      const qualityReason = qaBlocked
         ? `QA 자동 승인 차단: ${pipeline.qaResult?.reason ?? "QA가 게시 차단을 권고함"}`
-        : `품질 게이트 차단: ${qualityGate.status} · ${qualityGate.reasons.join(" / ")}`);
-      if (config.autoPublish) {
-        await activateSchedulerPublishCircuitBreaker({ status: "quality_failed", reason: notes.join(" · "), scheduleKey: key });
-      }
+        : `품질 게이트 차단: ${qualityGate.status} · ${qualityGate.reasons.join(" / ")}`;
+      notes.push(`STOCK_CONTENT_QUALITY_FAILED: ${qualityReason}`);
     }
 
     if (!qualityBlocked && config.autoApprove && approvalId && pipeline.status === "director_approval") {

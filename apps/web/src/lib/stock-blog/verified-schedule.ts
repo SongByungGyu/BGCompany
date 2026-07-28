@@ -76,7 +76,7 @@ function normalizeVerifiedEvents(snapshot?: MarketSnapshot, contentType?: StockR
     return { events: [] as VerifiedScheduleEvent[], issues: ["검증된 시장 스냅샷이 없습니다."], from: undefined, through: undefined };
   }
   if (!Array.isArray(snapshot.upcoming) || snapshot.upcoming.length === 0) {
-    return { events: [] as VerifiedScheduleEvent[], issues: ["검증된 upcoming 일정이 없습니다."], from: undefined, through: undefined };
+    return { events: [] as VerifiedScheduleEvent[], issues: [], from: undefined, through: undefined };
   }
 
   const seen = new Set<string>();
@@ -250,9 +250,12 @@ function validateSchedule(input: {
   scheduleBody: string;
   events: VerifiedScheduleEvent[];
   initialIssues: string[];
+  requireEvents: boolean;
 }): VerifiedScheduleValidation {
   const issues = [...input.initialIssues];
-  if (input.events.length === 0) issues.push("본문에 고정할 검증 일정이 없습니다.");
+  if (input.requireEvents && input.events.length === 0) {
+    issues.push("본문에 고정할 검증 일정이 없습니다.");
+  }
 
   const title = stringValue(input.result.finalTitle);
   const metaDescription = stringValue(input.result.metaDescription);
@@ -342,7 +345,13 @@ export function applyVerifiedSchedule(
     verifiedSchedule: schedule,
   };
   delete result.htmlDraft;
-  const validation = validateSchedule({ result, scheduleBody, events, initialIssues: issues });
+  const validation = validateSchedule({
+    result,
+    scheduleBody,
+    events,
+    initialIssues: issues,
+    requireEvents: options.contentType === "NEXT_WEEK_MARKET_PREVIEW",
+  });
   result.scheduleValidation = validation;
   return { result, validation };
 }

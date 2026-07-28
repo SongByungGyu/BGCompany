@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   evaluateStockBlogSchedulerRetry,
   isStockReferencePreflightFailure,
+  shouldClearRecoverablePipelineCircuitBreaker,
   shouldClearReferencePreflightCircuitBreaker,
 } from "./stock-blog-scheduler-policy.ts";
 
@@ -64,6 +65,42 @@ test("이전 날짜 참고자료 차단기는 해제하지만 실제 발행 실�
       reason: "네이버 이미지 업로드 실패",
     }),
     false,
+  );
+});
+
+test("품질 실패 차단기는 해제하지만 실제 네이버 발행 실패 차단기는 유지한다", () => {
+  assert.equal(
+    shouldClearRecoverablePipelineCircuitBreaker({
+      active: true,
+      status: "quality_failed",
+      reason: "본문 분량 부족",
+    }),
+    true,
+  );
+  assert.equal(
+    shouldClearRecoverablePipelineCircuitBreaker({
+      active: true,
+      status: "publish_failed",
+      reason: "네이버 최종 발행 실패",
+    }),
+    false,
+  );
+});
+
+test("기존 partial 품질 실패도 자동발행 재시도가 0이어도 한 번 재시도한다", () => {
+  assert.deepEqual(
+    evaluateStockBlogSchedulerRetry({
+      exists: true,
+      status: "partial_failed",
+      previousAttempt: 1,
+      elapsedMs: 10 * 60 * 1000,
+      autoPublish: true,
+      autoPublishRetryLimit: 0,
+      maxRetries: 3,
+      retryDelayMinutes: 10,
+      retryableGenerationFailure: true,
+    }),
+    { allowed: true, attempt: 2 },
   );
 });
 

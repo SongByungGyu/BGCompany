@@ -14,12 +14,18 @@ export type StockBlogSchedulerRetryPolicyInput = {
   maxRetries: number;
   retryDelayMinutes: number;
   referencePreflightFailure?: boolean;
+  retryableGenerationFailure?: boolean;
 };
 
 const STOCK_REFERENCE_PREFLIGHT_PREFIX = "STOCK_REFERENCE_PREFLIGHT_BLOCKED:";
+const STOCK_CONTENT_QUALITY_PREFIX = "STOCK_CONTENT_QUALITY_FAILED:";
 
 export function isStockReferencePreflightFailure(reason: string) {
   return reason.trimStart().startsWith(STOCK_REFERENCE_PREFLIGHT_PREFIX);
+}
+
+export function isStockContentQualityFailure(reason: string) {
+  return reason.trimStart().startsWith(STOCK_CONTENT_QUALITY_PREFIX);
 }
 
 export function shouldClearReferencePreflightCircuitBreaker(input: {
@@ -29,11 +35,25 @@ export function shouldClearReferencePreflightCircuitBreaker(input: {
   return input.active && isStockReferencePreflightFailure(input.reason);
 }
 
+export function shouldClearRecoverablePipelineCircuitBreaker(input: {
+  active: boolean;
+  status: string;
+  reason: string;
+}) {
+  return input.active && (
+    input.status === "quality_failed"
+    || isStockReferencePreflightFailure(input.reason)
+    || isStockContentQualityFailure(input.reason)
+  );
+}
+
 export function evaluateStockBlogSchedulerRetry(
   input: StockBlogSchedulerRetryPolicyInput,
 ): StockBlogSchedulerRetryDecision {
   if (!input.exists) return { allowed: true, attempt: 1 };
-  if (input.status !== "failed") {
+  const retryableStatus = input.status === "failed"
+    || (input.status === "partial_failed" && input.retryableGenerationFailure);
+  if (!retryableStatus) {
     return {
       allowed: false,
       attempt: input.previousAttempt,
@@ -42,7 +62,10 @@ export function evaluateStockBlogSchedulerRetry(
   }
 
   const maxAttempts = input.autoPublish
-    ? 1 + Math.max(input.autoPublishRetryLimit, input.referencePreflightFailure ? 1 : 0)
+    ? 1 + Math.max(
+      input.autoPublishRetryLimit,
+      input.referencePreflightFailure || input.retryableGenerationFailure ? 1 : 0,
+    )
     : input.maxRetries;
   if (input.previousAttempt >= maxAttempts) {
     return {
