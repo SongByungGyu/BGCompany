@@ -62,10 +62,12 @@ export function evaluateStockBlogSchedulerRetry(
   }
 
   const maxAttempts = input.autoPublish
-    ? 1 + Math.max(
-      input.autoPublishRetryLimit,
-      input.referencePreflightFailure || input.retryableGenerationFailure ? 1 : 0,
-    )
+    ? input.referencePreflightFailure
+      ? Math.max(2, input.maxRetries)
+      : 1 + Math.max(
+        input.autoPublishRetryLimit,
+        input.retryableGenerationFailure ? 1 : 0,
+      )
     : input.maxRetries;
   if (input.previousAttempt >= maxAttempts) {
     return {
@@ -76,10 +78,16 @@ export function evaluateStockBlogSchedulerRetry(
   }
 
   const delayMs = input.retryDelayMinutes * 60 * 1000;
-  if (input.elapsedMs < delayMs) {
+  // Scheduler ticks run on exact 10-minute boundaries, while the previous
+  // attempt timestamp is written after collection finishes. Allow a small
+  // alignment grace so a short failed collection does not postpone the next
+  // retry by another full scheduler interval.
+  const alignmentGraceMs = Math.min(60_000, Math.floor(delayMs * 0.1));
+  const effectiveDelayMs = Math.max(0, delayMs - alignmentGraceMs);
+  if (input.elapsedMs < effectiveDelayMs) {
     const waitMinutes = Math.max(
       1,
-      Math.ceil((delayMs - input.elapsedMs) / 60000),
+      Math.ceil((effectiveDelayMs - input.elapsedMs) / 60000),
     );
     return {
       allowed: false,

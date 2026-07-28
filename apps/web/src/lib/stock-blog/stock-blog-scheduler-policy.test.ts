@@ -134,5 +134,5 @@ test("재시도 지연이 지나기 전에는 남은 대기 시간을 반환한�
   });
 
   assert.equal(decision.allowed, false);
-  assert.match(decision.reason ?? "", /약 6분 후 가능/);
+  assert.match(decision.reason ?? "", /약 5분 후 가능/);
 });
