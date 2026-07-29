@@ -9,6 +9,12 @@ import { evaluateStockBlogPublishQuality, getRealStockReferences } from "@/lib/s
 import { FRED_DEGRADED_DISCLOSURE, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import { renderNaverBody, type NaverBodyBlock } from "@/lib/stock-blog/naver-body";
 import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
+import {
+  appendRelatedPostSection,
+  buildNaverDiscoveryTags,
+  selectRelatedPublishedPosts,
+  type PublishedPostCandidate,
+} from "@/lib/stock-blog/stock-blog-discovery";
 import type { StockBlogContentImage, StockBlogImageQualityAudit } from "@/lib/stock-blog/stock-blog-image-types";
 import { STOCK_BLOG_EDITORIAL_QUALITY_TARGET } from "@/lib/stock-blog/stock-blog-editorial-benchmark";
 
@@ -425,7 +431,7 @@ function buildDraftQualityCheck(template: StockBriefingTemplate, body: string, r
 }
 
 
-function buildDraftFromPipeline(pipeline: ContentPipelineRun): DraftBuildResult {
+function buildDraftFromPipeline(pipeline: ContentPipelineRun, publishedPosts: PublishedPostCandidate[] = []): DraftBuildResult {
   const bundleTemplate = collectReferenceBundle(pipeline)?.contentType;
   const template = pipeline.naverBlogPublishPrep?.briefingTemplate
     ?? bundleTemplate
@@ -447,21 +453,27 @@ function buildDraftFromPipeline(pipeline: ContentPipelineRun): DraftBuildResult 
   const thumbnailPrompt = clean(thumbnail.thumbnailPrompt) || `네이버 블로그 썸네일, 깔끔한 금융 리포트 스타일, 제목: ${title}, 핵심 문구: ${thumbnailText}`;
   const refs = collectReferences(pipeline);
   const writerBody = buildWriterEditorialBody(pipeline, template);
-  const body = pipeline.runnerMode === "hermes" && writerBody
+  const baseBody = pipeline.runnerMode === "hermes" && writerBody
     ? writerBody
     : buildPlainBody(pipeline, template, title, refs);
+  const body = appendRelatedPostSection({
+    body: baseBody,
+    template,
+    posts: selectRelatedPublishedPosts({ currentTitle: title, posts: publishedPosts, limit: 2 }),
+  });
   const quality = buildDraftQualityCheck(template, body, refs, pipeline);
   if (!quality.ok) {
     throw new Error(`${quality.code ?? "NAVER_DRAFT_QUALITY_FAILED"}: ${quality.reasons.join(" · ")}`);
   }
-  const tags = unique([
-    ...(pipeline.writerResult?.usedSeoKeywords ?? []),
-    ...(pipeline.marketingResult?.seoKeywords ?? []),
-    ...(pipeline.plannerResult?.seoKeywords ?? []),
-    ...(pipeline.naverBlogPublishPrep?.naverTags ?? []),
-    ...copy.requiredTags,
-    "BGMarketNote",
-  ]).slice(0, 20);
+  const tags = buildNaverDiscoveryTags({
+    seoKeywords: unique([
+      ...(pipeline.writerResult?.usedSeoKeywords ?? []),
+      ...(pipeline.marketingResult?.seoKeywords ?? []),
+      ...(pipeline.plannerResult?.seoKeywords ?? []),
+      ...(pipeline.naverBlogPublishPrep?.naverTags ?? []),
+    ]),
+    requiredTags: copy.requiredTags,
+  });
   return {
     title,
     body,
@@ -683,7 +695,20 @@ export async function createNaverDraftJobFromPipeline(input: {
     return serializeNaverDraftJobWithPipeline(existing, detail.pipeline);
   }
 
-  const draft = buildDraftFromPipeline(detail.pipeline);
+  const publishedPosts = await prisma.naverDraftJob.findMany({
+    where: {
+      status: "published",
+      publishedUrl: { not: null },
+      contentPipelineId: { not: detail.pipeline.id },
+    },
+    orderBy: { publishedAt: "desc" },
+    take: 12,
+    select: { title: true, publishedUrl: true },
+  });
+  const draft = buildDraftFromPipeline(
+    detail.pipeline,
+    publishedPosts.flatMap((post) => post.publishedUrl ? [{ title: post.title, url: post.publishedUrl }] : []),
+  );
   if (input.allowPublish) {
     const circuitBreaker = await getPublishCircuitBreaker();
     if (circuitBreaker.active) throw new Error("NAVER_PUBLISH_CIRCUIT_BREAKER_ACTIVE");

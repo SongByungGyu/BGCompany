@@ -8,7 +8,9 @@ const DEFAULT_HOOKS: Record<StockBriefingTemplate, string> = {
 };
 
 const PROHIBITED_TITLE_EXPRESSIONS = ["급등 확정", "무조건 상승", "매수 추천", "수익 보장", "상한가 확정", "폭등", "몰빵"];
-const COMPLETE_EDITORIAL_TITLE_PATTERN = /(?:20\d{2}년\s*\d{1,2}월\s*\d{1,2}일|(?:20)?\d{2}[-/.]\d{1,2}[-/.]\d{1,2}).*(?:증시|시장)/;
+const MARKET_TITLE_PATTERN = /(?:증시|시장|한국장|미국장|코스피|코스닥|나스닥|S&P\s*500)/i;
+const LEADING_DATE_PATTERN = /^(?:(?:20)?\d{2}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}\/\d{1,2}|20\d{2}년\s*\d{1,2}월\s*\d{1,2}일)\s*/;
+const TRAILING_DATE_PATTERN = /\s*[|｜·\-–—]?\s*(?:20\d{2}년\s*)?\d{1,2}월\s*\d{1,2}일(?:\s*기준)?\s*$/;
 
 function removeProhibitedExpressions(value: string) {
   let result = value;
@@ -18,7 +20,8 @@ function removeProhibitedExpressions(value: string) {
 
 function parseDateParts(value?: string) {
   const source = value?.trim() ?? "";
-  const match = source.match(/^(?:20)?(\d{2})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  const match = source.match(/^(?:20)?(\d{2})[-/.](\d{1,2})[-/.](\d{1,2})/)
+    ?? source.match(/^20(\d{2})년\s*(\d{1,2})월\s*(\d{1,2})일/);
   if (match) {
     return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
   }
@@ -26,18 +29,40 @@ function parseDateParts(value?: string) {
   return { year: now.getFullYear() % 100, month: now.getMonth() + 1, day: now.getDate() };
 }
 
-function baseTitle(template: StockBriefingTemplate, marketDate?: string) {
+function baseTitle(template: StockBriefingTemplate) {
+  if (template === "KOREA_DAILY_PREVIEW") return "오늘 한국장 전망";
+  if (template === "KOREA_MARKET_CLOSE_US_PREVIEW") return "오늘 미국장 전망";
+  if (template === "WEEKLY_MARKET_REVIEW") return "한국·미국 주간 시장 정리";
+  return "다음 주 증시 전망";
+}
+
+function dateSuffix(template: StockBriefingTemplate, marketDate?: string) {
   const { month, day } = parseDateParts(marketDate);
-  if (template === "KOREA_DAILY_PREVIEW") return `${month}/${day} 오늘의 한국장 전망`;
-  if (template === "KOREA_MARKET_CLOSE_US_PREVIEW") return `${month}/${day} 오늘의 미국장 전망`;
-  if (template === "WEEKLY_MARKET_REVIEW") return `${month}월 ${Math.ceil(day / 7)}주차 한국·미국 주간 시장 정리`;
-  return `${month}/${day} 다음 주 증시 전망`;
+  if (template === "WEEKLY_MARKET_REVIEW") return `${month}월 ${Math.ceil(day / 7)}주차`;
+  if (template === "NEXT_WEEK_MARKET_PREVIEW") return `${month}월 ${day}일 기준`;
+  return `${month}월 ${day}일`;
+}
+
+function stripDecorativeDate(value: string) {
+  return value
+    .replace(LEADING_DATE_PATTERN, "")
+    .replace(TRAILING_DATE_PATTERN, "")
+    .replace(/^[|｜·:\-–—]+\s*/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function withDateSuffix(value: string, suffix: string) {
+  const cleanValue = value.replace(/[|｜·:\-–—\s]+$/, "").trim();
+  const maxCoreLength = Math.max(20, 78 - suffix.length - 3);
+  const core = cleanValue.length > maxCoreLength
+    ? `${cleanValue.slice(0, maxCoreLength - 1).trim()}…`
+    : cleanValue;
+  return `${core}｜${suffix}`;
 }
 
 function cleanHook(value: string | undefined, template: StockBriefingTemplate) {
-  let result = (value ?? "")
-    .replace(/^(?:20)?\d{2}[-/.]\d{1,2}[-/.]\d{1,2}\s*/, "")
-    .replace(/^\d{1,2}\/\d{1,2}\s*/, "")
+  let result = stripDecorativeDate(value ?? "")
     .replace(/\d{1,2}월\s*\d{1,2}주차\s*/, "")
     .replace(/오늘의?\s*(한국|미국)?\s*증시\s*/, "")
     .replace(/오늘의?\s*(한국장|미국장)\s*(전망|체크)?/g, "")
@@ -57,10 +82,9 @@ export function buildStockBlogEditorialTitle(input: {
   marketDate?: string;
   sourceTitle?: string;
 }) {
-  const sourceTitle = removeProhibitedExpressions(input.sourceTitle?.trim() ?? "");
-  if (sourceTitle.length >= 15 && COMPLETE_EDITORIAL_TITLE_PATTERN.test(sourceTitle)) {
-    return sourceTitle.length > 90 ? `${sourceTitle.slice(0, 89)}…` : sourceTitle;
-  }
-  const prefix = baseTitle(input.template, input.marketDate);
-  return `${prefix} ${cleanHook(sourceTitle, input.template)}`;
+  const sourceTitle = stripDecorativeDate(removeProhibitedExpressions(input.sourceTitle?.trim() ?? ""));
+  const suffix = dateSuffix(input.template, input.marketDate);
+  if (sourceTitle.length >= 15 && MARKET_TITLE_PATTERN.test(sourceTitle)) return withDateSuffix(sourceTitle, suffix);
+  const prefix = baseTitle(input.template);
+  return withDateSuffix(`${prefix}｜${cleanHook(sourceTitle, input.template)}`, suffix);
 }

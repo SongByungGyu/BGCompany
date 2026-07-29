@@ -16,6 +16,10 @@ import { applyVerifiedSchedule, type VerifiedSchedule, type VerifiedScheduleVali
 import type { HermesRunTelemetry, NormalizedHermesRunResult } from "@/lib/hermes/hermes-types";
 import type { BlogImagePrompt, ReferenceBundle, StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 import type { StockBlogContentImage, StockBlogImageQualityAudit } from "@/lib/stock-blog/stock-blog-image-types";
+import {
+  buildRecentTitleAvoidanceGuideline,
+  STOCK_BLOG_DISCOVERY_GUIDELINES,
+} from "@/lib/stock-blog/stock-blog-discovery";
 import type { ContentChannel, ContentPipelineDetail, ContentPipelineRun, ContentPipelineStatus } from "@/features/content-pipeline/content-pipeline-types";
 import {
   buildStockBlogEditorialBenchmark,
@@ -317,10 +321,19 @@ async function enrichContentPipelineInput(input: ContentPipelineInput): Promise<
   const blogImagePrompts = input.blogImagePrompts ?? buildBlogImagePrompts(referenceBundle);
   const currentGuidelines = selectSafeEditorialBenchmarkGuidelines(referenceBundle.competitorAnalysis);
   const historicalGuidelines = await loadRecentEditorialBenchmarkGuidelines(contentType);
+  const recentPublishedTitles = await prisma.naverDraftJob.findMany({
+    where: { status: "published" },
+    orderBy: { publishedAt: "desc" },
+    take: 6,
+    select: { title: true },
+  });
+  const recentTitleGuideline = buildRecentTitleAvoidanceGuideline(recentPublishedTitles.map((post) => post.title));
   const editorialBenchmarkGuidelines = Array.from(new Set([
+    ...STOCK_BLOG_DISCOVERY_GUIDELINES,
+    ...(recentTitleGuideline ? [recentTitleGuideline] : []),
+    ...(input.editorialBenchmarkGuidelines ?? []),
     ...currentGuidelines,
     ...historicalGuidelines,
-    ...(input.editorialBenchmarkGuidelines ?? []),
   ])).slice(0, 10);
   return { ...input, referenceBundle, blogImagePrompts, editorialBenchmarkGuidelines };
 }

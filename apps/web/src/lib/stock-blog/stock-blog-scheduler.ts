@@ -130,8 +130,8 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     objective: "장 시작 전 전일 해외 변수와 당일 한국장 체크포인트를 정리합니다.",
     primaryAudience: "한국 주식 투자자",
     recommendedRunnerMode: "hermes",
-    topic: "오늘 한국 주식시장 장전 현황과 체크포인트",
-    title: (date) => `${date} 오늘의 한국 증시 장전 브리핑`,
+    topic: "오늘 한국 증시 변동 원인과 코스피·반도체·원달러 환율 영향",
+    title: (date) => `${date} 오늘 한국장 핵심 변수: 코스피·반도체·원달러 환율`,
   },
   {
     scheduleId: "weekday-korea-close-us-preview",
@@ -144,8 +144,8 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     objective: "한국 장 마감 흐름과 오늘 밤 미국장 관전 포인트를 연결합니다.",
     primaryAudience: "한국·미국 주식 병행 투자자",
     recommendedRunnerMode: "hermes",
-    topic: "한국 증시 마감 흐름과 오늘 밤 미국장 전망",
-    title: (date) => `${date} 한국장 마감 정리와 미국장 전망`,
+    topic: "한국 증시 마감 원인과 오늘 밤 나스닥·미국 금리·반도체 영향",
+    title: (date) => `${date} 오늘 미국장 핵심 변수: 나스닥·금리·반도체`,
   },
   {
     scheduleId: "saturday-weekly-market-review",
@@ -158,8 +158,8 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     objective: "이번 주 한국·미국 증시 흐름, 수급, 섹터, 주요 이벤트를 주말용으로 정리합니다.",
     primaryAudience: "주말에 한 주를 복기하고 다음 주를 준비하는 투자자",
     recommendedRunnerMode: "hermes",
-    topic: "이번 주 한국·미국 주식시장 흐름과 다음 주 체크포인트",
-    title: (date) => `${date} 이번 주 한국·미국 증시 주간 정리`,
+    topic: "이번 주 한국·미국 증시 변동 원인과 다음 주 핵심 일정·주도 업종",
+    title: (date) => `${date} 이번 주 증시를 움직인 원인과 다음 주 핵심 일정`,
   },
   {
     scheduleId: "sunday-next-week-market-preview",
@@ -172,8 +172,8 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     objective: "다음 주 주요 경제 일정, 실적, 리스크와 투자자 체크리스트를 준비합니다.",
     primaryAudience: "일요일 저녁 다음 주 투자 계획을 세우는 투자자",
     recommendedRunnerMode: "hermes",
-    topic: "다음 주 한국·미국 주식시장 주요 일정과 투자자 체크리스트",
-    title: (date) => `${date} 다음 주 증시 일정과 체크포인트`,
+    topic: "다음 주 한국·미국 증시에 영향을 줄 경제 일정·실적·금리 변수",
+    title: (date) => `${date} 다음 주 증시를 움직일 일정과 핵심 변수`,
   },
 ];
 

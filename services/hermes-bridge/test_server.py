@@ -281,7 +281,29 @@ class VerifiedSchedulePromptTests(unittest.TestCase):
         self.assertIn("하루 앞뒤로 옮기지 말고", prompt)
         self.assertIn("내용 있는 문단 블록을 10개 이상", prompt)
         self.assertIn('"- " 불릿은 최소 5개', prompt)
+        self.assertIn("introduction 첫 3문장 안에서", prompt)
+        self.assertIn("usedSeoKeywords는 같은 뜻을 반복하지 않는 구체 검색어 5~8개", prompt)
+        self.assertIn("독자가 댓글로 답하기 쉬운 구체 질문", prompt)
         self.assertNotIn('첫 번째 sections 항목의 heading은 반드시 "데이터 기준"', prompt)
+
+    def test_planner_and_marketing_prompts_enforce_search_intent_titles(self) -> None:
+        payload = {
+            "input": {
+                "topic": "한국 증시 장전 브리핑",
+                "title": "26/07/29 한국 증시 장전 브리핑",
+                "channel": "blog",
+                "language": "ko",
+            },
+        }
+        planner_prompt = bridge.build_content_planner_prompt(payload)
+        marketing_prompt = bridge.build_marketing_review_prompt(payload)
+
+        self.assertIn("primary search intent", planner_prompt)
+        self.assertIn("제목은 날짜로 시작하지 않는다", planner_prompt)
+        self.assertIn("seoKeywords는 뜻이 겹치지 않는 구체 검색어 5~8개", planner_prompt)
+        self.assertIn("recommendedTitle은 날짜가 아니라 핵심 검색어로 시작", marketing_prompt)
+        self.assertIn('"7월 29일" 형식으로 제목 끝', marketing_prompt)
+        self.assertIn("최근 발행 제목과 다른 검색 질문", marketing_prompt)
 
     def test_writer_schema_lists_every_required_section(self) -> None:
         headings = [
@@ -332,6 +354,8 @@ class VerifiedSchedulePromptTests(unittest.TestCase):
         self.assertIn("URL을 공개 본문에 쓰라고 요구하지 않는다", prompt)
         self.assertIn("실제 활용한 신뢰 가능한 기사 정확히 3개", prompt)
         self.assertIn("지정된 투자 유의 문구가 cta에 정확히 한 번", prompt)
+        self.assertIn("finalTitle이 날짜나 포괄적인", prompt)
+        self.assertIn("usedSeoKeywords가 중복 없는 5~8개", prompt)
 
     def test_benchmark_guidelines_and_ninety_point_target_are_enforced(self) -> None:
         guidelines = ["본문은 소제목 6개 이상으로 구성합니다."]
