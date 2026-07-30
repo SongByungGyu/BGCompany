@@ -284,6 +284,8 @@ class VerifiedSchedulePromptTests(unittest.TestCase):
         self.assertIn("introduction 첫 3문장 안에서", prompt)
         self.assertIn("usedSeoKeywords는 같은 뜻을 반복하지 않는 구체 검색어 5~8개", prompt)
         self.assertIn("독자가 댓글로 답하기 쉬운 구체 질문", prompt)
+        self.assertIn('"- 기회: 설명" 또는 "- 위험: 설명"', prompt)
+        self.assertIn("독자용 데이터 범위 고지이므로 삭제하거나", prompt)
         self.assertNotIn('첫 번째 sections 항목의 heading은 반드시 "데이터 기준"', prompt)
 
     def test_planner_and_marketing_prompts_enforce_search_intent_titles(self) -> None:
@@ -356,6 +358,8 @@ class VerifiedSchedulePromptTests(unittest.TestCase):
         self.assertIn("지정된 투자 유의 문구가 cta에 정확히 한 번", prompt)
         self.assertIn("finalTitle이 날짜나 포괄적인", prompt)
         self.assertIn("usedSeoKeywords가 중복 없는 5~8개", prompt)
+        self.assertIn("내부 수집·분석 과정 노출로 판정하거나 삭제를 요구하지 않는다", prompt)
+        self.assertIn('각 불릿이 "- 기회:" 또는 "- 위험:"', prompt)
 
     def test_benchmark_guidelines_and_ninety_point_target_are_enforced(self) -> None:
         guidelines = ["본문은 소제목 6개 이상으로 구성합니다."]
