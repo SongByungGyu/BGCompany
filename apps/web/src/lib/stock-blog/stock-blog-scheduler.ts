@@ -24,6 +24,8 @@ export type StockBlogSchedulerRunnerMode = "mock" | "hermes-dry-run" | "hermes";
 export type StockBlogSchedulerRunStatus =
   | "not_due"
   | "disabled"
+  | "running"
+  | "deferred"
   | "skipped"
   | "already_ran"
   | "succeeded"
@@ -539,7 +541,7 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
     key,
     contentType,
     scheduledFor,
-    status: "skipped",
+    status: "running",
     summary: `${contentType} 자동 실행 시작`,
     payload: { phase: "started", runnerMode: config.runnerMode, attempt },
   });
@@ -554,7 +556,7 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
           contentType,
           scheduleKey: key,
           scheduledFor,
-          status: "skipped",
+          status: "deferred",
           attempt,
           reason: `Hermes 남은 횟수 부족: ${requiredRuns}회 필요, ${hermesUsageBefore.remaining}회 남음`,
           hermesUsageBefore,
@@ -563,8 +565,8 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
           key,
           contentType,
           scheduledFor,
-          status: "skipped",
-          summary: `${contentType} 자동 실행 건너뜀 · Hermes 한도 부족`,
+          status: "deferred",
+          summary: `${contentType} 자동 실행 대기 · Hermes 한도 부족`,
           payload: result as unknown as Prisma.InputJsonObject,
         });
         return result;
@@ -648,20 +650,35 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
   } catch (error) {
     const reason = error instanceof HermesDailyLimitExceededError ? error.message : error instanceof Error ? error.message : "알 수 없는 스케줄러 오류";
     const referencePreflightFailure = isStockReferencePreflightFailure(reason);
-    const result: StockBlogSchedulerRunResult = { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "failed", attempt, reason };
+    const capacityDeferred = error instanceof HermesDailyLimitExceededError;
+    const qualityGate = error && typeof error === "object" && "qualityGate" in error
+      ? (error as { qualityGate?: StockBlogQualityGateResult }).qualityGate
+      : undefined;
+    const result: StockBlogSchedulerRunResult = {
+      scheduleId: definition.scheduleId,
+      contentType,
+      scheduleKey: key,
+      scheduledFor,
+      status: capacityDeferred ? "deferred" : "failed",
+      attempt,
+      reason,
+      qualityGate,
+    };
     await writeSchedulerEvent({
       key,
       contentType,
       scheduledFor,
-      status: "failed",
-      summary: `${contentType} 자동 실행 실패`,
+      status: result.status,
+      summary: capacityDeferred
+        ? `${contentType} 자동 실행 대기 · Hermes 한도 부족`
+        : `${contentType} 자동 실행 실패`,
       payload: {
         ...(result as unknown as Prisma.InputJsonObject),
-        failurePhase: referencePreflightFailure ? "reference_preflight" : "runtime",
-        retryable: referencePreflightFailure,
+        failurePhase: referencePreflightFailure ? "reference_preflight" : capacityDeferred ? "capacity" : "runtime",
+        retryable: referencePreflightFailure || capacityDeferred,
       },
     });
-    if (config.autoPublish && !referencePreflightFailure) {
+    if (config.autoPublish && !referencePreflightFailure && !capacityDeferred) {
       await activateSchedulerPublishCircuitBreaker({ status: "failed", reason, scheduleKey: key });
     }
     return result;

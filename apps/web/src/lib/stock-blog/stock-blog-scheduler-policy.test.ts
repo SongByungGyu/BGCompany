@@ -136,3 +136,44 @@ test("재시도 지연이 지나기 전에는 남은 대기 시간을 반환한�
   assert.equal(decision.allowed, false);
   assert.match(decision.reason ?? "", /약 5분 후 가능/);
 });
+
+test("Hermes 용량 대기는 시도 횟수를 소진하지 않고 다시 실행한다", () => {
+  const decision = evaluateStockBlogSchedulerRetry({
+    exists: true,
+    status: "deferred",
+    previousAttempt: 3,
+    elapsedMs: 10 * 60 * 1000,
+    autoPublish: true,
+    autoPublishRetryLimit: 2,
+    maxRetries: 3,
+    retryDelayMinutes: 10,
+  });
+
+  assert.deepEqual(decision, { allowed: true, attempt: 3 });
+});
+
+test("중단된 running 실행은 30분 뒤 같은 시도로 복구한다", () => {
+  const waiting = evaluateStockBlogSchedulerRetry({
+    exists: true,
+    status: "running",
+    previousAttempt: 2,
+    elapsedMs: 20 * 60 * 1000,
+    autoPublish: true,
+    autoPublishRetryLimit: 2,
+    maxRetries: 3,
+    retryDelayMinutes: 10,
+  });
+  const recovered = evaluateStockBlogSchedulerRetry({
+    exists: true,
+    status: "running",
+    previousAttempt: 2,
+    elapsedMs: 30 * 60 * 1000,
+    autoPublish: true,
+    autoPublishRetryLimit: 2,
+    maxRetries: 3,
+    retryDelayMinutes: 10,
+  });
+
+  assert.equal(waiting.allowed, false);
+  assert.deepEqual(recovered, { allowed: true, attempt: 2 });
+});

@@ -51,8 +51,10 @@ export function evaluateStockBlogSchedulerRetry(
   input: StockBlogSchedulerRetryPolicyInput,
 ): StockBlogSchedulerRetryDecision {
   if (!input.exists) return { allowed: true, attempt: 1 };
+  const preserveAttempt = input.status === "deferred" || input.status === "running";
   const retryableStatus = input.status === "failed"
-    || (input.status === "partial_failed" && input.retryableGenerationFailure);
+    || (input.status === "partial_failed" && input.retryableGenerationFailure)
+    || preserveAttempt;
   if (!retryableStatus) {
     return {
       allowed: false,
@@ -69,7 +71,7 @@ export function evaluateStockBlogSchedulerRetry(
         input.retryableGenerationFailure ? 1 : 0,
       )
     : input.maxRetries;
-  if (input.previousAttempt >= maxAttempts) {
+  if (!preserveAttempt && input.previousAttempt >= maxAttempts) {
     return {
       allowed: false,
       attempt: input.previousAttempt,
@@ -77,7 +79,9 @@ export function evaluateStockBlogSchedulerRetry(
     };
   }
 
-  const delayMs = input.retryDelayMinutes * 60 * 1000;
+  const delayMs = input.status === "running"
+    ? Math.max(input.retryDelayMinutes, 30) * 60 * 1000
+    : input.retryDelayMinutes * 60 * 1000;
   // Scheduler ticks run on exact 10-minute boundaries, while the previous
   // attempt timestamp is written after collection finishes. Allow a small
   // alignment grace so a short failed collection does not postpone the next
@@ -96,5 +100,8 @@ export function evaluateStockBlogSchedulerRetry(
     };
   }
 
-  return { allowed: true, attempt: input.previousAttempt + 1 };
+  return {
+    allowed: true,
+    attempt: preserveAttempt ? input.previousAttempt : input.previousAttempt + 1,
+  };
 }

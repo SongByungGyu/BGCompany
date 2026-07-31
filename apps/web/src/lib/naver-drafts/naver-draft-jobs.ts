@@ -6,9 +6,11 @@ import type { ContentPipelineRun, StockBriefingTemplate } from "@/features/conte
 import type { CompetitorBlogReference, ReferenceBundle, ReferenceItem } from "@/lib/stock-blog/references/reference-types";
 import { buildStockBlogThumbnail, inferStockBriefingTemplateFromPipeline } from "@/lib/stock-blog/thumbnail-automation";
 import { evaluateStockBlogPublishQuality, getRealStockReferences } from "@/lib/stock-blog/quality-gate";
-import { FRED_DEGRADED_DISCLOSURE, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
+import { ensureFredDegradedDisclosure, FRED_DEGRADED_DISCLOSURE, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
+import { ensureKisSectorDegradedDisclosure, KIS_SECTOR_DEGRADED_DISCLOSURE, isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
 import { renderNaverBody, type NaverBodyBlock } from "@/lib/stock-blog/naver-body";
 import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
+import { evaluateNaverDraftSafeRetry, getNaverDraftSafeRetryLimit } from "@/lib/naver-drafts/naver-draft-retry-policy";
 import {
   appendRelatedPostSection,
   buildNaverDiscoveryTags,
@@ -360,9 +362,11 @@ function buildChecklist(template: StockBriefingTemplate) {
 
 function buildPlainBody(pipeline: ContentPipelineRun, template: StockBriefingTemplate, title: string, refs: ReferenceItem[]) {
   const copy = STOCK_BRIEFING_COPY[template];
-  const fredDisclosureBlocks: NaverBodyBlock[] = isAllowedFredDegradedSnapshot(
-    collectReferenceBundle(pipeline)?.marketSnapshot,
-  ) ? [{ type: "paragraph", text: FRED_DEGRADED_DISCLOSURE }] : [];
+  const snapshot = collectReferenceBundle(pipeline)?.marketSnapshot;
+  const marketDisclosureBlocks: NaverBodyBlock[] = [
+    ...(isAllowedFredDegradedSnapshot(snapshot) ? [{ type: "paragraph" as const, text: FRED_DEGRADED_DISCLOSURE }] : []),
+    ...(isAllowedKisSectorDegradedSnapshot(snapshot) ? [{ type: "paragraph" as const, text: KIS_SECTOR_DEGRADED_DISCLOSURE }] : []),
+  ];
   const blocks: NaverBodyBlock[] = [
     { type: "heading", text: title },
     { type: "heading", text: copy.introHeading },
@@ -380,7 +384,7 @@ function buildPlainBody(pipeline: ContentPipelineRun, template: StockBriefingTem
     ...refs.slice(0, 5).map<NaverBodyBlock>((item, index) => ({ type: "reference", item, index: index + 1 })),
     { type: "heading", text: "마무리" },
     { type: "paragraph", text: clean(pipeline.writerResult?.conclusion) || "시장은 매일 다른 신호를 주지만, 중요한 것은 방향을 단정하기보다 확인할 변수를 근거별로 줄여가는 것입니다." },
-    ...fredDisclosureBlocks,
+    ...marketDisclosureBlocks,
     { type: "disclaimer", text: INVESTMENT_DISCLAIMER },
   ];
   return sanitizeByTemplate(renderNaverBody(blocks), template);
@@ -453,8 +457,13 @@ function buildDraftFromPipeline(pipeline: ContentPipelineRun, publishedPosts: Pu
   const thumbnailPrompt = clean(thumbnail.thumbnailPrompt) || `네이버 블로그 썸네일, 깔끔한 금융 리포트 스타일, 제목: ${title}, 핵심 문구: ${thumbnailText}`;
   const refs = collectReferences(pipeline);
   const writerBody = buildWriterEditorialBody(pipeline, template);
-  const baseBody = pipeline.runnerMode === "hermes" && writerBody
-    ? writerBody
+  const snapshot = collectReferenceBundle(pipeline)?.marketSnapshot;
+  const disclosedWriterBody = ensureKisSectorDegradedDisclosure(
+    ensureFredDegradedDisclosure(writerBody, snapshot),
+    snapshot,
+  );
+  const baseBody = pipeline.runnerMode === "hermes" && disclosedWriterBody
+    ? disclosedWriterBody
     : buildPlainBody(pipeline, template, title, refs);
   const body = appendRelatedPostSection({
     body: baseBody,
@@ -581,6 +590,8 @@ export function getNaverDraftPolicy() {
 function automaticPublishBlockReasons(pipeline: ContentPipelineRun, body: string) {
   const bundle = collectReferenceBundle(pipeline);
   const snapshot = bundle?.marketSnapshot;
+  const allowedDegradedSnapshot = isAllowedFredDegradedSnapshot(snapshot)
+    || isAllowedKisSectorDegradedSnapshot(snapshot);
   const quality = evaluateStockBlogPublishQuality({
     pipeline,
     referenceBundle: bundle,
@@ -599,10 +610,10 @@ function automaticPublishBlockReasons(pipeline: ContentPipelineRun, body: string
   if ((pipeline.qaResult?.qaScore ?? 0) < STOCK_BLOG_EDITORIAL_QUALITY_TARGET) {
     reasons.push(`qa-auditor ${STOCK_BLOG_EDITORIAL_QUALITY_TARGET}점 이상 필요`);
   }
-  if ((bundle?.missingItems?.length ?? 0) > 0) reasons.push("Reference missingItems 존재");
+  if ((bundle?.missingItems?.length ?? 0) > 0 && !allowedDegradedSnapshot) reasons.push("Reference missingItems 존재");
   if ((bundle?.competitorAnalysis?.analyzedCount ?? 0) < 1) reasons.push("경쟁 블로그 심층 구조 분석 PASS 필요");
   if (snapshot?.status !== "ready") reasons.push("MarketSnapshot status=ready 필요");
-  if (snapshot?.dataQuality !== "verified") reasons.push("MarketSnapshot dataQuality=verified 필요");
+  if (snapshot?.dataQuality !== "verified" && !allowedDegradedSnapshot) reasons.push("MarketSnapshot dataQuality=verified 필요");
   if (snapshot?.freshness?.status !== "fresh") reasons.push("MarketSnapshot freshness=fresh 필요");
   if (snapshot?.fallbackUsed !== false) reasons.push("MarketSnapshot fallbackUsed=false 필요");
   if (pipeline.imageStatus !== "generated") reasons.push("imageStatus=generated 필요");
@@ -760,6 +771,72 @@ function maxClaimAgeDate() {
   return new Date(Date.now() - safeMinutes * 60 * 1000);
 }
 
+function safeRetryEventPayload(value: Prisma.JsonValue | undefined) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, Prisma.JsonValue>
+    : {};
+}
+
+async function scheduleSafeNaverDraftRetry(
+  job: NaverDraftJob,
+  input: Pick<StatusReportInput, "status" | "errorCode" | "errorMessage">,
+) {
+  const eventId = `event-naver-safe-retry-${job.id}`;
+  const existing = await prisma.eventLog.findUnique({ where: { id: eventId } });
+  const payload = safeRetryEventPayload(existing?.payload);
+  const retryCount = typeof payload.retryCount === "number" ? payload.retryCount : 0;
+  const decision = evaluateNaverDraftSafeRetry({
+    status: input.status,
+    allowPublish: job.allowPublish,
+    publishAttemptCount: job.publishAttemptCount,
+    retryCount,
+    retryLimit: getNaverDraftSafeRetryLimit(process.env.NAVER_DRAFT_SAFE_RETRY_LIMIT),
+  });
+  if (!decision.allowed) return null;
+
+  const now = new Date();
+  const [updated] = await prisma.$transaction([
+    prisma.naverDraftJob.update({
+      where: { id: job.id },
+      data: {
+        status: "queued",
+        claimedBy: null,
+        claimedAt: null,
+        startedAt: null,
+        completedAt: null,
+        errorCode: input.errorCode,
+        errorMessage: input.errorMessage,
+      },
+    }),
+    prisma.eventLog.upsert({
+      where: { id: eventId },
+      create: {
+        id: eventId,
+        type: "NaverDraftSafeRetryScheduled",
+        timestamp: now,
+        summary: `네이버 발행 전 오류 자동 재시도 ${decision.nextRetryCount}회차 예약`,
+        payload: {
+          jobId: job.id,
+          retryCount: decision.nextRetryCount,
+          previousStatus: input.status,
+          errorCode: input.errorCode ?? null,
+        },
+      },
+      update: {
+        timestamp: now,
+        summary: `네이버 발행 전 오류 자동 재시도 ${decision.nextRetryCount}회차 예약`,
+        payload: {
+          jobId: job.id,
+          retryCount: decision.nextRetryCount,
+          previousStatus: input.status,
+          errorCode: input.errorCode ?? null,
+        },
+      },
+    }),
+  ]);
+  return updated;
+}
+
 export async function getNextNaverDraftJob() {
   const staleBefore = maxClaimAgeDate();
   const job = await prisma.naverDraftJob.findFirst({
@@ -908,6 +985,8 @@ export async function reportNaverDraftJobStatus(jobId: string, input: StatusRepo
   if (input.status === "published" && (current.status !== "publishing" || !isAllowedPublishedUrl(input.publishedUrl))) {
     throw new Error("NAVER_PUBLISHED_RESULT_INVALID");
   }
+  const safeRetry = await scheduleSafeNaverDraftRetry(current, input);
+  if (safeRetry) return serializeNaverDraftJobWithPipeline(safeRetry);
   const data: Prisma.NaverDraftJobUpdateInput = {
     status: input.status,
     claimedBy: input.claimedBy,

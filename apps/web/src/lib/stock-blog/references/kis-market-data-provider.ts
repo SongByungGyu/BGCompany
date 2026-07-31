@@ -1,4 +1,11 @@
 import { asNumber, asRecord, asRecords, directionFromChange, makeSource, metricFromSource, parseDateTime } from "./market-data-utils";
+import {
+  getKisMinRequestIntervalMs,
+  KIS_MAX_RETRIES,
+  KIS_PROHIBITED_CAPABILITIES,
+  KIS_RETRYABLE_HTTP_STATUSES,
+  KIS_RETRYABLE_RESPONSE_CODES,
+} from "./kis-request-policy";
 import type { MarketSnapshot, MarketSnapshotMetric, MarketSnapshotSource, ReferenceSearchInput } from "./reference-types";
 
 const KIS_ALLOWED_REQUESTS = new Map<string, string>([
@@ -9,7 +16,6 @@ const KIS_ALLOWED_REQUESTS = new Map<string, string>([
 ] as const);
 
 const KIS_ALLOWED_HOSTS = new Set(["openapi.koreainvestment.com", "openapivts.koreainvestment.com"]);
-const KIS_RETRYABLE_HTTP_STATUSES = new Set([429, 500, 502, 503, 504]);
 const KIS_DOC_URL = "https://github.com/koreainvestment/open-trading-api";
 
 type KisStatus = MarketSnapshot["status"];
@@ -30,6 +36,9 @@ export type KisResult = {
 
 type KisToken = { value: string; expiresAt: number };
 let tokenCache: KisToken | undefined;
+let tokenRequest: Promise<KisToken> | undefined;
+let requestQueue: Promise<void> = Promise.resolve();
+let lastRequestStartedAt = 0;
 
 function requiredCredentials() {
   const appKey = process.env.KIS_APP_KEY?.trim();
@@ -51,12 +60,16 @@ function timeoutMs() {
 
 function maxRetries() {
   const parsed = Number.parseInt(process.env.KIS_MAX_RETRIES ?? "2", 10);
-  return Number.isFinite(parsed) ? Math.max(0, Math.min(parsed, 2)) : 2;
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(parsed, KIS_MAX_RETRIES)) : KIS_MAX_RETRIES;
 }
 
 function retryBaseDelayMs() {
   const parsed = Number.parseInt(process.env.KIS_RETRY_BASE_DELAY_MS ?? "500", 10);
   return Number.isFinite(parsed) ? Math.max(200, Math.min(parsed, 5000)) : 500;
+}
+
+function minRequestIntervalMs() {
+  return getKisMinRequestIntervalMs(process.env.KIS_MIN_REQUEST_INTERVAL_MS);
 }
 
 function retryDelayMs(attempt: number) {
@@ -65,6 +78,17 @@ function retryDelayMs(attempt: number) {
 
 function wait(delayMs: number) {
   return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+async function runPacedRequest<T>(request: () => Promise<T>) {
+  const run = requestQueue.then(async () => {
+    const remainingDelay = lastRequestStartedAt + minRequestIntervalMs() - Date.now();
+    if (remainingDelay > 0) await wait(remainingDelay);
+    lastRequestStartedAt = Date.now();
+    return request();
+  });
+  requestQueue = run.then(() => undefined, () => undefined);
+  return run;
 }
 
 function freshnessMinutes() {
@@ -79,28 +103,36 @@ function freshnessMinutes() {
 
 async function getAccessToken(credentials: { appKey: string; appSecret: string }) {
   if (tokenCache && tokenCache.expiresAt > Date.now() + 60000) return tokenCache.value;
-  const response = await fetch(`${baseUrl()}/oauth2/tokenP`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ grant_type: "client_credentials", appkey: credentials.appKey, appsecret: credentials.appSecret }),
-    signal: AbortSignal.timeout(timeoutMs()),
-  });
-  if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? "KIS_AUTH_FAILED" : `KIS_TOKEN_HTTP_${response.status}`);
-  const body = asRecord(await response.json());
-  const accessToken = typeof body?.access_token === "string" ? body.access_token : undefined;
-  if (!accessToken) throw new Error("KIS_TOKEN_PARSE_FAILED");
-  const expiresIn = asNumber(body?.expires_in) ?? 86400;
-  tokenCache = { value: accessToken, expiresAt: Date.now() + Math.max(300, expiresIn) * 1000 };
-  return accessToken;
+  if (!tokenRequest) {
+    tokenRequest = (async () => {
+      const response = await fetch(`${baseUrl()}/oauth2/tokenP`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ grant_type: "client_credentials", appkey: credentials.appKey, appsecret: credentials.appSecret }),
+        signal: AbortSignal.timeout(timeoutMs()),
+      });
+      if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? "KIS_AUTH_FAILED" : `KIS_TOKEN_HTTP_${response.status}`);
+      const body = asRecord(await response.json());
+      const accessToken = typeof body?.access_token === "string" ? body.access_token : undefined;
+      if (!accessToken) throw new Error("KIS_TOKEN_PARSE_FAILED");
+      const expiresIn = asNumber(body?.expires_in) ?? 86400;
+      return { value: accessToken, expiresAt: Date.now() + Math.max(300, expiresIn) * 1000 };
+    })();
+  }
+  try {
+    tokenCache = await tokenRequest;
+    return tokenCache.value;
+  } finally {
+    tokenRequest = undefined;
+  }
 }
 
 async function kisGet(path: string, trId: string, params: Record<string, string>, credentials: { appKey: string; appSecret: string }, token: string) {
   if (KIS_ALLOWED_REQUESTS.get(path) !== trId) throw new Error("KIS_QUERY_NOT_ALLOWLISTED");
   const url = new URL(path, baseUrl());
   for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
-  let response: Response | undefined;
   for (let attempt = 0; attempt <= maxRetries(); attempt += 1) {
-    response = await fetch(url, {
+    const response = await runPacedRequest(() => fetch(url, {
       headers: {
         authorization: `Bearer ${token}`,
         appkey: credentials.appKey,
@@ -109,24 +141,30 @@ async function kisGet(path: string, trId: string, params: Record<string, string>
         custtype: "P",
       },
       signal: AbortSignal.timeout(timeoutMs()),
-    });
-    if (response.ok || !KIS_RETRYABLE_HTTP_STATUSES.has(response.status) || attempt >= maxRetries()) break;
-    try { await response.body?.cancel(); } catch { /* response body contains no required data */ }
-    await wait(retryDelayMs(attempt));
+    }));
+    if (!response.ok) {
+      if (KIS_RETRYABLE_HTTP_STATUSES.has(response.status) && attempt < maxRetries()) {
+        try { await response.body?.cancel(); } catch { /* response body contains no required data */ }
+        await wait(retryDelayMs(attempt));
+        continue;
+      }
+      if (response.status === 401 || response.status === 403) throw new Error("KIS_AUTH_FAILED");
+      if (response.status === 429) throw new Error("KIS_RATE_LIMITED");
+      throw new Error(`KIS_HTTP_${response.status}`);
+    }
+    const body = asRecord(await response.json());
+    if (!body) throw new Error("KIS_PARSE_FAILED");
+    if (typeof body.rt_cd === "string" && body.rt_cd !== "0") {
+      const messageCode = typeof body.msg_cd === "string" ? body.msg_cd.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40) : "UNKNOWN";
+      if (KIS_RETRYABLE_RESPONSE_CODES.has(messageCode) && attempt < maxRetries()) {
+        await wait(retryDelayMs(attempt));
+        continue;
+      }
+      throw new Error(`KIS_RESPONSE_${messageCode}`);
+    }
+    return body;
   }
-  if (!response) throw new Error("KIS_UNKNOWN_ERROR");
-  if (!response.ok) {
-    if (response.status === 401 || response.status === 403) throw new Error("KIS_AUTH_FAILED");
-    if (response.status === 429) throw new Error("KIS_RATE_LIMITED");
-    throw new Error(`KIS_HTTP_${response.status}`);
-  }
-  const body = asRecord(await response.json());
-  if (!body) throw new Error("KIS_PARSE_FAILED");
-  if (typeof body.rt_cd === "string" && body.rt_cd !== "0") {
-    const messageCode = typeof body.msg_cd === "string" ? body.msg_cd.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40) : "UNKNOWN";
-    throw new Error(`KIS_RESPONSE_${messageCode}`);
-  }
-  return body;
+  throw new Error("KIS_RATE_LIMITED");
 }
 
 function safeDiagnostic(item: string, error: unknown): KisDiagnostic {
@@ -309,7 +347,9 @@ export const KIS_READ_ONLY_POLICY = {
   tokenPath: "/oauth2/tokenP",
   allowedRequests: Array.from(KIS_ALLOWED_REQUESTS.entries()).map(([path, trId]) => ({ path, trId })),
   retryableHttpStatuses: Array.from(KIS_RETRYABLE_HTTP_STATUSES),
-  maximumRetries: 2,
-  prohibitedCapabilities: ["order", "balance", "account", "position", "buy", "sell"],
+  retryableResponseCodes: Array.from(KIS_RETRYABLE_RESPONSE_CODES),
+  minimumRequestIntervalMs: getKisMinRequestIntervalMs(),
+  maximumRetries: KIS_MAX_RETRIES,
+  prohibitedCapabilities: KIS_PROHIBITED_CAPABILITIES,
   documentation: KIS_DOC_URL,
 } as const;
