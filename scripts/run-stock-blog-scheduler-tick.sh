@@ -43,7 +43,7 @@ BASE_URL="${BG_COMPANY_BASE_URL:-https://bgcompanyoffice.cloud}"
 
 {
   printf '[%s] scheduler tick start\n' "$(date --iso-8601=seconds)"
-  curl --fail --silent --show-error --max-time 900 \
+  curl --fail --silent --show-error --connect-timeout 20 --max-time 1800 \
     -X POST "$BASE_URL/api/stock-blog/scheduler" \
     -H "x-bg-agent-key: $AGENT_API_KEY"
   printf '\n[%s] scheduler tick complete\n' "$(date --iso-8601=seconds)"
