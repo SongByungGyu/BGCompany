@@ -946,9 +946,26 @@ async function fillNaverTags(page: import("playwright").Page, tags: string[]) {
   for (const selector of selectors) {
     const input = page.locator(selector).first();
     if (!(await input.count().catch(() => 0))) continue;
-    await input.fill(tags.map((tag) => tag.replace(/^#/, "")).join(","), { timeout: 10000 });
-    await page.keyboard.press("Enter").catch(() => undefined);
-    console.log(`[naver-agent] filled ${tags.length} tags.`);
+    const normalizedTags = tags.map((tag) => tag.replace(/^#/, "").trim()).filter(Boolean);
+    const publishLayer = page.locator('div[class*="layer_publish"]:visible').last();
+    for (const tag of normalizedTags) {
+      const existingText = await publishLayer.innerText().catch(() => "");
+      if (existingText.includes(tag)) continue;
+      await input.fill(tag, { timeout: 10000 });
+      await input.press("Enter");
+      await page.waitForTimeout(150);
+      if (await input.inputValue().catch(() => tag)) {
+        console.warn(`[naver-agent] tag was not committed: ${tag}`);
+        return false;
+      }
+    }
+    const confirmedText = await publishLayer.innerText().catch(() => "");
+    const missingTags = normalizedTags.filter((tag) => !confirmedText.includes(tag));
+    if (missingTags.length > 0) {
+      console.warn(`[naver-agent] tag chips were not confirmed: ${missingTags.join(",")}`);
+      return false;
+    }
+    console.log(`[naver-agent] committed and confirmed ${normalizedTags.length} tags.`);
     return true;
   }
   console.warn("[naver-agent] tag input was not found.");
