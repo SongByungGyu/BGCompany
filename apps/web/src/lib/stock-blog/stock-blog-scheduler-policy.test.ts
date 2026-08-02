@@ -1,11 +1,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  evaluateStockBlogRecoveryDate,
   evaluateStockBlogSchedulerRetry,
   isStockReferencePreflightFailure,
   shouldClearRecoverablePipelineCircuitBreaker,
   shouldClearReferencePreflightCircuitBreaker,
 } from "./stock-blog-scheduler-policy.ts";
+
+test("지난 7일 안의 올바른 요일 일정만 복구 대상으로 허용한다", () => {
+  assert.deepEqual(evaluateStockBlogRecoveryDate({
+    scheduledDate: "2026-08-01",
+    todayDate: "2026-08-02",
+    weekdays: [6],
+  }), { allowed: true });
+  assert.equal(evaluateStockBlogRecoveryDate({
+    scheduledDate: "2026-08-02",
+    todayDate: "2026-08-02",
+    weekdays: [6],
+  }).allowed, false);
+  assert.equal(evaluateStockBlogRecoveryDate({
+    scheduledDate: "2026-07-18",
+    todayDate: "2026-08-02",
+    weekdays: [6],
+  }).allowed, false);
+});
 
 test("시장 참고자료 사전검증 실패만 재시도 가능한 데이터 실패로 분류한다", () => {
   assert.equal(
@@ -119,6 +138,56 @@ test("자동발행 재시도 한도에 도달하면 추가 실행을 막는다",
   assert.equal(decision.allowed, false);
   assert.equal(decision.attempt, 2);
   assert.match(decision.reason ?? "", /재시도 한도 1회/);
+});
+
+test("인증된 수동 복구는 품질 실패 재시도 한도 뒤에도 한 번 더 실행한다", () => {
+  const decision = evaluateStockBlogSchedulerRetry({
+    exists: true,
+    status: "failed",
+    previousAttempt: 3,
+    elapsedMs: 60 * 60 * 1000,
+    autoPublish: true,
+    autoPublishRetryLimit: 2,
+    maxRetries: 3,
+    retryDelayMinutes: 10,
+    retryableGenerationFailure: true,
+    manualRecovery: true,
+  });
+
+  assert.deepEqual(decision, { allowed: true, attempt: 4 });
+});
+
+test("인증된 수동 복구의 추가 실행도 한 번으로 제한한다", () => {
+  const decision = evaluateStockBlogSchedulerRetry({
+    exists: true,
+    status: "failed",
+    previousAttempt: 4,
+    elapsedMs: 60 * 60 * 1000,
+    autoPublish: true,
+    autoPublishRetryLimit: 2,
+    maxRetries: 3,
+    retryDelayMinutes: 10,
+    retryableGenerationFailure: true,
+    manualRecovery: true,
+  });
+
+  assert.equal(decision.allowed, false);
+});
+
+test("인증된 수동 복구도 실제 발행 실패의 재시도 한도는 우회하지 않는다", () => {
+  const decision = evaluateStockBlogSchedulerRetry({
+    exists: true,
+    status: "failed",
+    previousAttempt: 3,
+    elapsedMs: 60 * 60 * 1000,
+    autoPublish: true,
+    autoPublishRetryLimit: 2,
+    maxRetries: 3,
+    retryDelayMinutes: 10,
+    manualRecovery: true,
+  });
+
+  assert.equal(decision.allowed, false);
 });
 
 test("재시도 지연이 지나기 전에는 남은 대기 시간을 반환한다", () => {

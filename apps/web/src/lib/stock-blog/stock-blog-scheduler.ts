@@ -7,6 +7,7 @@ import { createNaverDraftJobFromPipeline, getPublishCircuitBreaker } from "@/lib
 import type { StockBlogQualityGateResult } from "@/features/content-pipeline/content-pipeline-types";
 import { evaluateStockBlogPublishQuality } from "@/lib/stock-blog/quality-gate";
 import {
+  evaluateStockBlogRecoveryDate,
   evaluateStockBlogSchedulerRetry,
   isStockContentQualityFailure,
   isStockReferencePreflightFailure,
@@ -438,7 +439,12 @@ async function clearRecoverablePipelineCircuitBreaker(scheduleKey: string) {
   return true;
 }
 
-function retryState(existing: Awaited<ReturnType<typeof prisma.eventLog.findUnique>>, now: Date, config: StockBlogSchedulerConfig) {
+function retryState(
+  existing: Awaited<ReturnType<typeof prisma.eventLog.findUnique>>,
+  now: Date,
+  config: StockBlogSchedulerConfig,
+  manualRecovery = false,
+) {
   const payload = existing ? eventPayload(existing.payload) : {};
   const reason = typeof payload.reason === "string" ? payload.reason : "";
   const qualityGate = payload.qualityGate;
@@ -461,6 +467,7 @@ function retryState(existing: Awaited<ReturnType<typeof prisma.eventLog.findUniq
     retryDelayMinutes: config.retryDelayMinutes,
     referencePreflightFailure: isStockReferencePreflightFailure(reason),
     retryableGenerationFailure,
+    manualRecovery,
   });
 }
 
@@ -511,9 +518,15 @@ export async function getStockBlogSchedulerStatus(now = new Date()): Promise<Sto
   };
 }
 
-async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Date, config: StockBlogSchedulerConfig): Promise<StockBlogSchedulerRunResult> {
+async function runOneSchedule(
+  definition: StockBlogSchedulerDefinition,
+  now: Date,
+  config: StockBlogSchedulerConfig,
+  options: { scheduledAt?: Date; manualRecovery?: boolean } = {},
+): Promise<StockBlogSchedulerRunResult> {
   const contentType = definition.contentType;
-  const scheduledAt = getScheduledAtForParts(definition, getZonedParts(now, config.timezone), config.timezone);
+  const scheduledAt = options.scheduledAt
+    ?? getScheduledAtForParts(definition, getZonedParts(now, config.timezone), config.timezone);
   const key = scheduleKey(definition, scheduledAt);
   const id = schedulerEventId(key);
   const scheduledFor = scheduledAt.toISOString();
@@ -533,7 +546,7 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
   }
 
   const existing = await prisma.eventLog.findUnique({ where: { id } });
-  const retry = retryState(existing, now, config);
+  const retry = retryState(existing, now, config, options.manualRecovery);
   if (!retry.allowed) return { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "already_ran", attempt: retry.attempt, reason: retry.reason };
   const attempt = retry.attempt;
 
@@ -573,7 +586,7 @@ async function runOneSchedule(definition: StockBlogSchedulerDefinition, now: Dat
       }
     }
 
-    const pipeline = await startContentPipeline(buildPipelineInput(definition, config.runnerMode, now, config.timezone));
+    const pipeline = await startContentPipeline(buildPipelineInput(definition, config.runnerMode, scheduledAt, config.timezone));
     const approvalId = pipeline.approvalId ?? null;
     let naverDraftJobId: string | undefined;
     let status: StockBlogSchedulerRunStatus = "succeeded";
@@ -699,7 +712,11 @@ export async function runStockBlogSchedulerTick(now = new Date()) {
   return { ok: true, status: "processed" as const, config, results };
 }
 
-export async function runStockBlogSchedulerRecovery(scheduleId: string, now = new Date()) {
+export async function runStockBlogSchedulerRecovery(
+  scheduleId: string,
+  now = new Date(),
+  scheduledDate?: string,
+) {
   const config = getStockBlogSchedulerConfig();
   if (!config.enabled) {
     return {
@@ -724,8 +741,34 @@ export async function runStockBlogSchedulerRecovery(scheduleId: string, now = ne
   }
 
   const parts = getZonedParts(now, config.timezone);
-  const scheduledAt = getScheduledAtForParts(definition, parts, config.timezone);
-  if (!appliesOnWeekday(definition, parts.weekday) || scheduledAt > now) {
+  let scheduledAt = getScheduledAtForParts(definition, parts, config.timezone);
+  if (scheduledDate) {
+    const todayDate = `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
+    const recoveryDate = evaluateStockBlogRecoveryDate({
+      scheduledDate,
+      todayDate,
+      weekdays: definition.weekdays,
+      maxAgeDays: 7,
+    });
+    if (!recoveryDate.allowed) {
+      return {
+        ok: false,
+        status: "invalid_schedule_date" as const,
+        error: recoveryDate.reason,
+        config,
+        results: [] as StockBlogSchedulerRunResult[],
+      };
+    }
+    const [year, month, day] = scheduledDate.split("-").map(Number);
+    scheduledAt = getScheduledAtForParts(definition, {
+      ...parts,
+      year,
+      month,
+      day,
+      weekday: new Date(`${scheduledDate}T00:00:00Z`).getUTCDay(),
+    }, config.timezone);
+  }
+  if ((!scheduledDate && !appliesOnWeekday(definition, parts.weekday)) || scheduledAt > now) {
     return {
       ok: true,
       status: "not_due" as const,
@@ -734,7 +777,10 @@ export async function runStockBlogSchedulerRecovery(scheduleId: string, now = ne
     };
   }
 
-  const result = await runOneSchedule(definition, now, config);
+  const result = await runOneSchedule(definition, now, config, {
+    scheduledAt,
+    manualRecovery: true,
+  });
   return {
     ok: true,
     status: "processed" as const,

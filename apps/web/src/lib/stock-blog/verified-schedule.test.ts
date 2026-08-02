@@ -60,6 +60,39 @@ test("일정 섹션 밖에 남은 잘못된 날짜를 QA 전에 차단한다", (
   assert.match(applied.validation.issues.join("\n"), /2026-07-20.*2026-07-19/);
 });
 
+test("같은 이름의 일정이 여러 날짜에 있으면 모두 유효한 검증값으로 처리한다", () => {
+  const applied = applyVerifiedSchedule(writerResult([
+    { heading: "다음 주 주요 일정", body: "2026-08-01 및 2026-08-02 FOMC Press Release를 확인합니다." },
+  ]), snapshot({
+    marketDate: "2026-08-01",
+    upcoming: [
+      { date: "2026-08-01", event: "FOMC Press Release", market: "US", url: "https://example.com/aug-1" },
+      { date: "2026-08-02", event: "FOMC Press Release", market: "US", url: "https://example.com/aug-2" },
+    ],
+  }));
+
+  assert.equal(applied.validation.ok, true);
+  assert.equal(applied.validation.checkedEventCount, 2);
+  assert.match(String(applied.result.fullDraft), /8월 1일 토요일: FOMC Press Release/);
+  assert.match(String(applied.result.fullDraft), /8월 2일 일요일: FOMC Press Release/);
+});
+
+test("같은 이름의 일정이어도 검증값에 없는 날짜는 차단한다", () => {
+  const applied = applyVerifiedSchedule(writerResult([
+    { heading: "다음 주 주요 일정", body: "2026-08-01 및 2026-08-02 FOMC Press Release를 확인합니다." },
+    { heading: "관찰 포인트", body: "FOMC Press Release는 8월 3일 발표될 예정입니다." },
+  ]), snapshot({
+    marketDate: "2026-08-01",
+    upcoming: [
+      { date: "2026-08-01", event: "FOMC Press Release", market: "US", url: "https://example.com/aug-1" },
+      { date: "2026-08-02", event: "FOMC Press Release", market: "US", url: "https://example.com/aug-2" },
+    ],
+  }));
+
+  assert.equal(applied.validation.ok, false);
+  assert.match(applied.validation.issues.join("\n"), /2026-08-03.*2026-08-01, 2026-08-02/);
+});
+
 test("검증 일정의 원문 URL이 없으면 차단한다", () => {
   const applied = applyVerifiedSchedule(writerResult([
     { heading: "데이터 기준", body: "시장 데이터의 기준일은 2026-07-19입니다." },

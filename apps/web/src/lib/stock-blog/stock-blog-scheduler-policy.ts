@@ -15,6 +15,12 @@ export type StockBlogSchedulerRetryPolicyInput = {
   retryDelayMinutes: number;
   referencePreflightFailure?: boolean;
   retryableGenerationFailure?: boolean;
+  manualRecovery?: boolean;
+};
+
+export type StockBlogRecoveryDateDecision = {
+  allowed: boolean;
+  reason?: string;
 };
 
 const STOCK_REFERENCE_PREFLIGHT_PREFIX = "STOCK_REFERENCE_PREFLIGHT_BLOCKED:";
@@ -47,6 +53,34 @@ export function shouldClearRecoverablePipelineCircuitBreaker(input: {
   );
 }
 
+export function evaluateStockBlogRecoveryDate(input: {
+  scheduledDate: string;
+  todayDate: string;
+  weekdays: number[];
+  maxAgeDays?: number;
+}): StockBlogRecoveryDateDecision {
+  const parseDate = (value: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+    const date = new Date(`${value}T00:00:00Z`);
+    if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) return null;
+    return date;
+  };
+  const scheduled = parseDate(input.scheduledDate);
+  const today = parseDate(input.todayDate);
+  if (!scheduled || !today) {
+    return { allowed: false, reason: "scheduledDate는 YYYY-MM-DD 형식의 유효한 날짜여야 합니다." };
+  }
+  if (!input.weekdays.includes(scheduled.getUTCDay())) {
+    return { allowed: false, reason: "해당 날짜는 이 스케줄의 실행 요일이 아닙니다." };
+  }
+  const ageDays = Math.floor((today.getTime() - scheduled.getTime()) / 86_400_000);
+  if (ageDays < 0) return { allowed: false, reason: "미래 일정은 복구 실행할 수 없습니다." };
+  if (ageDays > (input.maxAgeDays ?? 7)) {
+    return { allowed: false, reason: `최근 ${input.maxAgeDays ?? 7}일 이내 일정만 복구할 수 있습니다.` };
+  }
+  return { allowed: true };
+}
+
 export function evaluateStockBlogSchedulerRetry(
   input: StockBlogSchedulerRetryPolicyInput,
 ): StockBlogSchedulerRetryDecision {
@@ -71,6 +105,15 @@ export function evaluateStockBlogSchedulerRetry(
         input.retryableGenerationFailure ? 1 : 0,
       )
     : input.maxRetries;
+  const manualRecoveryAllowed = input.manualRecovery
+    && input.status !== "running"
+    && input.status !== "deferred"
+    && (input.referencePreflightFailure || input.retryableGenerationFailure)
+    && input.previousAttempt < maxAttempts + 1;
+  if (manualRecoveryAllowed) {
+    return { allowed: true, attempt: input.previousAttempt + 1 };
+  }
+
   if (!preserveAttempt && input.previousAttempt >= maxAttempts) {
     return {
       allowed: false,

@@ -263,17 +263,30 @@ function validateSchedule(input: {
   const publishableText = [title, metaDescription, fullDraft].filter(Boolean).join("\n");
   const segments = publishableText.split(/\n+|(?<=[.!?。])\s+/).map((item) => item.trim()).filter(Boolean);
 
+  const eventsByName = new Map<string, { event: string; dates: Set<string> }>();
   for (const item of input.events) {
     const readableDate = koreanScheduleDate(item.date);
     if (!input.scheduleBody.includes(readableDate) || !input.scheduleBody.includes(item.event)) {
       issues.push(`${item.date} ${item.event}: 고정 일정 블록의 날짜·이벤트명이 일치하지 않습니다.`);
     }
-    const expectedYear = item.date.slice(0, 4);
+    const normalizedEvent = item.event.toLowerCase();
+    const grouped = eventsByName.get(normalizedEvent) ?? {
+      event: item.event,
+      dates: new Set<string>(),
+    };
+    grouped.dates.add(item.date);
+    eventsByName.set(normalizedEvent, grouped);
+  }
+
+  for (const [normalizedEvent, grouped] of eventsByName) {
+    const expectedDates = [...grouped.dates].sort();
+    const expectedYear = expectedDates[0]?.slice(0, 4) ?? String(new Date().getUTCFullYear());
     for (const segment of segments) {
-      if (!segment.toLowerCase().includes(item.event.toLowerCase())) continue;
+      if (!segment.toLowerCase().includes(normalizedEvent)) continue;
       const mentionedDates = extractDates(segment, expectedYear);
-      if (mentionedDates.length > 0 && !mentionedDates.includes(item.date)) {
-        issues.push(`${item.event}: 본문의 날짜 ${mentionedDates.join(", ")}가 검증값 ${item.date}와 다릅니다.`);
+      const unexpectedDates = mentionedDates.filter((date) => !grouped.dates.has(date));
+      if (unexpectedDates.length > 0) {
+        issues.push(`${grouped.event}: 본문의 날짜 ${unexpectedDates.join(", ")}가 검증값 ${expectedDates.join(", ")}와 다릅니다.`);
         break;
       }
     }
