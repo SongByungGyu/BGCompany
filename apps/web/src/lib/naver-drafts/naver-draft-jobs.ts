@@ -5,6 +5,7 @@ import { getContentPipelineDetail } from "@/lib/content-pipeline/content-pipelin
 import type { ContentPipelineRun, StockBriefingTemplate } from "@/features/content-pipeline/content-pipeline-types";
 import type { CompetitorBlogReference, ReferenceBundle, ReferenceItem } from "@/lib/stock-blog/references/reference-types";
 import { buildStockBlogThumbnail, inferStockBriefingTemplateFromPipeline } from "@/lib/stock-blog/thumbnail-automation";
+import { resolveStockBriefingNaverCategory } from "@/lib/naver-drafts/naver-category";
 import { evaluateStockBlogPublishQuality, getRealStockReferences } from "@/lib/stock-blog/quality-gate";
 import { ensureFredDegradedDisclosure, FRED_DEGRADED_DISCLOSURE, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import { ensureKisSectorDegradedDisclosure, KIS_SECTOR_DEGRADED_DISCLOSURE, isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
@@ -160,7 +161,7 @@ const STOCK_BRIEFING_COPY: Record<StockBriefingTemplate, {
 }> = {
   KOREA_DAILY_PREVIEW: {
     fallbackTitle: "오늘의 한국 증시 장전 브리핑",
-    category: "주식시장 브리핑",
+    category: "오늘의 한국장 전망",
     introHeading: "① 오늘 장을 보기 전 한 줄 요약",
     headings: [
       "② 전일 해외시장과 오늘 한국장 연결고리",
@@ -174,7 +175,7 @@ const STOCK_BRIEFING_COPY: Record<StockBriefingTemplate, {
   },
   KOREA_MARKET_CLOSE_US_PREVIEW: {
     fallbackTitle: "오늘 한국 증시 마감 정리와 미국장 체크포인트",
-    category: "주식시장 브리핑",
+    category: "오늘의 미국장 전망",
     introHeading: "① 오늘 한국장 마감 한 줄 요약",
     headings: [
       "② 코스피·코스닥 흐름",
@@ -188,7 +189,7 @@ const STOCK_BRIEFING_COPY: Record<StockBriefingTemplate, {
   },
   WEEKLY_MARKET_REVIEW: {
     fallbackTitle: "이번 주 한국·미국 증시 주간 정리",
-    category: "주식시장 브리핑",
+    category: "주간 시장 정리",
     introHeading: "① 이번 주 시장 한 줄 요약",
     headings: [
       "② 한국 증시 주간 흐름",
@@ -202,7 +203,7 @@ const STOCK_BRIEFING_COPY: Record<StockBriefingTemplate, {
   },
   NEXT_WEEK_MARKET_PREVIEW: {
     fallbackTitle: "다음 주 증시 일정과 체크포인트",
-    category: "주식시장 브리핑",
+    category: "차주 시장 전망",
     introHeading: "① 다음 주 시장을 보기 전 한 줄 요약",
     headings: [
       "② 다음 주 주요 일정",
@@ -510,7 +511,10 @@ function buildDraftFromPipeline(pipeline: ContentPipelineRun, publishedPosts: Pu
     markdownBody: buildMarkdownBody(title, body),
     htmlBody: toHtml(body),
     tags,
-    category: pipeline.naverBlogPublishPrep?.naverCategory ?? copy.category,
+    category: resolveStockBriefingNaverCategory(
+      template,
+      pipeline.naverBlogPublishPrep?.naverCategory ?? copy.category,
+    ),
     thumbnailText,
     thumbnailPrompt,
     disclaimer: INVESTMENT_DISCLAIMER,

@@ -7,6 +7,7 @@ import {
   normalizeNaverCategoryLabel,
   pickMostReadableEditorText,
   prepareNaverPublicationBody,
+  resolveNaverPublishCategory,
   savedDraftTitleMatchToken,
   selectNaverArticleUrls,
   selectNaverEmphasisParagraphs,
@@ -16,6 +17,14 @@ import {
 test("네이버 하위 카테고리 표시 문구를 실제 카테고리명으로 정규화한다", () => {
   assert.equal(normalizeNaverCategoryLabel("하위 카테고리 투자 공부"), "투자공부");
   assert.equal(normalizeNaverCategoryLabel("투자 공부"), "투자공부");
+});
+
+test("기존 논리 카테고리를 예약 시간별 네이버 실제 카테고리로 변환한다", () => {
+  assert.equal(resolveNaverPublishCategory("주식시장 브리핑", "07:20"), "오늘의 한국장 전망");
+  assert.equal(resolveNaverPublishCategory("주식시장 브리핑", "17:00"), "오늘의 미국장 전망");
+  assert.equal(resolveNaverPublishCategory("주식시장 브리핑", "09:00"), "주간 시장 정리");
+  assert.equal(resolveNaverPublishCategory("주식시장 브리핑", "19:00"), "차주 시장 전망");
+  assert.equal(resolveNaverPublishCategory("투자 공부", "17:00"), "투자 공부");
 });
 
 function reconstruct(steps: ReturnType<typeof buildMultilineEditorInputSteps>) {

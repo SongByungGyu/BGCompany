@@ -188,6 +188,16 @@ export function normalizeNaverCategoryLabel(value: string) {
   return value.replace(/\s+/g, "").replace(/^하위카테고리/, "");
 }
 
+export function resolveNaverPublishCategory(category?: string | null, scheduleSlot?: string | null) {
+  if (normalizeNaverCategoryLabel(category ?? "") !== "주식시장브리핑") return category?.trim() || null;
+  const slot = scheduleSlot?.trim() ?? "";
+  if (["07:20", "08:30"].includes(slot)) return "오늘의 한국장 전망";
+  if (slot === "17:00") return "오늘의 미국장 전망";
+  if (slot === "09:00") return "주간 시장 정리";
+  if (slot === "19:00") return "차주 시장 전망";
+  return "주식 정보 공유";
+}
+
 export function prepareNaverPublicationBody(value: string) {
   return normalizeEditorText(value)
     .replace(
@@ -1015,7 +1025,7 @@ function isPublishedNaverUrl(value: string, writeUrl: string) {
   }
 }
 
-async function clickNaverPublish(page: import("playwright").Page, writeUrl: string, tags: string[], category?: string | null) {
+async function prepareNaverPublishDialog(page: import("playwright").Page, writeUrl: string, tags: string[], category?: string | null) {
   const publishSelectors = [
     'button:has-text("발행")',
     '[role="button"]:has-text("발행")',
@@ -1036,7 +1046,7 @@ async function clickNaverPublish(page: import("playwright").Page, writeUrl: stri
 
   await page.waitForTimeout(1500);
   if (isPublishedNaverUrl(page.url(), writeUrl)) {
-    return { publishedUrl: page.url(), naverPostId: naverPostIdFromUrl(page.url()) };
+    throw new Error("NAVER_UNEXPECTED_DIRECT_PUBLISH");
   }
   if (category?.trim()) {
     const normalizedCategory = normalizeNaverCategoryLabel(category);
@@ -1062,6 +1072,9 @@ async function clickNaverPublish(page: import("playwright").Page, writeUrl: stri
     console.log(`[naver-agent] category confirmed: ${category}`);
   }
   if (!(await fillNaverTags(page, tags))) throw new Error("NAVER_TAG_INPUT_NOT_FOUND");
+}
+
+async function confirmNaverPublish(page: import("playwright").Page, writeUrl: string) {
   const confirmationSelectors = [
     'div[class*="layer_publish"] button[class*="confirm_btn"]',
     'button[class*="confirm_btn"]',
@@ -1366,6 +1379,21 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
       if (!allowPublish) return { status: "draft_saved", externalUrl: page.url() };
 
       await context.reportProgress?.({ status: "publish_ready", externalUrl: page.url() });
+      try {
+        await prepareNaverPublishDialog(
+          page,
+          writeUrl,
+          job.tags,
+          resolveNaverPublishCategory(job.category, job.scheduleSlot),
+        );
+      } catch (error) {
+        return {
+          status: "failed",
+          externalUrl: page.url(),
+          errorCode: "NAVER_PUBLISH_PREP_FAILED",
+          errorMessage: error instanceof Error ? error.message : String(error),
+        };
+      }
       const publishGate = await context.beginPublish?.();
       if (!publishGate?.allowed) {
         return {
@@ -1376,7 +1404,7 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
         };
       }
       try {
-        const published = await clickNaverPublish(page, writeUrl, job.tags, job.category);
+        const published = await confirmNaverPublish(page, writeUrl);
         return { status: "published", externalUrl: published.publishedUrl, ...published };
       } catch (error) {
         return {
