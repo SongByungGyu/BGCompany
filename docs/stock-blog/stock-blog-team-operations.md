@@ -29,7 +29,7 @@ BG Company의 주식 블로그 운영은 네이버 블로그 수동 발행을 �
 
 | 시간 | 콘텐츠 타입 | 목적 |
 |---|---|---|
-| 평일 08:30 KST | KOREA_DAILY_PREVIEW | 금일 한국장 현황/전망 |
+| 평일 07:20 KST 생성 시작·08:20 이전 발행 | KOREA_DAILY_PREVIEW | 금일 한국장 전망 |
 | 평일 17:00 KST | KOREA_MARKET_CLOSE_US_PREVIEW | 한국장 마감 + 미국장 프리뷰 |
 | 토요일 09:00 KST | WEEKLY_MARKET_REVIEW | 한국·미국 주간 시장 정리 |
 | 일요일 19:00 KST | NEXT_WEEK_MARKET_PREVIEW | 다음 주 시장 프리뷰 |

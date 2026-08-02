@@ -18,6 +18,7 @@ import type { BlogImagePrompt, ReferenceBundle, StockReferenceBriefingTemplate }
 import type { StockBlogContentImage, StockBlogImageQualityAudit } from "@/lib/stock-blog/stock-blog-image-types";
 import {
   buildRecentTitleAvoidanceGuideline,
+  getStockBlogSearchIntentGuidelines,
   STOCK_BLOG_DISCOVERY_GUIDELINES,
 } from "@/lib/stock-blog/stock-blog-discovery";
 import type { ContentChannel, ContentPipelineDetail, ContentPipelineRun, ContentPipelineStatus } from "@/features/content-pipeline/content-pipeline-types";
@@ -330,11 +331,12 @@ async function enrichContentPipelineInput(input: ContentPipelineInput): Promise<
   const recentTitleGuideline = buildRecentTitleAvoidanceGuideline(recentPublishedTitles.map((post) => post.title));
   const editorialBenchmarkGuidelines = Array.from(new Set([
     ...STOCK_BLOG_DISCOVERY_GUIDELINES,
+    ...getStockBlogSearchIntentGuidelines(contentType),
     ...(recentTitleGuideline ? [recentTitleGuideline] : []),
     ...(input.editorialBenchmarkGuidelines ?? []),
     ...currentGuidelines,
     ...historicalGuidelines,
-  ])).slice(0, 10);
+  ])).slice(0, 12);
   return { ...input, referenceBundle, blogImagePrompts, editorialBenchmarkGuidelines };
 }
 

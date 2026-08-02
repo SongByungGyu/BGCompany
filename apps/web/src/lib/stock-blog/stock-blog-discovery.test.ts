@@ -4,6 +4,8 @@ import {
   appendRelatedPostSection,
   buildNaverDiscoveryTags,
   buildRecentTitleAvoidanceGuideline,
+  getStockBlogSearchIntentGuidelines,
+  inspectPublishedPostSimilarity,
   selectRelatedPublishedPosts,
 } from "./stock-blog-discovery.ts";
 
@@ -42,4 +44,37 @@ test("최근 발행 제목 회피 가이드는 최대 6개 제목만 포함한�
   const guideline = buildRecentTitleAvoidanceGuideline(Array.from({ length: 8 }, (_, index) => `제목 ${index + 1}`));
   assert.match(guideline ?? "", /제목 6/);
   assert.doesNotMatch(guideline ?? "", /제목 7/);
+});
+
+test("장전과 마감 글은 서로 다른 1차 검색 의도를 갖는다", () => {
+  assert.match(getStockBlogSearchIntentGuidelines("KOREA_DAILY_PREVIEW").join(" "), /오늘 코스피 전망/);
+  assert.match(getStockBlogSearchIntentGuidelines("KOREA_MARKET_CLOSE_US_PREVIEW").join(" "), /오늘 코스피 마감 원인/);
+});
+
+test("최근 글과 제목·본문이 사실상 같은 원고는 차단한다", () => {
+  const repeatedBody = "외국인 수급과 원달러 환율을 확인합니다. 반도체 주도 업종의 거래대금을 점검합니다. ".repeat(20);
+  const result = inspectPublishedPostSimilarity({
+    title: "오늘 코스피 마감 원인과 외국인 수급｜8월 3일",
+    body: repeatedBody,
+    posts: [{
+      title: "오늘 코스피 마감 원인과 외국인 수급｜8월 2일",
+      body: repeatedBody,
+      url: "https://blog.naver.com/bgmarketnote/3",
+    }],
+  });
+  assert.equal(result.blocked, true);
+  assert.equal(result.bodySimilarity, 1);
+});
+
+test("주제가 다른 최근 글은 유사 콘텐츠로 차단하지 않는다", () => {
+  const result = inspectPublishedPostSimilarity({
+    title: "원달러 환율 상승이 반도체 수출주에 미치는 영향｜8월 3일",
+    body: "원달러 환율과 수출 채산성, 외국인 수급의 관계를 단계별로 살펴봅니다. ".repeat(12),
+    posts: [{
+      title: "미국 CPI 발표 일정과 나스닥 금리 변수｜8월 2일",
+      body: "미국 소비자물가지수 발표 시간과 국채 금리, 성장주 밸류에이션을 점검합니다. ".repeat(12),
+      url: "https://blog.naver.com/bgmarketnote/4",
+    }],
+  });
+  assert.equal(result.blocked, false);
 });

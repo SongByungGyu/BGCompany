@@ -10,7 +10,31 @@ const DEFAULT_HOOKS: Record<StockBriefingTemplate, string> = {
 const PROHIBITED_TITLE_EXPRESSIONS = ["급등 확정", "무조건 상승", "매수 추천", "수익 보장", "상한가 확정", "폭등", "몰빵"];
 const MARKET_TITLE_PATTERN = /(?:증시|시장|한국장|미국장|코스피|코스닥|나스닥|S&P\s*500)/i;
 const LEADING_DATE_PATTERN = /^(?:(?:20)?\d{2}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}\/\d{1,2}|20\d{2}년\s*\d{1,2}월\s*\d{1,2}일)\s*/;
-const TRAILING_DATE_PATTERN = /\s*[|｜·\-–—]?\s*(?:20\d{2}년\s*)?\d{1,2}월\s*\d{1,2}일(?:\s*기준)?\s*$/;
+const TRAILING_DATE_PATTERN = /(?:\s*[|｜·\-–—]?\s*(?:(?:20\d{2}년\s*)?\d{1,2}월\s*\d{1,2}일(?:\s*기준)?|\d{1,2}월\s*\d{1,2}주차))+\s*$/;
+const TITLE_GENERIC_TOKENS = new Set([
+  "오늘",
+  "이번",
+  "다음",
+  "한국",
+  "미국",
+  "증시",
+  "시장",
+  "주식",
+  "전망",
+  "정리",
+  "브리핑",
+  "핵심",
+  "변수",
+  "기준",
+  "주차",
+]);
+
+const TEMPLATE_INTENT_TERMS: Record<StockBriefingTemplate, string[]> = {
+  KOREA_DAILY_PREVIEW: ["오늘", "한국장", "코스피", "장전", "환율", "수급"],
+  KOREA_MARKET_CLOSE_US_PREVIEW: ["마감", "원인", "외국인", "수급", "미국장", "나스닥"],
+  WEEKLY_MARKET_REVIEW: ["주간", "이번 주", "수급", "주도 업종", "변화"],
+  NEXT_WEEK_MARKET_PREVIEW: ["다음 주", "일정", "실적", "경제지표", "리스크"],
+};
 
 function removeProhibitedExpressions(value: string) {
   let result = value;
@@ -52,6 +76,37 @@ function stripDecorativeDate(value: string) {
     .trim();
 }
 
+function comparisonTokens(value: string) {
+  return new Set(stripDecorativeDate(value)
+    .toLocaleLowerCase("ko-KR")
+    .split(/[^0-9a-z가-힣]+/i)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2 && !TITLE_GENERIC_TOKENS.has(token)));
+}
+
+function jaccardSimilarity(left: Set<string>, right: Set<string>) {
+  if (left.size === 0 || right.size === 0) return 0;
+  const intersection = [...left].filter((token) => right.has(token)).length;
+  return intersection / (left.size + right.size - intersection);
+}
+
+function scoreTitle(input: {
+  title: string;
+  template: StockBriefingTemplate;
+  recentTitles: string[];
+}) {
+  const core = stripDecorativeDate(input.title);
+  const tokens = comparisonTokens(core);
+  const intentMatches = TEMPLATE_INTENT_TERMS[input.template].filter((term) => core.includes(term)).length;
+  const specificitySignals = (core.match(/\d+(?:\.\d+)?%?|원달러|외국인|기관|환율|금리|실적|수급|반도체|코스피|코스닥|나스닥/g) ?? []).length;
+  const strongestRecentSimilarity = input.recentTitles.reduce((max, recentTitle) => (
+    Math.max(max, jaccardSimilarity(tokens, comparisonTokens(recentTitle)))
+  ), 0);
+  const lengthPenalty = core.length < 18 ? 12 : core.length > 62 ? 8 : 0;
+  const duplicatePenalty = strongestRecentSimilarity >= 0.8 ? 70 : strongestRecentSimilarity * 35;
+  return Math.round((50 + Math.min(18, intentMatches * 4) + Math.min(18, specificitySignals * 3) - lengthPenalty - duplicatePenalty) * 10) / 10;
+}
+
 function withDateSuffix(value: string, suffix: string) {
   const cleanValue = value.replace(/[|｜·:\-–—\s]+$/, "").trim();
   const maxCoreLength = Math.max(20, 78 - suffix.length - 3);
@@ -87,4 +142,46 @@ export function buildStockBlogEditorialTitle(input: {
   if (sourceTitle.length >= 15 && MARKET_TITLE_PATTERN.test(sourceTitle)) return withDateSuffix(sourceTitle, suffix);
   const prefix = baseTitle(input.template);
   return withDateSuffix(`${prefix}｜${cleanHook(sourceTitle, input.template)}`, suffix);
+}
+
+export type StockBlogTitleCandidateScore = {
+  title: string;
+  score: number;
+};
+
+export function selectBestStockBlogEditorialTitle(input: {
+  template: StockBriefingTemplate;
+  marketDate?: string;
+  candidates: Array<string | null | undefined>;
+  recentTitles?: string[];
+}) {
+  const recentTitles = input.recentTitles ?? [];
+  const seen = new Set<string>();
+  const candidates = input.candidates
+    .map((sourceTitle) => buildStockBlogEditorialTitle({
+      template: input.template,
+      marketDate: input.marketDate,
+      sourceTitle: sourceTitle ?? "",
+    }))
+    .filter((title) => {
+      const key = title.toLocaleLowerCase("ko-KR").replace(/[\s|｜·:\-–—]+/g, "");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 3)
+    .map((title) => ({
+      title,
+      score: scoreTitle({ title, template: input.template, recentTitles }),
+    }))
+    .sort((left, right) => right.score - left.score);
+
+  const fallbackTitle = buildStockBlogEditorialTitle({
+    template: input.template,
+    marketDate: input.marketDate,
+  });
+  return {
+    title: candidates[0]?.title ?? fallbackTitle,
+    candidates,
+  };
 }

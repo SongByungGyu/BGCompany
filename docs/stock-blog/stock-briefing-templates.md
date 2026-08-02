@@ -6,8 +6,8 @@ The templates are deterministic preparation rules. They do not fetch live market
 
 ## 1. KOREA_DAILY_PREVIEW
 
-- Schedule: every day at 08:30 KST
-- Recommended writing window: 08:00-08:20 KST
+- Schedule: weekdays, generation starts at 07:20 KST and publishing targets before 08:20 KST
+- Recommended writing window: 07:20-08:20 KST
 - Purpose: today's Korean stock market status and outlook
 - Recommended Naver category: 오늘의 한국장 전망
 
@@ -19,6 +19,7 @@ Required sections:
 - 오늘의 주요 변수
 - 코스피·코스닥 예상 흐름
 - 주목 섹터
+- BG Market Note 판단
 - 리스크 요인
 - 투자자 체크리스트
 - 투자 유의문구
@@ -54,6 +55,7 @@ Required sections:
 - 환율/금리/유가 체크
 - 미국 선물 흐름
 - 오늘 밤 미장 체크포인트
+- BG Market Note 판단
 - 리스크 요인
 - 투자자 체크리스트
 - 투자 유의문구
@@ -87,6 +89,7 @@ Required sections:
 - 주요 상승/하락 섹터
 - 주요 뉴스/이벤트
 - 다음 주로 이어질 포인트
+- BG Market Note 판단
 - 리스크 요인
 - 투자자 체크리스트
 - 투자 유의문구
@@ -118,6 +121,7 @@ Required sections:
 - 기업 실적 일정
 - FOMC/CPI/고용지표 등 주요 이벤트
 - 관심 섹터
+- BG Market Note 판단
 - 리스크 시나리오
 - 투자자 체크리스트
 - 투자 유의문구
@@ -138,6 +142,8 @@ Default tags:
 ## Title policy
 
 Good titles should be click-worthy but not sensational.
+
+Marketing review must produce exactly three search-intent title candidates and select one after scoring specificity, recent-title overlap, and prohibited expressions.
 
 Allowed examples:
 

@@ -9,11 +9,12 @@ import { evaluateStockBlogPublishQuality, getRealStockReferences } from "@/lib/s
 import { ensureFredDegradedDisclosure, FRED_DEGRADED_DISCLOSURE, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import { ensureKisSectorDegradedDisclosure, KIS_SECTOR_DEGRADED_DISCLOSURE, isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
 import { renderNaverBody, type NaverBodyBlock } from "@/lib/stock-blog/naver-body";
-import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
+import { selectBestStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
 import { evaluateNaverDraftSafeRetry, getNaverDraftSafeRetryLimit } from "@/lib/naver-drafts/naver-draft-retry-policy";
 import {
   appendRelatedPostSection,
   buildNaverDiscoveryTags,
+  inspectPublishedPostSimilarity,
   selectRelatedPublishedPosts,
   type PublishedPostCandidate,
 } from "@/lib/stock-blog/stock-blog-discovery";
@@ -112,7 +113,7 @@ type StatusReportInput = {
 
 type DraftQualityCheck = {
   ok: boolean;
-  code?: "NAVER_DRAFT_QUALITY_FAILED" | "NAVER_DRAFT_NEEDS_REFERENCE";
+  code?: "NAVER_DRAFT_QUALITY_FAILED" | "NAVER_DRAFT_NEEDS_REFERENCE" | "NAVER_DRAFT_DUPLICATE_CONTENT_BLOCKED";
   reasons: string[];
 };
 
@@ -414,7 +415,14 @@ function buildMarkdownBody(title: string, body: string) {
   return `# ${title}\n\n${body}`;
 }
 
-function buildDraftQualityCheck(template: StockBriefingTemplate, body: string, refs: ReferenceItem[], pipeline: ContentPipelineRun): DraftQualityCheck {
+function buildDraftQualityCheck(
+  template: StockBriefingTemplate,
+  title: string,
+  body: string,
+  refs: ReferenceItem[],
+  pipeline: ContentPipelineRun,
+  publishedPosts: PublishedPostCandidate[],
+): DraftQualityCheck {
   const gate = evaluateStockBlogPublishQuality({
     pipeline,
     referenceBundle: collectReferenceBundle(pipeline),
@@ -425,6 +433,14 @@ function buildDraftQualityCheck(template: StockBriefingTemplate, body: string, r
   const reasons = [...gate.reasons];
   if ((template === "WEEKLY_MARKET_REVIEW" || template === "NEXT_WEEK_MARKET_PREVIEW") && WEEKEND_FORBIDDEN_PHRASES.some((phrase) => body.includes(phrase))) {
     reasons.push("주말/주간 글에 장전·장마감 등 일일 브리핑 표현 포함");
+  }
+  const similarity = inspectPublishedPostSimilarity({ title, body, posts: publishedPosts });
+  if (similarity.blocked) {
+    return {
+      ok: false,
+      code: "NAVER_DRAFT_DUPLICATE_CONTENT_BLOCKED",
+      reasons: [similarity.reason ?? "최근 게시글과 제목 또는 본문이 과도하게 유사함"],
+    };
   }
   if (reasons.length === 0) return { ok: true, reasons: [] };
   return {
@@ -441,17 +457,22 @@ function buildDraftFromPipeline(pipeline: ContentPipelineRun, publishedPosts: Pu
     ?? bundleTemplate
     ?? inferStockBriefingTemplateFromPipeline(pipeline);
   const copy = STOCK_BRIEFING_COPY[template];
-  const sourceTitle = clean(pipeline.writerResult?.finalTitle)
-    || clean(pipeline.marketingResult?.recommendedTitle)
-    || clean(pipeline.plannerResult?.title)
-    || clean(pipeline.outputTitle)
-    || clean(pipeline.title)
-    || copy.fallbackTitle;
   const marketDate = collectReferenceBundle(pipeline)?.marketDate || pipeline.createdAt;
-  const title = sanitizeByTemplate(
-    buildStockBlogEditorialTitle({ template, marketDate, sourceTitle }),
+  const titleSelection = selectBestStockBlogEditorialTitle({
     template,
-  );
+    marketDate,
+    candidates: [
+      ...(pipeline.marketingResult?.titleSuggestions ?? []),
+      pipeline.marketingResult?.recommendedTitle,
+      pipeline.writerResult?.finalTitle,
+      pipeline.plannerResult?.title,
+      pipeline.outputTitle,
+      pipeline.title,
+      copy.fallbackTitle,
+    ],
+    recentTitles: publishedPosts.map((post) => post.title),
+  });
+  const title = sanitizeByTemplate(titleSelection.title, template);
   const thumbnail = pipeline.naverBlogPublishPrep ?? buildStockBlogThumbnail(pipeline, template);
   const thumbnailText = clean(thumbnail.thumbnailTitle) || clean(thumbnail.thumbnailPrimaryText) || `${title} 핵심 정리`;
   const thumbnailPrompt = clean(thumbnail.thumbnailPrompt) || `네이버 블로그 썸네일, 깔끔한 금융 리포트 스타일, 제목: ${title}, 핵심 문구: ${thumbnailText}`;
@@ -470,7 +491,7 @@ function buildDraftFromPipeline(pipeline: ContentPipelineRun, publishedPosts: Pu
     template,
     posts: selectRelatedPublishedPosts({ currentTitle: title, posts: publishedPosts, limit: 2 }),
   });
-  const quality = buildDraftQualityCheck(template, body, refs, pipeline);
+  const quality = buildDraftQualityCheck(template, title, body, refs, pipeline, publishedPosts);
   if (!quality.ok) {
     throw new Error(`${quality.code ?? "NAVER_DRAFT_QUALITY_FAILED"}: ${quality.reasons.join(" · ")}`);
   }
@@ -714,11 +735,11 @@ export async function createNaverDraftJobFromPipeline(input: {
     },
     orderBy: { publishedAt: "desc" },
     take: 12,
-    select: { title: true, publishedUrl: true },
+    select: { title: true, body: true, publishedUrl: true },
   });
   const draft = buildDraftFromPipeline(
     detail.pipeline,
-    publishedPosts.flatMap((post) => post.publishedUrl ? [{ title: post.title, url: post.publishedUrl }] : []),
+    publishedPosts.flatMap((post) => post.publishedUrl ? [{ title: post.title, body: post.body, url: post.publishedUrl }] : []),
   );
   if (input.allowPublish) {
     const circuitBreaker = await getPublishCircuitBreaker();

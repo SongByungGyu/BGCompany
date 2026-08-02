@@ -38,6 +38,7 @@ export type StockBlogQualityDiagnostics = {
   bulletItemCount: number;
   bodyLength: number;
   duplicateSentenceCount: number;
+  hasBgMarketNoteJudgment: boolean;
   hasDisclaimer: boolean;
   hasMockPhrase: boolean;
   hasImagePromptLeak: boolean;
@@ -97,6 +98,7 @@ const MARKET_DATA_PATTERNS = [
   /반도체|2차전지|금융|자동차|바이오|플랫폼|방산|조선|에너지/i,
 ];
 const DISCLAIMER_PATTERNS = [/투자 참고용/, /매수·매도 추천이 아닙니다/, /투자 판단과 책임/];
+const BG_MARKET_NOTE_JUDGMENT_PATTERN = /BG\s*Market\s*Note\s*(?:의\s*)?판단/i;
 const REPEATED_PHRASES = ["중요합니다", "확인할 필요가 있습니다", "살펴봐야 합니다", "방향성보다 선택이 중요합니다", "체크해야 합니다", "주목해야 합니다"];
 const NEXT_WEEK_HEADINGS = [
   "1. 지난주 시장은 어땠을까",
@@ -262,6 +264,7 @@ function diagnostics(input: {
     bulletItemCount: body.split("\n").filter((line) => line.trim().startsWith("- ")).length,
     bodyLength: body.replace(/\s/g, "").length,
     duplicateSentenceCount: countDuplicateSentences(body),
+    hasBgMarketNoteJudgment: BG_MARKET_NOTE_JUDGMENT_PATTERN.test(body),
     hasDisclaimer: DISCLAIMER_PATTERNS.some((pattern) => pattern.test(body)),
     hasMockPhrase: MOCK_TEXT_PATTERNS.some((pattern) => pattern.test(body)) || FORBIDDEN_SOURCE_NAMES.some((name) => body.includes(name)),
     hasImagePromptLeak: IMAGE_PROMPT_PATTERNS.some((pattern) => pattern.test(body)),
@@ -389,6 +392,7 @@ export function evaluateStockBlogPublishQuality(input: {
     if (d.missingReferenceItems.length > 0) reasons.push(`필수 참고자료 부족: ${d.missingReferenceItems.join(", ")}`);
   }
   if (!d.hasMarketDataSignal && requireReal) reasons.push("지수/섹터/수급 등 시장 데이터 신호 부족");
+  if (requireReal && !d.hasBgMarketNoteJudgment) reasons.push("BG Market Note 판단 섹션 필요");
   if (d.pasteReadyNewlineCount < 15) reasons.push("최종 본문 줄바꿈 15개 이상 필요");
   if (d.doubleNewlineBlockCount < 8) reasons.push("최종 본문 문단 블록 8개 이상 필요");
   if (d.sectionHeadingCount < 6) reasons.push("섹션 제목 6개 이상 필요");

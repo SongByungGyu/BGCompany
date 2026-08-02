@@ -127,14 +127,14 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     contentType: "KOREA_DAILY_PREVIEW",
     label: "한국 증시 장전 브리핑",
     cadence: "평일",
-    scheduledTimeKst: "08:30 KST",
-    scheduledTime: "08:30",
+    scheduledTimeKst: "07:20 KST 생성 시작 · 08:20 이전 발행 목표",
+    scheduledTime: "07:20",
     weekdays: [1, 2, 3, 4, 5],
-    objective: "장 시작 전 전일 해외 변수와 당일 한국장 체크포인트를 정리합니다.",
+    objective: "07:20부터 생성해 08:20 전에 전일 해외 변수와 당일 한국장 전망을 발행합니다.",
     primaryAudience: "한국 주식 투자자",
     recommendedRunnerMode: "hermes",
-    topic: "오늘 한국 증시 변동 원인과 코스피·반도체·원달러 환율 영향",
-    title: (date) => `${date} 오늘 한국장 핵심 변수: 코스피·반도체·원달러 환율`,
+    topic: "오늘 코스피 전망과 원달러 환율·전일 미국장·반도체가 한국장 시작에 미칠 영향",
+    title: (date) => `${date} 오늘 코스피 전망: 원달러 환율·전일 미국장 영향`,
   },
   {
     scheduleId: "weekday-korea-close-us-preview",
@@ -147,8 +147,8 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     objective: "한국 장 마감 흐름과 오늘 밤 미국장 관전 포인트를 연결합니다.",
     primaryAudience: "한국·미국 주식 병행 투자자",
     recommendedRunnerMode: "hermes",
-    topic: "한국 증시 마감 원인과 오늘 밤 나스닥·미국 금리·반도체 영향",
-    title: (date) => `${date} 오늘 미국장 핵심 변수: 나스닥·금리·반도체`,
+    topic: "오늘 코스피 마감 원인과 외국인 수급·주도 업종, 오늘 밤 나스닥 일정",
+    title: (date) => `${date} 오늘 코스피 마감 원인: 외국인 수급·주도 업종`,
   },
   {
     scheduleId: "saturday-weekly-market-review",
@@ -630,8 +630,11 @@ async function runOneSchedule(
       } catch (error) {
         status = "partial_failed";
         const reason = error instanceof Error ? error.message : "네이버 임시저장 job 생성 실패";
-        notes.push(reason);
-        if (config.autoPublish) await activateSchedulerPublishCircuitBreaker({ status: "publish_blocked", reason, scheduleKey: key });
+        const duplicateContentBlocked = reason.startsWith("NAVER_DRAFT_DUPLICATE_CONTENT_BLOCKED:");
+        notes.push(duplicateContentBlocked ? `STOCK_CONTENT_QUALITY_FAILED: ${reason}` : reason);
+        if (config.autoPublish && !duplicateContentBlocked) {
+          await activateSchedulerPublishCircuitBreaker({ status: "publish_blocked", reason, scheduleKey: key });
+        }
       }
     }
 
