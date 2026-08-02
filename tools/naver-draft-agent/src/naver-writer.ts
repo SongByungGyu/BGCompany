@@ -184,6 +184,10 @@ export function selectNaverArticleUrls(value: string) {
     .filter((line) => /^https?:\/\/\S+$/.test(line));
 }
 
+export function normalizeNaverCategoryLabel(value: string) {
+  return value.replace(/\s+/g, "").replace(/^하위카테고리/, "");
+}
+
 export function prepareNaverPublicationBody(value: string) {
   return normalizeEditorText(value)
     .replace(
@@ -530,7 +534,7 @@ async function formatNaverSourceParagraph(page: import("playwright").Page, sourc
   const target = await findNaverExactParagraph(page, sourceLabel);
   if (!target) return false;
   const { scope, paragraph } = target;
-  await paragraph.click({ clickCount: 3, delay: 80, timeout: 5000 });
+  await paragraph.click({ clickCount: 3, delay: 80, timeout: 5000, force: true });
   const centerButton = scope.locator(".se-contents-toolbar-cycle-toggle-button.se-align-center-toolbar-button:visible").first();
   if (!(await centerButton.count().catch(() => 0))) return false;
   await centerButton.click({ timeout: 5000 });
@@ -880,6 +884,16 @@ async function clickNaverEditorSave(page: import("playwright").Page) {
 }
 
 async function dismissNaverDraftModal(page: import("playwright").Page) {
+  const resumePopup = page.locator('.se-popup:visible').filter({ hasText: "작성 중인 글이 있습니다" }).last();
+  if (await resumePopup.isVisible().catch(() => false)) {
+    const cancelButton = resumePopup.locator("button.se-popup-button-cancel").first();
+    if (await cancelButton.isVisible().catch(() => false)) {
+      await cancelButton.click({ timeout: 5000 });
+      console.log("[naver-agent] started a new post without restoring the previous autosaved editor session.");
+      return true;
+    }
+  }
+
   const modal = page.locator('text="임시저장 글"').first();
   if (!(await modal.count().catch(() => 0))) return false;
 
@@ -984,7 +998,7 @@ function isPublishedNaverUrl(value: string, writeUrl: string) {
   }
 }
 
-async function clickNaverPublish(page: import("playwright").Page, writeUrl: string, tags: string[]) {
+async function clickNaverPublish(page: import("playwright").Page, writeUrl: string, tags: string[], category?: string | null) {
   const publishSelectors = [
     'button:has-text("발행")',
     '[role="button"]:has-text("발행")',
@@ -1006,6 +1020,29 @@ async function clickNaverPublish(page: import("playwright").Page, writeUrl: stri
   await page.waitForTimeout(1500);
   if (isPublishedNaverUrl(page.url(), writeUrl)) {
     return { publishedUrl: page.url(), naverPostId: naverPostIdFromUrl(page.url()) };
+  }
+  if (category?.trim()) {
+    const normalizedCategory = normalizeNaverCategoryLabel(category);
+    const categoryButton = page.locator('div[class*="layer_publish"] button[aria-label="카테고리 목록 버튼"]:visible').last();
+    if (!(await categoryButton.count().catch(() => 0))) throw new Error("NAVER_CATEGORY_BUTTON_NOT_FOUND");
+    await categoryButton.click({ timeout: 10000 });
+    await page.waitForTimeout(300);
+    const categoryItems = page.locator('[role="menu"]:visible li');
+    let categorySelected = false;
+    for (let index = 0; index < await categoryItems.count(); index += 1) {
+      const item = categoryItems.nth(index);
+      const itemText = normalizeNaverCategoryLabel(await item.innerText().catch(() => ""));
+      if (itemText !== normalizedCategory) continue;
+      await item.click({ timeout: 10000 });
+      categorySelected = true;
+      break;
+    }
+    if (!categorySelected) throw new Error(`NAVER_CATEGORY_NOT_FOUND:${category}`);
+    const selectedCategory = normalizeNaverCategoryLabel(await categoryButton.innerText().catch(() => ""));
+    if (selectedCategory !== normalizedCategory) {
+      throw new Error(`NAVER_CATEGORY_NOT_CONFIRMED:${selectedCategory || "empty"}`);
+    }
+    console.log(`[naver-agent] category confirmed: ${category}`);
   }
   if (!(await fillNaverTags(page, tags))) throw new Error("NAVER_TAG_INPUT_NOT_FOUND");
   const confirmationSelectors = [
@@ -1322,7 +1359,7 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
         };
       }
       try {
-        const published = await clickNaverPublish(page, writeUrl, job.tags);
+        const published = await clickNaverPublish(page, writeUrl, job.tags, job.category);
         return { status: "published", externalUrl: published.publishedUrl, ...published };
       } catch (error) {
         return {

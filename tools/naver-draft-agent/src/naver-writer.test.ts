@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   buildMultilineEditorInputSteps,
   hasSavedDraftTitle,
+  normalizeNaverCategoryLabel,
   pickMostReadableEditorText,
   prepareNaverPublicationBody,
   savedDraftTitleMatchToken,
@@ -11,6 +12,11 @@ import {
   selectNaverEmphasisParagraphs,
   selectNaverSectionHeadings,
 } from "./naver-writer.js";
+
+test("네이버 하위 카테고리 표시 문구를 실제 카테고리명으로 정규화한다", () => {
+  assert.equal(normalizeNaverCategoryLabel("하위 카테고리 투자 공부"), "투자공부");
+  assert.equal(normalizeNaverCategoryLabel("투자 공부"), "투자공부");
+});
 
 function reconstruct(steps: ReturnType<typeof buildMultilineEditorInputSteps>) {
   return steps.map((step) => step.type === "enter" ? "\n" : step.value).join("");
