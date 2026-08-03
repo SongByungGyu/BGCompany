@@ -93,7 +93,7 @@ async function runPacedRequest<T>(request: () => Promise<T>) {
 
 export function getKisMarketFreshnessMinutes(
   now = new Date(),
-  env: Pick<NodeJS.ProcessEnv, "KIS_MARKET_MAX_AGE_MINUTES" | "KIS_WEEKEND_MAX_AGE_MINUTES"> = process.env,
+  env: Partial<Record<"KIS_MARKET_MAX_AGE_MINUTES" | "KIS_WEEKEND_MAX_AGE_MINUTES", string>> = process.env,
 ) {
   const parsed = Number.parseInt(env.KIS_MARKET_MAX_AGE_MINUTES ?? "4320", 10);
   const baseMinutes = Number.isFinite(parsed) ? Math.max(60, parsed) : 4320;
