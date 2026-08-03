@@ -91,12 +91,16 @@ async function runPacedRequest<T>(request: () => Promise<T>) {
   return run;
 }
 
-function freshnessMinutes() {
-  const parsed = Number.parseInt(process.env.KIS_MARKET_MAX_AGE_MINUTES ?? "4320", 10);
+export function getKisMarketFreshnessMinutes(
+  now = new Date(),
+  env: Pick<NodeJS.ProcessEnv, "KIS_MARKET_MAX_AGE_MINUTES" | "KIS_WEEKEND_MAX_AGE_MINUTES"> = process.env,
+) {
+  const parsed = Number.parseInt(env.KIS_MARKET_MAX_AGE_MINUTES ?? "4320", 10);
   const baseMinutes = Number.isFinite(parsed) ? Math.max(60, parsed) : 4320;
-  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", weekday: "short" }).format(new Date());
-  if (weekday !== "Sat" && weekday !== "Sun") return baseMinutes;
-  const weekendParsed = Number.parseInt(process.env.KIS_WEEKEND_MAX_AGE_MINUTES ?? "5760", 10);
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", weekday: "short" }).format(now);
+  // 월요일 미국장 개장 전에는 금요일 종가가 여전히 최신 확정값이다.
+  if (weekday !== "Sat" && weekday !== "Sun" && weekday !== "Mon") return baseMinutes;
+  const weekendParsed = Number.parseInt(env.KIS_WEEKEND_MAX_AGE_MINUTES ?? "5760", 10);
   const weekendMinutes = Number.isFinite(weekendParsed) ? Math.max(baseMinutes, weekendParsed) : 5760;
   return weekendMinutes;
 }
@@ -187,7 +191,7 @@ function source(label: string, asOf: string, collectedAt: string, endpoint: stri
     url: `${baseUrl()}${endpoint}`,
     asOf,
     collectedAt,
-    maxAgeMinutes: freshnessMinutes(),
+    maxAgeMinutes: getKisMarketFreshnessMinutes(new Date(collectedAt)),
   });
 }
 
