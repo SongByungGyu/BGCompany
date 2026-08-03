@@ -93,14 +93,14 @@ async function runPacedRequest<T>(request: () => Promise<T>) {
 
 export function getKisMarketFreshnessMinutes(
   now = new Date(),
-  env: Partial<Record<"KIS_MARKET_MAX_AGE_MINUTES" | "KIS_WEEKEND_MAX_AGE_MINUTES", string>> = process.env,
+  env?: { KIS_MARKET_MAX_AGE_MINUTES?: string; KIS_WEEKEND_MAX_AGE_MINUTES?: string },
 ) {
-  const parsed = Number.parseInt(env.KIS_MARKET_MAX_AGE_MINUTES ?? "4320", 10);
+  const parsed = Number.parseInt(env?.KIS_MARKET_MAX_AGE_MINUTES ?? process.env.KIS_MARKET_MAX_AGE_MINUTES ?? "4320", 10);
   const baseMinutes = Number.isFinite(parsed) ? Math.max(60, parsed) : 4320;
   const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", weekday: "short" }).format(now);
   // 월요일 미국장 개장 전에는 금요일 종가가 여전히 최신 확정값이다.
   if (weekday !== "Sat" && weekday !== "Sun" && weekday !== "Mon") return baseMinutes;
-  const weekendParsed = Number.parseInt(env.KIS_WEEKEND_MAX_AGE_MINUTES ?? "5760", 10);
+  const weekendParsed = Number.parseInt(env?.KIS_WEEKEND_MAX_AGE_MINUTES ?? process.env.KIS_WEEKEND_MAX_AGE_MINUTES ?? "5760", 10);
   const weekendMinutes = Number.isFinite(weekendParsed) ? Math.max(baseMinutes, weekendParsed) : 5760;
   return weekendMinutes;
 }
