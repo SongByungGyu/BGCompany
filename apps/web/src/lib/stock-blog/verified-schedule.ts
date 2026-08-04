@@ -1,4 +1,5 @@
 import type { MarketSnapshot, StockReferenceBriefingTemplate } from "./references/reference-types";
+import { STOCK_BLOG_INVESTMENT_DISCLAIMER } from "./stock-blog-editorial-policy";
 
 export type VerifiedScheduleEvent = {
   date: string;
@@ -193,17 +194,18 @@ function assembleDraft(input: {
   introduction: string;
   sections: WriterSection[];
   conclusion: string;
-  cta: string;
 }) {
+  const withoutDisclaimer = (value: string) => value.replaceAll(STOCK_BLOG_INVESTMENT_DISCLAIMER, "").trim();
   const plainParts: string[] = [];
   const markdownParts: string[] = [];
-  if (input.introduction) {
-    plainParts.push(input.introduction);
-    markdownParts.push(input.introduction);
+  const introduction = withoutDisclaimer(input.introduction);
+  if (introduction) {
+    plainParts.push(introduction);
+    markdownParts.push(introduction);
   }
   for (const section of input.sections) {
     const heading = stringValue(section.heading);
-    const body = stringValue(section.body);
+    const body = withoutDisclaimer(stringValue(section.body));
     if (heading) {
       plainParts.push(heading);
       markdownParts.push(`## ${heading}`);
@@ -213,14 +215,13 @@ function assembleDraft(input: {
       markdownParts.push(body);
     }
   }
-  if (input.conclusion) {
-    plainParts.push("마무리", input.conclusion);
-    markdownParts.push("## 마무리", input.conclusion);
+  const conclusion = withoutDisclaimer(input.conclusion);
+  if (conclusion) {
+    plainParts.push("마무리", conclusion);
+    markdownParts.push("## 마무리", conclusion);
   }
-  if (input.cta) {
-    plainParts.push(input.cta);
-    markdownParts.push(input.cta);
-  }
+  plainParts.push(STOCK_BLOG_INVESTMENT_DISCLAIMER);
+  markdownParts.push(STOCK_BLOG_INVESTMENT_DISCLAIMER);
   return {
     fullDraft: plainParts.join("\n\n"),
     markdownDraft: markdownParts.join("\n\n"),
@@ -349,11 +350,11 @@ export function applyVerifiedSchedule(
 
   const introduction = stringValue(writerResult.introduction);
   const conclusion = stringValue(writerResult.conclusion);
-  const cta = stringValue(writerResult.cta);
-  const drafts = assembleDraft({ introduction, sections, conclusion, cta });
+  const drafts = assembleDraft({ introduction, sections, conclusion });
   const result: Record<string, unknown> = {
     ...writerResult,
     sections,
+    cta: STOCK_BLOG_INVESTMENT_DISCLAIMER,
     ...drafts,
     verifiedSchedule: schedule,
   };

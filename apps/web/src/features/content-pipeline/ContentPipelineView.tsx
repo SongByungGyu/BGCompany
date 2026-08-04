@@ -47,7 +47,7 @@ const STOCK_BRIEFING_TEMPLATE_CONFIGS: Record<StockBriefingTemplate, StockBriefi
     label: "평일 07:20 KST 생성 시작 · 08:20 이전 한국장 전망 발행",
     recommendedSchedule: "평일 07:20 KST 자동 생성 시작 · 08:20 이전 발행 목표",
     recommendedCategory: "오늘의 한국장 전망",
-    requiredSections: ["오늘의 한국장 한 줄 요약", "전일 미국장 흐름", "환율/금리/유가 체크", "오늘의 주요 변수", "코스피·코스닥 예상 흐름", "주목 섹터", "BG Market Note 판단", "리스크 요인", "투자자 체크리스트"],
+    requiredSections: ["30초 요약", "오늘 시장 핵심 숫자", "오늘의 핵심 변수 2가지", "상승·하락 조건별 시나리오", "오늘의 초보자 설명", "오늘 볼 것 3가지", "BG Market Note 판단", "함께 확인한 기사"],
     defaultTags: ["BGMarketNote", "주식시장", "증시브리핑", "시장전망", "투자공부", "한국주식", "코스피", "코스닥", "국장전망", "환율", "반도체", "2차전지"],
     thumbnailTextCandidates: ["오늘의 한국장 체크", "국장 프리뷰 핵심", "금리·환율 체크"],
   },
@@ -56,7 +56,7 @@ const STOCK_BRIEFING_TEMPLATE_CONFIGS: Record<StockBriefingTemplate, StockBriefi
     label: "매일 17:00 KST · 한국장 리뷰 + 미국장 프리뷰",
     recommendedSchedule: "매일 15:45~16:20 KST 작성 · 17:00 KST 발행 권장",
     recommendedCategory: "오늘의 미국장 전망",
-    requiredSections: ["오늘의 한국장 마감 요약", "코스피·코스닥 흐름", "수급 체크", "강세/약세 섹터", "환율/금리/유가 체크", "미국 선물 흐름", "오늘 밤 미장 체크포인트", "BG Market Note 판단", "리스크 요인", "투자자 체크리스트"],
+    requiredSections: ["30초 요약", "오늘 한국장 핵심 숫자", "오늘 밤 핵심 변수 2가지", "미국장 상승·하락 조건", "오늘의 초보자 설명", "오늘 밤 볼 것 3가지", "BG Market Note 판단", "함께 확인한 기사"],
     defaultTags: ["BGMarketNote", "주식시장", "증시브리핑", "시장전망", "투자공부", "미국주식", "나스닥", "S&P500", "다우지수", "미장전망", "빅테크", "금리"],
     thumbnailTextCandidates: ["미국장 프리뷰", "오늘 밤 체크포인트", "미장 흐름 정리"],
   },
@@ -65,7 +65,7 @@ const STOCK_BRIEFING_TEMPLATE_CONFIGS: Record<StockBriefingTemplate, StockBriefi
     label: "토요일 09:00 KST · 금주 한국/미국 주식시장 정리",
     recommendedSchedule: "토요일 09:00 KST 발행",
     recommendedCategory: "주간 시장 정리",
-    requiredSections: ["이번 주 시장 한 줄 요약", "코스피·코스닥 흐름", "S&P500·나스닥 흐름", "주요 상승/하락 섹터", "주요 뉴스/이벤트", "다음 주로 이어질 포인트", "BG Market Note 판단", "리스크 요인", "투자자 체크리스트"],
+    requiredSections: ["30초 요약", "이번 주 시장 핵심 숫자", "다음 주 핵심 변수 2가지", "다음 주 주요 일정", "다음 주 상승·하락 조건", "이번 주 초보자 설명", "다음 주 볼 것 3가지", "BG Market Note 판단", "함께 확인한 기사"],
     defaultTags: ["BGMarketNote", "주식시장", "증시브리핑", "투자공부", "주간증시", "시장정리", "섹터흐름", "다음주증시", "경제지표", "한국주식", "미국주식"],
     thumbnailTextCandidates: ["주간 시장 정리", "이번 주 증시 흐름", "섹터 흐름 한눈에"],
   },
@@ -73,8 +73,8 @@ const STOCK_BRIEFING_TEMPLATE_CONFIGS: Record<StockBriefingTemplate, StockBriefi
     type: "NEXT_WEEK_MARKET_PREVIEW",
     label: "주말/일요일 · 다음 주 시장 프리뷰",
     recommendedSchedule: "일요일 저녁 또는 월요일 장전 발행 권장",
-    recommendedCategory: "주요 이슈/섹터",
-    requiredSections: ["다음 주 시장 한 줄 요약", "다음 주 경제지표", "기업 실적 일정", "FOMC/CPI/고용지표 등 주요 이벤트", "관심 섹터", "BG Market Note 판단", "리스크 시나리오", "투자자 체크리스트"],
+    recommendedCategory: "차주 시장 전망",
+    requiredSections: ["30초 요약", "지난주 시장 핵심 숫자", "다음 주 핵심 변수 2가지", "다음 주 핵심 일정", "다음 주 상승·하락 조건", "이번 주 초보자 설명", "다음 주 볼 것 3가지", "BG Market Note 판단", "함께 확인한 기사"],
     defaultTags: ["BGMarketNote", "주식시장", "증시브리핑", "시장전망", "투자공부", "다음주증시", "경제지표", "실적시즌", "금리", "섹터흐름"],
     thumbnailTextCandidates: ["다음 주 증시 일정", "다음 주 체크포인트", "경제지표 미리보기"],
   },
@@ -1078,7 +1078,7 @@ function NaverBlogPublishPrepPanel({ pipeline }: { pipeline: ContentPipelineRun 
               <small>
                 실제 참고자료 {String(pipeline.qualityGate.diagnostics.realReferenceCount ?? 0)}개 · URL {String(pipeline.qualityGate.diagnostics.distinctUrlCount ?? 0)}개 · 발행처 {String(pipeline.qualityGate.diagnostics.publisherCount ?? 0)}곳
                 {pipeline.qualityGate.diagnostics.editorialQualityScore !== undefined
-                  ? ` · 편집 품질 ${String(pipeline.qualityGate.diagnostics.editorialQualityScore)}/${String(pipeline.qualityGate.diagnostics.editorialQualityTarget ?? 90)}`
+                  ? ` · 편집 품질 ${String(pipeline.qualityGate.diagnostics.editorialQualityScore)}/${String(pipeline.qualityGate.diagnostics.editorialQualityTarget ?? 95)}`
                   : ""}
               </small>
             </div>

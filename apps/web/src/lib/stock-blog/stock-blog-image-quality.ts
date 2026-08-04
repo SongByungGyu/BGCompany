@@ -24,8 +24,8 @@ export function evaluateStockBlogImageQuality(images: StockBlogContentImage[], s
   const generatedImages = images.filter((image) => image.licenseType === "generated" || image.licenseType === "generated-data-chart");
   const externalImages = images.filter((image) => image.licenseType === "external-commercial");
 
-  if (bodyImages.length < 2 || bodyImages.length > 4) {
-    issues.push({ code: "image_quality_failed", message: "본문 이미지는 2~4장이어야 합니다." });
+  if (bodyImages.length < 2 || bodyImages.length > 3) {
+    issues.push({ code: "image_quality_failed", message: "본문 이미지는 핵심 차트·이미지 2~3장이어야 합니다." });
   }
   if (new Set(images.map((image) => image.imageUrl)).size !== images.length) {
     issues.push({ code: "image_quality_failed", message: "중복 이미지 URL이 있습니다." });

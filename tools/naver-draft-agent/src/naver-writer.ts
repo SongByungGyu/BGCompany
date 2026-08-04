@@ -157,7 +157,9 @@ async function detectBlockedStatus(page: { url: () => string; locator: (selector
 
 function normalizeEditorText(value: string) {
   return value
-    .replace(/\r\n/g, "\n")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+\n/g, "\n\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
@@ -204,11 +206,10 @@ export function prepareNaverPublicationBody(value: string) {
       "확인되지 않은 국내 일정은 별도로 넣지 않았습니다. 새 일정은 날짜와 공식 내용을 확인한 뒤 시장 반응을 판단할 필요가 있습니다.",
       "추가 일정은 공식 발표 여부를 확인한 뒤 시장 반응과 함께 살펴볼 필요가 있습니다.",
     )
-    .replace("5. 이번 주에 눈여겨볼 기회와 위험", "5.\u00a0이번 주 기회와 위험")
     .split("\n")
     .map((line) => {
       if (/^https?:\/\/\S+$/.test(line.trim())) return "원문 보기";
-      if (/^[1-6]\.\s+/.test(line)) return line.replace(/^([1-6]\.)\s+/, "$1\u00a0");
+      if (/^[1-9]\.\s+/.test(line)) return line.replace(/^([1-9]\.)\s+/, "$1\u00a0");
       return line;
     })
     .join("\n");

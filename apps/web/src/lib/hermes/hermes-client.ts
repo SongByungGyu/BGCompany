@@ -16,6 +16,11 @@ import type {
 } from "./hermes-types";
 import { getRealStockReferences } from "@/lib/stock-blog/quality-gate";
 import { FRED_DEGRADED_DISCLOSURE } from "@/lib/stock-blog/references/fred-degraded-policy";
+import {
+  BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION,
+  getStockBlogEditorialPolicy,
+} from "@/lib/stock-blog/stock-blog-editorial-policy";
+import { STOCK_BLOG_EDITORIAL_QUALITY_TARGET } from "@/lib/stock-blog/stock-blog-editorial-benchmark";
 
 function baseUrl(url: string) {
   return url.replace(/\/$/, "");
@@ -271,7 +276,8 @@ export function buildMarketingReviewHermesPayload(input: MarketingReviewHermesIn
 }
 
 export function buildContentWriterHermesPayload(input: ContentWriterHermesInput): HermesContentWriterPayload {
-  const nextWeekPreview = input.referenceBundle?.contentType === "NEXT_WEEK_MARKET_PREVIEW";
+  const contentType = input.referenceBundle?.contentType ?? input.contentType ?? "KOREA_DAILY_PREVIEW";
+  const editorialPolicy = getStockBlogEditorialPolicy(contentType);
   return {
     agentId: "content-writer",
     role: "content_writer",
@@ -288,9 +294,7 @@ export function buildContentWriterHermesPayload(input: ContentWriterHermesInput)
       marketSnapshot: input.referenceBundle?.marketSnapshot,
       competitorBlogReferences: input.referenceBundle?.competitorBlogReferences,
       editorialBenchmarkGuidelines: input.editorialBenchmarkGuidelines,
-      bodyStructure: nextWeekPreview
-        ? ["1. 지난주 시장은 어땠을까", "2. 다음 주 한국 증시 전망", "3. 다음 주 미국 증시 전망", "4. 다음 주 핵심 일정", "5. 이번 주에 눈여겨볼 기회와 위험", "6. 개인 투자자가 확인할 것", "함께 확인한 기사"]
-        : ["1. 최근 시장은 어땠을까", "2. 한국 증시 흐름과 전망", "3. 미국 증시와 글로벌 변수", "4. 금리·환율·핵심 일정", "5. 눈여겨볼 기회와 위험", "6. 개인 투자자가 확인할 것", "함께 확인한 기사"],
+      bodyStructure: editorialPolicy.bodyStructure,
       prohibitedPhrases: input.prohibitedPhrases,
       blogImagePrompts: input.blogImagePrompts,
       referencePolicy: STOCK_REFERENCE_POLICY,
@@ -324,12 +328,17 @@ export function buildQaAuditHermesPayload(input: QaAuditHermesInput): HermesQaAu
       realReferences: getRealStockReferences(input.referenceBundle),
       marketSnapshot: input.referenceBundle?.marketSnapshot,
       qualityGateDiagnostics: {
+        editorialPolicyVersion: BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION,
         requiredRealReferences: 5,
         requiredDistinctPublishers: 3,
         requiredCompetitorReferences: 3,
         requireVerifiedOrAllowedFredDegradedMarketSnapshot: true,
         requiredFredDegradedDisclosure: FRED_DEGRADED_DISCLOSURE,
-        requiredEditorialQualityScore: 90,
+        requiredEditorialQualityScore: STOCK_BLOG_EDITORIAL_QUALITY_TARGET,
+        requiredThirtySecondSummaryLabels: ["판단", "상방 조건", "하방 조건", "다음 확인"],
+        requiredCoreVariableCount: 2,
+        requiredChecklistItemCount: 3,
+        forbiddenEngagementCta: true,
       },
       editorialBenchmarkGuidelines: input.editorialBenchmarkGuidelines,
       finalPasteReadyBody: typeof input.writerResult?.fullDraft === "string" ? input.writerResult.fullDraft : undefined,

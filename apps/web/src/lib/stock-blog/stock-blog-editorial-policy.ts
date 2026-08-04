@@ -1,0 +1,253 @@
+import type { StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
+
+export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 2;
+
+export const STOCK_BLOG_INVESTMENT_DISCLAIMER = "본 글은 시장 정보를 정리한 투자 참고 자료이며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 최종 투자 판단과 책임은 투자자 본인에게 있습니다.";
+
+export const STOCK_BLOG_HARD_PROHIBITED_PHRASES = [
+  "급등 확정",
+  "무조건 상승",
+  "매수 추천",
+  "수익 보장",
+  "상한가 확정",
+  "폭등",
+  "몰빵",
+  "결론부터 말씀드리면",
+  "쉽게 말하면",
+  "살펴보겠습니다",
+  "알아보겠습니다",
+  "도움이 되셨다면",
+  "공감 부탁",
+  "댓글 부탁",
+  "이웃 추가",
+  "서로이웃",
+  "투표해주세요",
+] as const;
+
+const FORBIDDEN_ENGAGEMENT_PATTERNS = [
+  /댓글(?:로|에)?[^.\n]{0,20}(?:남겨|알려|부탁)/i,
+  /공감(?:과|을|도)?\s*(?:눌러|부탁)/i,
+  /(?:서로)?이웃\s*(?:추가|신청)/i,
+  /투표(?:해|를\s*부탁)/i,
+  /여러분은\s*어떻게\s*생각/i,
+];
+
+export type StockBlogEditorialLengthRule = {
+  min: number;
+  targetMin: number;
+  targetMax: number;
+  max: number;
+};
+
+export type StockBlogEditorialPolicy = {
+  contentType: StockReferenceBriefingTemplate;
+  bodyLength: StockBlogEditorialLengthRule;
+  bodyStructure: string[];
+  minimumHeadingCount: number;
+  minimumParagraphCount: number;
+  checklistItemCount: number;
+  coreNumberMin: number;
+  coreNumberMax: number;
+  bodyImageMin: number;
+  bodyImageMax: number;
+  totalImageMin: number;
+  totalImageMax: number;
+};
+
+const DAILY_LENGTH: StockBlogEditorialLengthRule = {
+  min: 1_800,
+  targetMin: 2_100,
+  targetMax: 2_600,
+  max: 2_800,
+};
+
+const WEEKLY_LENGTH: StockBlogEditorialLengthRule = {
+  min: 2_000,
+  targetMin: 2_300,
+  targetMax: 2_900,
+  max: 3_200,
+};
+
+const BODY_STRUCTURES: Record<StockReferenceBriefingTemplate, string[]> = {
+  KOREA_DAILY_PREVIEW: [
+    "1. 30초 요약",
+    "2. 오늘 시장 핵심 숫자",
+    "3. 오늘의 핵심 변수 2가지",
+    "4. 상승·하락 조건별 시나리오",
+    "5. 오늘의 초보자 설명",
+    "6. 오늘 볼 것 3가지",
+    "7. BG Market Note 판단",
+    "함께 확인한 기사",
+  ],
+  KOREA_MARKET_CLOSE_US_PREVIEW: [
+    "1. 30초 요약",
+    "2. 오늘 한국장 핵심 숫자",
+    "3. 오늘 밤 핵심 변수 2가지",
+    "4. 미국장 상승·하락 조건",
+    "5. 오늘의 초보자 설명",
+    "6. 오늘 밤 볼 것 3가지",
+    "7. BG Market Note 판단",
+    "함께 확인한 기사",
+  ],
+  WEEKLY_MARKET_REVIEW: [
+    "1. 30초 요약",
+    "2. 이번 주 시장 핵심 숫자",
+    "3. 다음 주 핵심 변수 2가지",
+    "4. 다음 주 주요 일정",
+    "5. 다음 주 상승·하락 조건",
+    "6. 이번 주 초보자 설명",
+    "7. 다음 주 볼 것 3가지",
+    "8. BG Market Note 판단",
+    "함께 확인한 기사",
+  ],
+  NEXT_WEEK_MARKET_PREVIEW: [
+    "1. 30초 요약",
+    "2. 지난주 시장 핵심 숫자",
+    "3. 다음 주 핵심 변수 2가지",
+    "4. 다음 주 핵심 일정",
+    "5. 다음 주 상승·하락 조건",
+    "6. 이번 주 초보자 설명",
+    "7. 다음 주 볼 것 3가지",
+    "8. BG Market Note 판단",
+    "함께 확인한 기사",
+  ],
+};
+
+export function getStockBlogEditorialPolicy(contentType: StockReferenceBriefingTemplate): StockBlogEditorialPolicy {
+  const weekly = contentType === "WEEKLY_MARKET_REVIEW" || contentType === "NEXT_WEEK_MARKET_PREVIEW";
+  return {
+    contentType,
+    bodyLength: weekly ? WEEKLY_LENGTH : DAILY_LENGTH,
+    bodyStructure: [...BODY_STRUCTURES[contentType]],
+    minimumHeadingCount: weekly ? 8 : 7,
+    minimumParagraphCount: 10,
+    checklistItemCount: 3,
+    coreNumberMin: 4,
+    coreNumberMax: 6,
+    bodyImageMin: 2,
+    bodyImageMax: 3,
+    totalImageMin: 3,
+    totalImageMax: 4,
+  };
+}
+
+export function getStockBlogEditorialGuidelines(contentType: StockReferenceBriefingTemplate) {
+  const policy = getStockBlogEditorialPolicy(contentType);
+  const { bodyLength } = policy;
+  return [
+    `BG MARKET NOTE 편집 정책 v${BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION}: 기존 API·데이터 계산·이미지 생성·JSON 필드·카테고리·예약 발행 구조는 바꾸지 않고 공개 글의 구성과 문체만 개선합니다.`,
+    "제목은 실제 검색어와 오늘의 결론을 앞부분에 두고 핵심 변수는 1~2개만 사용합니다. 공포·확정·수익 보장 표현과 최근 제목의 중심 문구 반복을 금지합니다.",
+    `최종 공개 본문은 공백 포함 ${bodyLength.min.toLocaleString("ko-KR")}~${bodyLength.max.toLocaleString("ko-KR")}자이며 ${bodyLength.targetMin.toLocaleString("ko-KR")}~${bodyLength.targetMax.toLocaleString("ko-KR")}자를 목표로 합니다. 한 문단에는 한 가지 생각만 담고 모바일 기준 2~4문장으로 씁니다.`,
+    "첫 섹션 '30초 요약'에는 판단·상방 조건·하방 조건·다음 확인 지표를 각각 한 줄로 적습니다.",
+    `핵심 숫자는 검증된 기준일·단위가 있는 값 ${policy.coreNumberMin}~${policy.coreNumberMax}개만 고르고, 숫자의 반복 설명 대신 각각이 시장에 갖는 의미를 한 문장으로 설명합니다.`,
+    "핵심 변수 섹션은 반드시 '변수 1:'과 '변수 2:' 두 개만 사용합니다. 상승·하락 시나리오는 예측을 단정하지 말고 관찰 가능한 조건으로 구분합니다.",
+    "초보자 설명은 오늘 시장과 직접 연결된 개념 하나만 3~5문장으로 설명하고, 독자를 가르치려는 말투나 같은 설명의 반복을 피합니다.",
+    `체크 섹션은 실제로 확인할 시간·지표·조건 ${policy.checklistItemCount}개만 제시합니다. 댓글·공감·이웃·투표를 요구하거나 질문형 참여를 유도하지 않습니다.`,
+    "'어제 전망 확인'은 이전 글의 구조화된 판단과 실제 결과가 입력으로 함께 제공된 경우에만 작성합니다. 근거가 없으면 섹션 자체를 생략하고 맞았다고 추정하지 않습니다.",
+    "검증된 referenceBundle과 MarketSnapshot에 있는 자료만 사실 근거로 사용합니다. 누락값은 생략하고 전망치와 실제치를 구분하며, 확인되지 않은 원인은 '영향을 줬을 가능성'처럼 범위를 제한합니다.",
+    `대표 이미지 1장과 본문 이미지 ${policy.bodyImageMin}~${policy.bodyImageMax}장만 사용합니다. 이미지마다 한 메시지만 담고 캡션·기준일·단위·출처를 표시한 뒤 본문 숫자와 중복 설명하지 않습니다.`,
+    "마지막에는 실제 사용 기사와 원문만 표시하고 투자 유의문구를 정확히 한 번 둡니다. 내부 링크는 실제 발행 URL이 있을 때만 1~2개 사용하며 생성·추정하지 않습니다.",
+    "차분한 개인 투자자의 설명체로 쓰고 번역체, 증권사 보고서식 과장, 같은 문장 시작과 어미 반복, '결론부터 말씀드리면·쉽게 말하면·살펴보겠습니다·알아보겠습니다' 같은 AI 상투어를 사용하지 않습니다.",
+    "문장 중간 강제 줄바꿈, 내용 없는 빈 문단, 연속된 세 줄 이상의 개행, 특수 공백으로 만든 여백을 금지합니다. 문단 사이는 한 번만 구분합니다.",
+  ];
+}
+
+function sectionBody(body: string, headingPattern: RegExp) {
+  const lines = body.replace(/\r\n?/g, "\n").split("\n");
+  const start = lines.findIndex((line) => headingPattern.test(line.trim()));
+  if (start < 0) return "";
+  const collected: string[] = [];
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+    if (/^\d+\.\s+/.test(line) || line === "함께 확인한 기사" || line === "마무리") break;
+    collected.push(lines[index]);
+  }
+  return collected.join("\n").trim();
+}
+
+function bulletCount(value: string) {
+  return value.split("\n").filter((line) => /^\s*[-*•]\s+\S/.test(line)).length;
+}
+
+function sentenceCount(value: string) {
+  return value
+    .replace(/^\s*[-*•]\s+/gm, "")
+    .split(/[.!?。](?:\s|$)|\n+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length >= 8)
+    .length;
+}
+
+export type StockBlogEditorialContractInspection = {
+  hasThirtySecondSummary: boolean;
+  summaryLabelCount: number;
+  coreNumberCount: number;
+  coreVariableCount: number;
+  hasConditionalScenarios: boolean;
+  beginnerExplanationSentenceCount: number;
+  checklistItemCount: number;
+  hasBgMarketNoteJudgment: boolean;
+  forbiddenPhraseMatches: string[];
+  hasForbiddenEngagementCta: boolean;
+  excessiveBlankLineRunCount: number;
+  violations: string[];
+};
+
+export function inspectStockBlogEditorialContract(
+  body: string,
+  contentType: StockReferenceBriefingTemplate,
+): StockBlogEditorialContractInspection {
+  const policy = getStockBlogEditorialPolicy(contentType);
+  const summary = sectionBody(body, /^\d+\.\s*30초\s*요약$/);
+  const coreNumbers = sectionBody(body, /^\d+\..*핵심\s*숫자/);
+  const coreVariables = sectionBody(body, /^\d+\..*핵심\s*변수\s*2가지/);
+  const scenarios = sectionBody(body, /^\d+\..*(?:상승.*하락|하락.*상승).*(?:조건|시나리오)/);
+  const beginner = sectionBody(body, /^\d+\..*초보자\s*설명/);
+  const checklist = sectionBody(body, /^\d+\..*볼\s*것\s*3가지/);
+  const summaryLabelCount = ["판단", "상방 조건", "하방 조건", "다음 확인"]
+    .filter((label) => new RegExp(`(?:^|\\n)\\s*[-*•]?\\s*${label}\\s*[:：]`, "m").test(summary))
+    .length;
+  const coreVariableMarkers = Array.from(coreVariables.matchAll(/(?:^|\n)\s*[-*•]?\s*변수\s*([12])\s*[:：]/g))
+    .map((match) => match[1]);
+  const coreVariableCount = new Set(coreVariableMarkers).size;
+  const coreNumberCount = bulletCount(coreNumbers);
+  const beginnerExplanationSentenceCount = sentenceCount(beginner);
+  const checklistItemCount = bulletCount(checklist);
+  const forbiddenPhraseMatches = STOCK_BLOG_HARD_PROHIBITED_PHRASES.filter((phrase) => body.includes(phrase));
+  const hasForbiddenEngagementCta = FORBIDDEN_ENGAGEMENT_PATTERNS.some((pattern) => pattern.test(body));
+  const excessiveBlankLineRunCount = (body.replace(/\r\n?/g, "\n").match(/\n{3,}|\n[ \t]+\n/g) ?? []).length;
+  const hasThirtySecondSummary = Boolean(summary) && summaryLabelCount === 4;
+  const hasConditionalScenarios = Boolean(scenarios) && /상승/.test(scenarios) && /하락/.test(scenarios);
+  const hasBgMarketNoteJudgment = /(?:^|\n)\s*\d+\.\s*BG\s*Market\s*Note\s*(?:의\s*)?판단\s*$/im.test(body);
+  const violations: string[] = [];
+
+  if (!hasThirtySecondSummary) violations.push("30초 요약의 판단·상방 조건·하방 조건·다음 확인 4줄 필요");
+  if (coreNumberCount < policy.coreNumberMin || coreNumberCount > policy.coreNumberMax) {
+    violations.push(`핵심 숫자 ${policy.coreNumberMin}~${policy.coreNumberMax}개 필요`);
+  }
+  if (coreVariableCount !== 2) violations.push("핵심 변수는 변수 1·변수 2 두 개만 필요");
+  if (!hasConditionalScenarios) violations.push("상승·하락 조건별 시나리오 필요");
+  if (beginnerExplanationSentenceCount < 3 || beginnerExplanationSentenceCount > 5) {
+    violations.push("초보자 설명은 한 개념 3~5문장 필요");
+  }
+  if (checklistItemCount !== policy.checklistItemCount) violations.push(`확인 항목은 정확히 ${policy.checklistItemCount}개 필요`);
+  if (!hasBgMarketNoteJudgment) violations.push("번호가 붙은 BG Market Note 판단 섹션 필요");
+  if (forbiddenPhraseMatches.length > 0) violations.push(`금지 표현 포함: ${forbiddenPhraseMatches.join(", ")}`);
+  if (hasForbiddenEngagementCta) violations.push("댓글·공감·이웃·투표형 CTA 금지");
+  if (excessiveBlankLineRunCount > 0) violations.push("연속 빈 문단 또는 공백만 있는 문단 금지");
+
+  return {
+    hasThirtySecondSummary,
+    summaryLabelCount,
+    coreNumberCount,
+    coreVariableCount,
+    hasConditionalScenarios,
+    beginnerExplanationSentenceCount,
+    checklistItemCount,
+    hasBgMarketNoteJudgment,
+    forbiddenPhraseMatches,
+    hasForbiddenEngagementCta,
+    excessiveBlankLineRunCount,
+    violations,
+  };
+}

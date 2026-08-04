@@ -7,6 +7,7 @@ import {
   getStockBlogSearchIntentGuidelines,
   inspectPublishedPostSimilarity,
   selectRelatedPublishedPosts,
+  STOCK_BLOG_DISCOVERY_GUIDELINES,
 } from "./stock-blog-discovery.ts";
 
 test("네이버 태그는 의미 중복을 제거하고 브랜드 포함 최대 8개로 제한한다", () => {
@@ -49,6 +50,12 @@ test("최근 발행 제목 회피 가이드는 최대 6개 제목만 포함한�
 test("장전과 마감 글은 서로 다른 1차 검색 의도를 갖는다", () => {
   assert.match(getStockBlogSearchIntentGuidelines("KOREA_DAILY_PREVIEW").join(" "), /오늘 코스피 전망/);
   assert.match(getStockBlogSearchIntentGuidelines("KOREA_MARKET_CLOSE_US_PREVIEW").join(" "), /오늘 코스피 마감 원인/);
+});
+
+test("검색 최적화가 댓글 질문형 CTA를 요구하지 않는다", () => {
+  const guidelines = STOCK_BLOG_DISCOVERY_GUIDELINES.join("\n");
+  assert.match(guidelines, /CTA는 만들지 않습니다/);
+  assert.doesNotMatch(guidelines, /답하기 쉬운 질문/);
 });
 
 test("최근 글과 제목·본문이 사실상 같은 원고는 차단한다", () => {

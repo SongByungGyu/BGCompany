@@ -17,7 +17,7 @@ test("allows at most three QA attempts and reserves eight Hermes runs", () => {
 test("stops immediately after QA approval", () => {
   assert.equal(shouldRetryStockBlogQa({
     ok: true,
-    qaScore: 94,
+    qaScore: 97,
     publishReadiness: "ready",
     finalRecommendation: "approve",
     requiredRevisions: [],
@@ -27,7 +27,7 @@ test("stops immediately after QA approval", () => {
 test("retries an approved draft when the final body is too short", () => {
   const qa = {
     ok: true,
-    qaScore: 94,
+    qaScore: 97,
     publishReadiness: "ready",
     finalRecommendation: "approve",
     requiredRevisions: [],
@@ -37,7 +37,7 @@ test("retries an approved draft when the final body is too short", () => {
   assert.equal(shouldRetryStockBlogQa(qa, 1, writer), true);
   assert.match(
     buildStockBlogQaRevisionFeedback(qa, writer).requiredRevisions[0] ?? "",
-    /2000~3200자/,
+    /1800~2800자/,
   );
 });
 

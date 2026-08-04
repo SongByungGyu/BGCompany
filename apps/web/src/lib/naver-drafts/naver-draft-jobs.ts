@@ -21,6 +21,10 @@ import {
 } from "@/lib/stock-blog/stock-blog-discovery";
 import type { StockBlogContentImage, StockBlogImageQualityAudit } from "@/lib/stock-blog/stock-blog-image-types";
 import { STOCK_BLOG_EDITORIAL_QUALITY_TARGET } from "@/lib/stock-blog/stock-blog-editorial-benchmark";
+import {
+  getStockBlogEditorialPolicy,
+  STOCK_BLOG_INVESTMENT_DISCLAIMER,
+} from "@/lib/stock-blog/stock-blog-editorial-policy";
 
 export type NaverDraftJobStatus =
   | "created"
@@ -147,74 +151,34 @@ const publishFailureStatuses: NaverDraftJobStatus[] = [
 ];
 const PUBLISH_CIRCUIT_BREAKER_EVENT_ID = "event-stock-auto-publish-circuit-breaker";
 
-const INVESTMENT_DISCLAIMER = "본 글은 투자 참고용 정보이며, 특정 종목의 매수·매도 추천이 아닙니다. 모든 투자 판단과 책임은 투자자 본인에게 있습니다.";
+const INVESTMENT_DISCLAIMER = STOCK_BLOG_INVESTMENT_DISCLAIMER;
 
 const WEEKEND_FORBIDDEN_PHRASES = ["장전 브리핑", "장마감", "장 마감", "오늘 장 초반", "장 시작 전", "금일 장중", "장중 대응"];
 
 const STOCK_BRIEFING_COPY: Record<StockBriefingTemplate, {
   fallbackTitle: string;
   category: string;
-  introHeading: string;
-  headings: string[];
   requiredTags: string[];
-  preferredImagePlacement: string;
 }> = {
   KOREA_DAILY_PREVIEW: {
     fallbackTitle: "오늘의 한국 증시 장전 브리핑",
     category: "오늘의 한국장 전망",
-    introHeading: "① 오늘 장을 보기 전 한 줄 요약",
-    headings: [
-      "② 전일 해외시장과 오늘 한국장 연결고리",
-      "③ 수급·환율·금리 체크",
-      "④ 주목할 섹터와 테마",
-      "⑤ 오늘 투자자 체크리스트",
-      "⑥ 참고자료와 해석",
-    ],
     requiredTags: ["한국증시", "장전브리핑", "코스피", "코스닥", "시장체크"],
-    preferredImagePlacement: "본문 상단: 오늘 체크포인트 카드형 이미지",
   },
   KOREA_MARKET_CLOSE_US_PREVIEW: {
     fallbackTitle: "오늘 한국 증시 마감 정리와 미국장 체크포인트",
     category: "오늘의 미국장 전망",
-    introHeading: "① 오늘 한국장 마감 한 줄 요약",
-    headings: [
-      "② 코스피·코스닥 흐름",
-      "③ 수급과 섹터별 온도차",
-      "④ 오늘 밤 미국장 체크포인트",
-      "⑤ 내일 장을 위한 투자자 체크리스트",
-      "⑥ 참고자료와 해석",
-    ],
     requiredTags: ["한국장마감", "미국장", "수급", "섹터", "시장브리핑"],
-    preferredImagePlacement: "본문 중단: 한국장 마감과 미국장 프리뷰를 나란히 보여주는 카드",
   },
   WEEKLY_MARKET_REVIEW: {
     fallbackTitle: "이번 주 한국·미국 증시 주간 정리",
     category: "주간 시장 정리",
-    introHeading: "① 이번 주 시장 한 줄 요약",
-    headings: [
-      "② 한국 증시 주간 흐름",
-      "③ 미국 증시와 글로벌 변수",
-      "④ 강했던 섹터와 약했던 섹터",
-      "⑤ 다음 주로 이어질 체크포인트",
-      "⑥ 참고자료와 해석",
-    ],
     requiredTags: ["주간증시", "한국증시", "미국증시", "섹터정리", "다음주체크"],
-    preferredImagePlacement: "본문 상단: 주간 시장 정리 썸네일과 핵심 지표 카드",
   },
   NEXT_WEEK_MARKET_PREVIEW: {
     fallbackTitle: "다음 주 증시 일정과 체크포인트",
     category: "차주 시장 전망",
-    introHeading: "① 다음 주 시장을 보기 전 한 줄 요약",
-    headings: [
-      "② 다음 주 주요 일정",
-      "③ 한국 증시 체크포인트",
-      "④ 미국 증시 체크포인트",
-      "⑤ 리스크와 기회 요인",
-      "⑥ 투자자 체크리스트",
-      "⑦ 참고자료와 해석",
-    ],
     requiredTags: ["다음주증시", "경제일정", "실적시즌", "투자체크리스트", "시장프리뷰"],
-    preferredImagePlacement: "본문 상단: 다음 주 경제 일정 캘린더형 이미지",
   },
 };
 
@@ -285,7 +249,7 @@ function sectionsToText(pipeline: ContentPipelineRun) {
   if (sections.length > 0) return sections.join("\n\n");
   if (clean(writer.fullDraft)) return clean(writer.fullDraft);
   if (clean(writer.markdownDraft)) return clean(writer.markdownDraft);
-  return [writer.introduction, writer.conclusion, writer.cta]
+  return [writer.introduction, writer.conclusion]
     .map(clean)
     .filter(Boolean)
     .join("\n\n");
@@ -335,7 +299,6 @@ function buildChecklist(template: StockBriefingTemplate) {
       "미국 10년물 금리와 달러 인덱스가 국내 성장주에 부담을 주는지 확인",
       "외국인 선물·현물 수급이 같은 방향으로 움직이는지 확인",
       "반도체와 2차전지 대형주의 거래대금이 살아나는지 확인",
-      "오전 강세 섹터가 오후까지 유지되는지 확인",
     ];
   }
   if (template === "KOREA_MARKET_CLOSE_US_PREVIEW") {
@@ -343,7 +306,6 @@ function buildChecklist(template: StockBriefingTemplate) {
       "한국장 마감 후 미국 선물과 금리 흐름 확인",
       "국내 장중 강했던 섹터가 미국장 테마와 연결되는지 확인",
       "환율 변화가 다음 거래일 외국인 수급에 부담이 될지 점검",
-      "실적 발표 또는 경제지표 일정이 있는 종목은 변동성 확대 가능성 확인",
     ];
   }
   if (template === "NEXT_WEEK_MARKET_PREVIEW") {
@@ -351,19 +313,22 @@ function buildChecklist(template: StockBriefingTemplate) {
       "다음 주 주요 경제지표 발표 일정 확인",
       "대형 기술주 실적 또는 가이던스 관련 이벤트 확인",
       "환율·금리 방향이 국내 수급에 미칠 영향 점검",
-      "주도 섹터가 바뀌는지, 기존 강세 업종이 이어지는지 확인",
     ];
   }
   return [
     "이번 주 강했던 업종과 약했던 업종을 분리해서 복기",
     "외국인·기관 수급이 지수 상승을 뒷받침했는지 확인",
     "미국장 변수와 국내 섹터 흐름이 같은 방향이었는지 점검",
-    "다음 주에도 이어질 이벤트와 소멸된 재료를 구분",
   ];
 }
 
 function buildPlainBody(pipeline: ContentPipelineRun, template: StockBriefingTemplate, title: string, refs: ReferenceItem[]) {
-  const copy = STOCK_BRIEFING_COPY[template];
+  const structure = getStockBlogEditorialPolicy(template).bodyStructure;
+  const articleHeadingIndex = structure.indexOf("함께 확인한 기사");
+  const checklistHeadingIndex = structure.findIndex((heading) => /볼\s*것\s*3가지/.test(heading));
+  const introHeading = structure[0] ?? "1. 30초 요약";
+  const analysisHeadings = structure.slice(1, checklistHeadingIndex);
+  const closingHeadings = structure.slice(checklistHeadingIndex + 1, articleHeadingIndex);
   const snapshot = collectReferenceBundle(pipeline)?.marketSnapshot;
   const marketDisclosureBlocks: NaverBodyBlock[] = [
     ...(isAllowedFredDegradedSnapshot(snapshot) ? [{ type: "paragraph" as const, text: FRED_DEGRADED_DISCLOSURE }] : []),
@@ -371,19 +336,23 @@ function buildPlainBody(pipeline: ContentPipelineRun, template: StockBriefingTem
   ];
   const blocks: NaverBodyBlock[] = [
     { type: "heading", text: title },
-    { type: "heading", text: copy.introHeading },
+    { type: "heading", text: introHeading },
     { type: "intro", text: ensureMeaningfulParagraph(
       clean(pipeline.writerResult?.introduction) || clean(pipeline.outputSummary),
       `${pipeline.topic}을 중심으로 시장 흐름, 수급, 섹터, 이벤트를 블로그 독자가 바로 확인할 수 있게 정리했습니다.`,
     ) },
-    ...copy.headings.slice(0, -1).flatMap<NaverBodyBlock>((heading, index) => [
+    ...analysisHeadings.flatMap<NaverBodyBlock>((heading, index) => [
       { type: "heading", text: heading },
       { type: "paragraph", text: buildSectionBody(pipeline, index, template) },
     ]),
-    { type: "heading", text: "투자자 체크리스트" },
+    { type: "heading", text: structure[checklistHeadingIndex] ?? "6. 오늘 볼 것 3가지" },
     { type: "bulletList", items: buildChecklist(template) },
-    { type: "heading", text: copy.headings.at(-1) ?? "참고자료와 해석" },
-    ...refs.slice(0, 5).map<NaverBodyBlock>((item, index) => ({ type: "reference", item, index: index + 1 })),
+    ...closingHeadings.flatMap<NaverBodyBlock>((heading, index) => [
+      { type: "heading", text: heading },
+      { type: "paragraph", text: buildSectionBody(pipeline, analysisHeadings.length + index, template) },
+    ]),
+    { type: "heading", text: "함께 확인한 기사" },
+    ...refs.slice(0, 3).map<NaverBodyBlock>((item, index) => ({ type: "reference", item, index: index + 1 })),
     { type: "heading", text: "마무리" },
     { type: "paragraph", text: clean(pipeline.writerResult?.conclusion) || "시장은 매일 다른 신호를 주지만, 중요한 것은 방향을 단정하기보다 확인할 변수를 근거별로 줄여가는 것입니다." },
     ...marketDisclosureBlocks,
@@ -397,15 +366,15 @@ function buildWriterEditorialBody(pipeline: ContentPipelineRun, template: StockB
   if (!writer) return "";
   const sections = writer.sections?.map((section) => {
     const heading = clean(section.heading);
-    const body = clean(section.body);
+    const body = clean(section.body).replaceAll(INVESTMENT_DISCLAIMER, "").trim();
     return [heading, body].filter(Boolean).join("\n");
   }).filter(Boolean) ?? [];
   const body = [
-    clean(writer.introduction),
+    clean(writer.introduction).replaceAll(INVESTMENT_DISCLAIMER, "").trim(),
     ...sections,
     "마무리",
-    clean(writer.conclusion),
-    clean(writer.cta) || INVESTMENT_DISCLAIMER,
+    clean(writer.conclusion).replaceAll(INVESTMENT_DISCLAIMER, "").trim(),
+    INVESTMENT_DISCLAIMER,
   ].filter(Boolean).join("\n\n");
   return sanitizeByTemplate(stripMarkdownSyntax(body)
     .replace(/\r\n/g, "\n")

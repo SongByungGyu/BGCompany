@@ -1,12 +1,18 @@
 import type { ContentPipelineRun } from "@/features/content-pipeline/content-pipeline-types";
 import { FRED_DEGRADED_DISCLOSURE, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import { KIS_SECTOR_DEGRADED_DISCLOSURE, isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
-import type { ReferenceBundle, ReferenceItem } from "@/lib/stock-blog/references/reference-types";
+import type { ReferenceBundle, ReferenceItem, StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 import {
   assessStockBlogEditorialQuality,
   inspectOwnStockBlogStructure,
   STOCK_BLOG_EDITORIAL_QUALITY_TARGET,
 } from "@/lib/stock-blog/stock-blog-editorial-benchmark";
+import {
+  getStockBlogEditorialPolicy,
+  inspectStockBlogEditorialContract,
+  STOCK_BLOG_INVESTMENT_DISCLAIMER,
+  type StockBlogEditorialContractInspection,
+} from "@/lib/stock-blog/stock-blog-editorial-policy";
 
 export type StockBlogQualityStatus =
   | "passed"
@@ -66,6 +72,7 @@ export type StockBlogQualityDiagnostics = {
   editorialQualityPassed?: boolean;
   editorialQualityDimensions?: Record<string, number>;
   editorialQualityFailedChecks?: string[];
+  editorialContract?: StockBlogEditorialContractInspection;
 };
 
 export type StockBlogQualityGateResult = {
@@ -101,16 +108,10 @@ const DISCLAIMER_PATTERNS = [/투자 참고용/, /매수·매도 추천이 아�
 const BG_MARKET_NOTE_JUDGMENT_PATTERN = /BG\s*Market\s*Note\s*(?:의\s*)?판단/i;
 const REPEATED_PHRASES = ["중요합니다", "확인할 필요가 있습니다", "살펴봐야 합니다", "방향성보다 선택이 중요합니다", "체크해야 합니다", "주목해야 합니다"];
 const NEXT_WEEK_HEADINGS = [
-  "1. 지난주 시장은 어땠을까",
-  "2. 다음 주 한국 증시 전망",
-  "3. 다음 주 미국 증시 전망",
-  "4. 다음 주 핵심 일정",
-  "5. 이번 주에 눈여겨볼 기회와 위험",
-  "6. 개인 투자자가 확인할 것",
-  "함께 확인한 기사",
+  ...getStockBlogEditorialPolicy("NEXT_WEEK_MARKET_PREVIEW").bodyStructure,
   "마무리",
 ];
-const NEXT_WEEK_DISCLAIMER = "본 글은 시장 정보를 정리한 투자 참고 자료이며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 최종 투자 판단과 책임은 투자자 본인에게 있습니다.";
+const NEXT_WEEK_DISCLAIMER = STOCK_BLOG_INVESTMENT_DISCLAIMER;
 const NEXT_WEEK_FORBIDDEN_PATTERNS = [
   /\basOf\b/i,
   /JSON\s*(?:필드|field)/i,
@@ -155,8 +156,12 @@ export function inspectNextWeekEditorialContract(body: string) {
   };
 }
 
-export function hasValidStockBlogBodyLength(body: string) {
-  return body.length >= 2000 && body.length <= 3200;
+export function hasValidStockBlogBodyLength(
+  body: string,
+  contentType: StockReferenceBriefingTemplate = "KOREA_DAILY_PREVIEW",
+) {
+  const { bodyLength } = getStockBlogEditorialPolicy(contentType);
+  return body.length >= bodyLength.min && body.length <= bodyLength.max;
 }
 
 function clean(value?: string | null) {
@@ -262,7 +267,7 @@ function diagnostics(input: {
     sectionHeadingCount: countSectionHeadings(body),
     paragraphCount,
     bulletItemCount: body.split("\n").filter((line) => line.trim().startsWith("- ")).length,
-    bodyLength: body.replace(/\s/g, "").length,
+    bodyLength: body.length,
     duplicateSentenceCount: countDuplicateSentences(body),
     hasBgMarketNoteJudgment: BG_MARKET_NOTE_JUDGMENT_PATTERN.test(body),
     hasDisclaimer: DISCLAIMER_PATTERNS.some((pattern) => pattern.test(body)),
@@ -335,7 +340,10 @@ export function evaluateStockBlogPublishQuality(input: {
   const baseDiagnostics = diagnostics({ bundle, pasteReadyBody: body, writerText });
   const reasons: string[] = [];
   const requireReal = input.requireRealReferences ?? input.pipeline.runnerMode === "hermes";
-  const nextWeekPreview = bundle?.contentType === "NEXT_WEEK_MARKET_PREVIEW";
+  const contentType = bundle?.contentType ?? "KOREA_DAILY_PREVIEW";
+  const policy = getStockBlogEditorialPolicy(contentType);
+  const publicEditorialContract = inspectStockBlogEditorialContract(body, contentType);
+  const nextWeekPreview = contentType === "NEXT_WEEK_MARKET_PREVIEW";
   const editorialContract = nextWeekPreview ? inspectNextWeekEditorialContract(body) : undefined;
   const imageCount = input.pipeline.contentImages?.length
     ?? (input.pipeline.thumbnailImageUrl ? 1 : 0) + (input.pipeline.inlineImageUrls?.length ?? 0);
@@ -344,7 +352,9 @@ export function evaluateStockBlogPublishQuality(input: {
       title: input.pipeline.writerResult?.finalTitle ?? input.pipeline.outputTitle ?? input.pipeline.title,
       body,
       imageCount,
+      contentType,
     }),
+    contentType,
     realReferenceCount: baseDiagnostics.realReferenceCount,
     publisherCount: baseDiagnostics.publisherCount,
     verifiedMarketSnapshot: baseDiagnostics.marketSnapshotStatus === "ready"
@@ -360,6 +370,7 @@ export function evaluateStockBlogPublishQuality(input: {
     editorialQualityPassed: editorialQuality.passed,
     editorialQualityDimensions: editorialQuality.dimensions,
     editorialQualityFailedChecks: editorialQuality.failedChecks,
+    editorialContract: publicEditorialContract,
   };
 
   if (
@@ -395,18 +406,20 @@ export function evaluateStockBlogPublishQuality(input: {
   if (requireReal && !d.hasBgMarketNoteJudgment) reasons.push("BG Market Note 판단 섹션 필요");
   if (d.pasteReadyNewlineCount < 15) reasons.push("최종 본문 줄바꿈 15개 이상 필요");
   if (d.doubleNewlineBlockCount < 8) reasons.push("최종 본문 문단 블록 8개 이상 필요");
-  if (d.sectionHeadingCount < 6) reasons.push("섹션 제목 6개 이상 필요");
-  if (d.paragraphCount < 10) reasons.push("최종 본문 문단 10개 이상 필요");
-  if (d.bulletItemCount < 5) reasons.push("투자자 체크리스트/불릿 5개 이상 필요");
+  if (d.sectionHeadingCount < policy.minimumHeadingCount) reasons.push(`섹션 제목 ${policy.minimumHeadingCount}개 이상 필요`);
+  if (d.paragraphCount < policy.minimumParagraphCount) reasons.push(`최종 본문 문단 ${policy.minimumParagraphCount}개 이상 필요`);
+  if (requireReal && publicEditorialContract.violations.length > 0) {
+    reasons.push(...publicEditorialContract.violations.map((reason) => `편집 정책 v2: ${reason}`));
+  }
   if (requireReal && d.distinctUrlCount < 5) reasons.push("최종 본문용 실제 URL 5개 이상 필요");
   if (nextWeekPreview && editorialContract) {
-    if (!hasValidStockBlogBodyLength(body)) reasons.push("다음 주 전망 공개 본문은 공백 포함 2000~3200자 필요");
+    if (!hasValidStockBlogBodyLength(body, contentType)) reasons.push(`다음 주 전망 공개 본문은 공백 포함 ${policy.bodyLength.min}~${policy.bodyLength.max}자 필요`);
     if (editorialContract.articleEntryCount !== 3 || editorialContract.articleUrlCount !== 3) reasons.push("함께 확인한 기사 3개와 원문 링크 3개 필요");
     if (editorialContract.outsideArticleUrlCount > 0) reasons.push("함께 확인한 기사 밖의 본문 중간 링크 노출 금지");
     if (editorialContract.disclaimerCount !== 1) reasons.push("지정 투자 유의문구 정확히 1회 필요");
     if (editorialContract.missingOrOutOfOrderHeadings.length > 0) reasons.push(`주간 전망 섹션 누락 또는 순서 오류: ${editorialContract.missingOrOutOfOrderHeadings.join(", ")}`);
     if (editorialContract.forbiddenTerms.length > 0) reasons.push("내부·시스템·기계적 용어가 공개 본문에 포함됨");
-  } else if (!hasValidStockBlogBodyLength(body)) reasons.push("최종 본문은 공백 포함 2000~3200자 필요");
+  } else if (!hasValidStockBlogBodyLength(body, contentType)) reasons.push(`최종 본문은 공백 포함 ${policy.bodyLength.min}~${policy.bodyLength.max}자 필요`);
   if (!d.hasDisclaimer) reasons.push("투자 유의문구 누락");
   if (d.hasMockPhrase) reasons.push("mock/수동 확인 문구가 최종 본문에 포함됨");
   if (d.hasImagePromptLeak) reasons.push("이미지 프롬프트가 최종 본문에 섞임");
@@ -420,7 +433,13 @@ export function evaluateStockBlogPublishQuality(input: {
   if (reasons.some((reason) => reason.includes("시장 데이터") || reason.includes("MarketSnapshot") || reason.includes("최신성"))) return { ok: false, status: "needs_data", reasons, diagnostics: d };
   if (d.hasImagePromptLeak) return { ok: false, status: "image_pending", reasons, diagnostics: d };
   if (d.duplicateSentenceCount > 1) return { ok: false, status: "duplicate_content_failed", reasons, diagnostics: d };
-  if (d.pasteReadyNewlineCount < 15 || d.doubleNewlineBlockCount < 8 || d.sectionHeadingCount < 6 || d.paragraphCount < 10 || d.bulletItemCount < 5) {
+  if (
+    d.pasteReadyNewlineCount < 15
+    || d.doubleNewlineBlockCount < 8
+    || d.sectionHeadingCount < policy.minimumHeadingCount
+    || d.paragraphCount < policy.minimumParagraphCount
+    || publicEditorialContract.violations.some((reason) => /30초 요약|핵심 숫자|핵심 변수|시나리오|초보자|확인 항목|빈 문단/.test(reason))
+  ) {
     return { ok: false, status: "readability_failed", reasons, diagnostics: d };
   }
   return { ok: false, status: "quality_failed", reasons, diagnostics: d };

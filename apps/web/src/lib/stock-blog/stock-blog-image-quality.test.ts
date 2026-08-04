@@ -36,3 +36,16 @@ test("chart value mismatch blocks automatic publishing", () => {
   assert.equal(result.status, "blocked");
   assert.ok(result.issues.some((issue) => issue.code === "image_data_mismatch"));
 });
+
+test("본문 이미지가 핵심 3장을 넘으면 정보 과밀로 차단한다", () => {
+  const result = evaluateStockBlogImageQuality([
+    image("thumbnail", "thumbnail", "thumbnail"),
+    image("chart-1", "body", "chart"),
+    image("chart-2", "body", "chart"),
+    image("chart-3", "body", "chart"),
+    image("chart-4", "body", "chart"),
+  ], snapshot);
+
+  assert.equal(result.status, "blocked");
+  assert.match(result.issues.map((issue) => issue.message).join("\n"), /2~3장/);
+});

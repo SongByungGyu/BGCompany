@@ -80,7 +80,7 @@ https://example.com/two
   ]);
 });
 
-test("네이버 발행 본문은 긴 5절 제목과 원문 URL을 가독성 형식으로 바꾼다", () => {
+test("네이버 발행 본문은 번호 제목 간격과 원문 URL만 안전하게 바꾼다", () => {
   const body = `4. 다음 주 핵심 일정
 본문
 
@@ -95,16 +95,22 @@ test("네이버 발행 본문은 긴 5절 제목과 원문 URL을 가독성 형�
 https://example.com/one`;
   const prepared = prepareNaverPublicationBody(body);
 
-  assert.ok(prepared.includes("5.\u00a0이번 주 기회와 위험"));
+  assert.ok(prepared.includes("5.\u00a0이번 주에 눈여겨볼 기회와 위험"));
   assert.ok(prepared.includes("원문 보기"));
   assert.ok(!prepared.includes("https://example.com/one"));
   assert.deepEqual(selectNaverArticleUrls(body), ["https://example.com/one"]);
   assert.deepEqual(selectNaverEmphasisParagraphs(prepared), ["기회 요인", "위험 요인"]);
   assert.deepEqual(selectNaverSectionHeadings(prepared), [
     "4. 다음 주 핵심 일정",
-    "5. 이번 주 기회와 위험",
+    "5. 이번 주에 눈여겨볼 기회와 위험",
     "함께 확인한 기사",
   ]);
+});
+
+test("공백만 있는 문단과 연속 빈 줄은 한 번의 문단 간격으로 정리한다", () => {
+  const prepared = prepareNaverPublicationBody("첫 문단\n \n\n\n둘째 문단");
+
+  assert.equal(prepared, "첫 문단\n\n둘째 문단");
 });
 
 test("검수 과정처럼 보이는 일정 문장은 독자용 문장으로 바꾼다", () => {

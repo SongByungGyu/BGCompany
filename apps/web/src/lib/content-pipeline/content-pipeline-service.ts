@@ -21,6 +21,10 @@ import {
   getStockBlogSearchIntentGuidelines,
   STOCK_BLOG_DISCOVERY_GUIDELINES,
 } from "@/lib/stock-blog/stock-blog-discovery";
+import {
+  getStockBlogEditorialGuidelines,
+  STOCK_BLOG_HARD_PROHIBITED_PHRASES,
+} from "@/lib/stock-blog/stock-blog-editorial-policy";
 import type { ContentChannel, ContentPipelineDetail, ContentPipelineRun, ContentPipelineStatus } from "@/features/content-pipeline/content-pipeline-types";
 import {
   buildStockBlogEditorialBenchmark,
@@ -268,10 +272,7 @@ function buildReferenceKeywords(input: { topic: string; title: string }) {
 }
 
 const STOCK_PROHIBITED_PHRASES = [
-  "급등 확정",
-  "무조건 상승",
-  "매수 추천",
-  "수익 보장",
+  ...STOCK_BLOG_HARD_PROHIBITED_PHRASES,
   "존재하지 않는 기사·수치·URL 생성",
   "이미지 프롬프트를 독자용 본문에 출력",
 ];
@@ -306,7 +307,9 @@ async function loadRecentEditorialBenchmarkGuidelines(contentType: StockReferenc
     guidelines.push(...applied);
     if (guidelines.length >= 10) break;
   }
-  return Array.from(new Set(guidelines)).slice(0, 10);
+  return Array.from(new Set(guidelines))
+    .filter((guideline) => !/(?:CTA.*질문|2,?000~3,?200자|체크리스트.*4~6개|본문 이미지 2~4장|대표·본문 이미지.*3~5장)/i.test(guideline))
+    .slice(0, 10);
 }
 
 async function enrichContentPipelineInput(input: ContentPipelineInput): Promise<ContentPipelineInput> {
@@ -330,13 +333,14 @@ async function enrichContentPipelineInput(input: ContentPipelineInput): Promise<
   });
   const recentTitleGuideline = buildRecentTitleAvoidanceGuideline(recentPublishedTitles.map((post) => post.title));
   const editorialBenchmarkGuidelines = Array.from(new Set([
+    ...getStockBlogEditorialGuidelines(contentType),
     ...STOCK_BLOG_DISCOVERY_GUIDELINES,
     ...getStockBlogSearchIntentGuidelines(contentType),
     ...(recentTitleGuideline ? [recentTitleGuideline] : []),
     ...(input.editorialBenchmarkGuidelines ?? []),
     ...currentGuidelines,
     ...historicalGuidelines,
-  ])).slice(0, 12);
+  ])).slice(0, 30);
   return { ...input, referenceBundle, blogImagePrompts, editorialBenchmarkGuidelines };
 }
 
@@ -1686,13 +1690,13 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     runnerMode === "hermes"
     && writer.agentRunStatus === "succeeded"
     && qa.agentRunStatus === "succeeded"
-    && shouldRetryStockBlogQa(qa.result, writerQaAttempts.length, writer.result)
+    && shouldRetryStockBlogQa(qa.result, writerQaAttempts.length, writer.result, data.referenceBundle?.contentType)
   ) {
     const revisionAttempt = writerQaAttempts.length + 1;
     rawWriter = await executeWriter(data, planner, marketing, {
       revisionAttempt,
       previousWriterResult: writer.result,
-      qaRevisionFeedback: buildStockBlogQaRevisionFeedback(qa.result, writer.result),
+      qaRevisionFeedback: buildStockBlogQaRevisionFeedback(qa.result, writer.result, data.referenceBundle?.contentType),
     });
     scheduleCheckedWriter = withVerifiedSchedule(rawWriter, data.referenceBundle);
     writer = withMarketDataDisclosure(scheduleCheckedWriter, data.referenceBundle);
