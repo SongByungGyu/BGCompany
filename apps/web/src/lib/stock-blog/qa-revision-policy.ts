@@ -1,6 +1,9 @@
-import { STOCK_BLOG_EDITORIAL_QUALITY_TARGET } from "./stock-blog-editorial-benchmark";
-import type { StockReferenceBriefingTemplate } from "./references/reference-types";
-import { getStockBlogEditorialPolicy } from "./stock-blog-editorial-policy";
+import type { StockReferenceBriefingTemplate } from "./references/reference-types.ts";
+import {
+  getStockBlogEditorialPolicy,
+  inspectStockBlogEditorialContract,
+} from "./stock-blog-editorial-policy.ts";
+import { STOCK_BLOG_EDITORIAL_QUALITY_TARGET } from "./stock-blog-quality-target.ts";
 
 export const STOCK_BLOG_MAX_QA_ATTEMPTS = 3;
 export const STOCK_BLOG_MAX_HERMES_RUNS = 2 + (STOCK_BLOG_MAX_QA_ATTEMPTS * 2);
@@ -32,6 +35,15 @@ function draftLengthRevision(
   return `최종 공개 본문을 공백 포함 ${bodyLength.min}~${bodyLength.max}자로 작성하고 ${bodyLength.targetMin}~${bodyLength.targetMax}자를 목표로 하세요. 현재 ${length}자입니다. 검증된 참고자료 안에서만 설명을 보강하고 수치·일정은 추정하지 마세요.`;
 }
 
+function editorialContractRevisions(
+  writerResult?: QaRevisionResult,
+  contentType: StockReferenceBriefingTemplate = "KOREA_DAILY_PREVIEW",
+) {
+  if (typeof writerResult?.fullDraft !== "string") return [];
+  return inspectStockBlogEditorialContract(writerResult.fullDraft, contentType).violations
+    .map((violation) => `편집 정책 v2 필수 수정: ${violation}`);
+}
+
 export function shouldRetryStockBlogQa(
   result: QaRevisionResult,
   completedAttempts: number,
@@ -42,6 +54,7 @@ export function shouldRetryStockBlogQa(
   const score = typeof result.qaScore === "number" ? result.qaScore : 0;
   const requiredRevisions = stringList(result.requiredRevisions);
   return Boolean(draftLengthRevision(writerResult, contentType))
+    || editorialContractRevisions(writerResult, contentType).length > 0
     || score < STOCK_BLOG_EDITORIAL_QUALITY_TARGET
     || result.publishReadiness !== "ready"
     || result.finalRecommendation !== "approve"
@@ -57,6 +70,9 @@ export function buildStockBlogQaRevisionFeedback(
   const lengthRevision = draftLengthRevision(writerResult, contentType);
   if (lengthRevision && !requiredRevisions.includes(lengthRevision)) {
     requiredRevisions.push(lengthRevision);
+  }
+  for (const revision of editorialContractRevisions(writerResult, contentType)) {
+    if (!requiredRevisions.includes(revision)) requiredRevisions.push(revision);
   }
   return {
     qaSummary: typeof result.qaSummary === "string" ? result.qaSummary : undefined,

@@ -59,6 +59,34 @@ test("30초 요약·숫자·변수·시나리오·초보자 설명·확인 항�
   assert.deepEqual(result.violations, []);
 });
 
+test("실제 생성기에서 사용한 번호 목록과 동의 표현을 올바르게 인식한다", () => {
+  const generatedBody = validBody
+    .replace("- 판단:", "- 기본 판단:")
+    .replace("- 상방 조건:", "- 상승 조건:")
+    .replace("- 하방 조건:", "- 하락 조건:")
+    .replace("- 다음 확인:", "- 다음 확인 지표:")
+    .replace("- 코스피 2,800선:", "1. 코스피 2,800선:")
+    .replace("- 원·달러 환율 1,360원:", "2. 원·달러 환율 1,360원:")
+    .replace("- 미국 10년물 4.2%:", "3. 미국 10년물 4.2%:")
+    .replace("- 나스닥 0.4% 상승:", "4. 나스닥 0.4% 상승:")
+    .replace("- 변수 1:", "- 변수 1은")
+    .replace("- 변수 2:", "- 변수 2는")
+    .replace("상승 조건은", "상방 조건은")
+    .replace("하락 조건은", "하방 조건은")
+    .replace("- 오전 9시 원·달러 환율 방향", "1) 오전 9시 원·달러 환율 방향")
+    .replace("- 오전 10시 외국인 현물·선물 수급", "2) 오전 10시 외국인 현물·선물 수급")
+    .replace("- 오후 2시 반도체 거래대금 유지 여부", "3) 오후 2시 반도체 거래대금 유지 여부");
+
+  const result = inspectStockBlogEditorialContract(generatedBody, "KOREA_DAILY_PREVIEW");
+
+  assert.equal(result.summaryLabelCount, 4);
+  assert.equal(result.coreNumberCount, 4);
+  assert.equal(result.coreVariableCount, 2);
+  assert.equal(result.hasConditionalScenarios, true);
+  assert.equal(result.checklistItemCount, 3);
+  assert.deepEqual(result.violations, []);
+});
+
 test("AI 상투어·참여 CTA·과도한 빈 문단을 차단한다", () => {
   const result = inspectStockBlogEditorialContract(
     `${validBody}\n\n\n결론부터 말씀드리면 댓글로 의견을 남겨주세요.`,

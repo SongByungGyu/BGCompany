@@ -7,8 +7,9 @@ import {
   getStockBlogEditorialPolicy,
   inspectStockBlogEditorialContract,
 } from "@/lib/stock-blog/stock-blog-editorial-policy";
+import { STOCK_BLOG_EDITORIAL_QUALITY_TARGET } from "@/lib/stock-blog/stock-blog-quality-target";
 
-export const STOCK_BLOG_EDITORIAL_QUALITY_TARGET = 95;
+export { STOCK_BLOG_EDITORIAL_QUALITY_TARGET } from "@/lib/stock-blog/stock-blog-quality-target";
 
 const SAFE_BASELINE_GUIDELINES = [
   "경쟁 글의 문장·비유·체크리스트를 복사하지 않고 구조 지표만 참고합니다.",
@@ -143,7 +144,7 @@ export function inspectOwnStockBlogStructure(input: {
       ? Math.round(proseParagraphs.reduce((sum, paragraph) => sum + paragraph.length, 0) / proseParagraphs.length)
       : 0,
     hasDateInTitle: /(?:20\d{2}[./-]\d{1,2}[./-]\d{1,2}|20\d{2}년|\d{1,2}월\s*\d{1,2}일)/.test(input.title),
-    hasChecklist: /체크\s*(?:리스트|포인트)|확인할\s*(?:사항|항목)|점검할\s*(?:사항|항목)/i.test(body) || countBullets(input.body) >= 4,
+    hasChecklist: contract.checklistItemCount > 0,
     hasSourceSection: /함께\s*확인한\s*기사|참고\s*자료|출처\s*[:：]?/i.test(body),
     hasDisclaimer: /투자\s*(?:판단|책임)|매수[·ㆍ\s-]*매도\s*(?:권유|추천)|투자\s*참고/i.test(body),
     hasThirtySecondSummary: contract.hasThirtySecondSummary,

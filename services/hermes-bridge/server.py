@@ -526,8 +526,26 @@ def build_content_writer_prompt(payload: dict[str, Any]) -> str:
     ], ensure_ascii=False, indent=2)
     benchmark_guidelines_json = compact_json(input_data.get("editorialBenchmarkGuidelines") or [])
     reference_bundle = input_data.get("referenceBundle") if isinstance(input_data.get("referenceBundle"), dict) else {}
+    content_type = str(reference_bundle.get("contentType") or "KOREA_DAILY_PREVIEW")
+    editorial_policy_v2 = "1. 30초 요약" in body_structure
+    weekly_editorial = content_type in {"WEEKLY_MARKET_REVIEW", "NEXT_WEEK_MARKET_PREVIEW"}
+    body_min, body_target_min, body_target_max, body_max = (
+        (2000, 2300, 2900, 3200) if weekly_editorial else (1800, 2100, 2600, 2800)
+    )
+    editorial_structure_policy = ""
+    if editorial_policy_v2:
+        editorial_structure_policy = """
+- "1. 30초 요약"은 정확히 네 줄의 불릿으로 작성하고 라벨을 각각 "- 판단:", "- 상방 조건:", "- 하방 조건:", "- 다음 확인:"으로 시작한다.
+- "핵심 숫자"는 검증된 숫자 4~6개를 각각 새 줄의 "- 항목: 값 — 시장에서 갖는 의미" 형식으로 작성한다. 숫자 항목에 1., 2. 같은 번호를 붙이지 않는다.
+- "핵심 변수 2가지"는 정확히 두 줄만 두고 각각 "- 변수 1:"과 "- 변수 2:"로 시작한다.
+- 상승·하락 조건 섹션에는 "- 상승 조건:"과 "- 하락 조건:"을 모두 두고 관찰 가능한 조건으로 작성한다.
+- 초보자 설명은 오늘 시장에 직접 연결된 개념 하나만 3~5문장으로 설명한다.
+- "볼 것 3가지"는 정확히 세 줄의 "- " 불릿만 작성한다. 네 번째 확인 항목을 추가하지 않는다.
+- "BG Market Note 판단"에는 기본 판단과 그 판단을 바꿀 조건을 함께 적는다.
+- 댓글·공감·이웃·투표를 요청하거나 질문으로 참여를 유도하지 않는다. cta에는 지정 투자 유의문구만 자연스럽게 둔다.
+""".strip()
     next_week_preview = (
-        reference_bundle.get("contentType") == "NEXT_WEEK_MARKET_PREVIEW"
+        content_type == "NEXT_WEEK_MARKET_PREVIEW"
         or "다음 주" in f"{topic} {title}"
         or "다음주" in f"{topic} {title}"
     )
@@ -553,23 +571,23 @@ def build_content_writer_prompt(payload: dict[str, Any]) -> str:
 - URL은 마지막 "함께 확인한 기사" 섹션의 기사 3개에만 각각 1개씩 표시한다. 일정·시장 데이터·본문 중간에는 URL을 쓰지 않는다.
 - sections는 required body structure의 heading을 한 글자도 바꾸지 말고 정확한 순서로 모두 작성한다. introduction, conclusion, cta는 sections에 중복해서 넣지 않는다.
 - introduction과 각 sections의 body는 한 덩어리 장문으로 쓰지 않는다. 2~4문장 단위 문단을 빈 줄(\\n\\n)로 나눠 공개 본문 전체에 내용 있는 문단 블록을 10개 이상 만든다.
-- 일정, 기회·위험, 개인 투자자 체크리스트에서는 각 항목을 새 줄의 "- "로 시작한다. 공개 본문 전체의 "- " 불릿은 최소 5개이며 개인 투자자 체크리스트는 4~6개다.
+- 목록형 섹션의 각 항목은 새 줄의 "- "로 시작하고 공개 본문 전체의 "- " 불릿은 최소 5개다.
 - 한국 시장은 수급·원달러 환율·반도체 대형주·코스닥 성장주를 상승 조건과 하락 위험으로 나누어 연결한다.
 - 미국 시장의 실적·대형 기술주 가이던스·금리·달러·연준 기대 중 ReferenceBundle이나 verified market snapshot에 실제 근거가 있는 변수만 해석한다. 입력에 실적·가이던스 근거가 없으면 이를 전망 근거로 언급하지 않는다.
 - 핵심 일정은 검증된 일정만 쓰고 각 일정 아래에 중요한 이유를 한 문장으로 덧붙인다. 일정을 억지로 채우지 않는다.
-- 기회와 위험은 각각 2~3개를 쓰고 모든 항목을 정확히 "- 기회: 설명" 또는 "- 위험: 설명" 형식으로 시작한다. 라벨 없는 혼합 불릿으로 쓰지 않는다.
 - conclusion은 앞 문장을 반복하지 말고 해당 글에서 확인된 환율·기업 실적·국채금리·수급 같은 핵심 변수를 구체적으로 다시 연결한다.
-- cta에는 독자가 댓글로 답하기 쉬운 구체 질문 한 문장과 "본 글은 시장 정보를 정리한 투자 참고 자료이며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 최종 투자 판단과 책임은 투자자 본인에게 있습니다."를 정확히 한 번만 쓴다.
-- introduction, sections, conclusion, cta를 합친 모델 초안은 공백 포함 2,300~2,800자로 작성한다. 이후 검증 일정이 추가되어도 최종 공개 본문이 3,100자를 넘지 않도록 간결하게 쓴다.
+- cta에는 "본 글은 시장 정보를 정리한 투자 참고 자료이며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 최종 투자 판단과 책임은 투자자 본인에게 있습니다."를 정확히 한 번만 쓴다.
+- introduction, sections, conclusion, cta를 합친 모델 초안은 공백 포함 {body_min:,}~{body_max:,}자로 작성하고 {body_target_min:,}~{body_target_max:,}자를 목표로 한다.
 - 같은 문장을 반복하지 않고, 같은 어미와 "관찰됐습니다", "확인했습니다", "전망입니다"를 연속 사용하지 않는다.
 - 숫자 뒤의 한국어 조사와 띄어쓰기를 최종 교정한다. 예를 들어 "6,516.27으로"가 아니라 "6,516.27로"처럼 쓴다.
 - "함께 확인한 기사"는 정확히 다음 형식으로 작성한다: 번호. 기사 제목 – 언론사, 발행일 다음 줄에 원문 링크. 실제 활용한 기사 3개만 둔다.
 - usedSeoKeywords는 같은 뜻을 반복하지 않는 구체 검색어 5~8개만 쓴다.
+{editorial_structure_policy}
 {schedule_policy}
 """.strip()
     strict_writer_rules = f"""
 - sections 배열 길이는 정확히 {len(body_structure)}개이며 required body structure와 heading·순서가 완전히 같아야 한다.
-- 모델 초안은 공백 포함 2,300~2,800자, 내용 있는 문단 블록 10개 이상, 줄바꿈 15개 이상, "- " 불릿 5개 이상이어야 한다.
+- 모델 초안은 공백 포함 {body_min:,}~{body_max:,}자이며 {body_target_min:,}~{body_target_max:,}자를 목표로 한다. 내용 있는 문단 블록 10개 이상, 줄바꿈 15개 이상, "- " 불릿 5개 이상이어야 한다.
 - "함께 확인한 기사" 외부의 URL은 0개이고, 해당 섹션에는 서로 다른 실제 기사 URL이 정확히 3개다.
 - 지정 투자 유의문구는 cta에 정확히 한 번만 있으며 sections나 conclusion에 반복하지 않는다.
 """.strip()
@@ -668,8 +686,22 @@ def build_qa_audit_prompt(payload: dict[str, Any]) -> str:
     quality_diagnostics = input_data.get("qualityGateDiagnostics") if isinstance(input_data.get("qualityGateDiagnostics"), dict) else {}
     quality_target = int(quality_diagnostics.get("requiredEditorialQualityScore") or 90)
     reference_bundle = input_data.get("referenceBundle") if isinstance(input_data.get("referenceBundle"), dict) else {}
+    content_type = str(reference_bundle.get("contentType") or "KOREA_DAILY_PREVIEW")
+    weekly_editorial = content_type in {"WEEKLY_MARKET_REVIEW", "NEXT_WEEK_MARKET_PREVIEW"}
+    body_min, body_max = (2000, 3200) if weekly_editorial else (1800, 2800)
+    editorial_policy_v2 = int(quality_diagnostics.get("editorialPolicyVersion") or 0) >= 2
+    checklist_item_count = int(quality_diagnostics.get("requiredChecklistItemCount") or 3)
+    qa_contract_policy = ""
+    if editorial_policy_v2:
+        qa_contract_policy = f"""
+- "30초 요약"에 "판단:", "상방 조건:", "하방 조건:", "다음 확인:" 네 라벨이 각각 한 번 있는지 확인한다.
+- 핵심 숫자가 4~6개, 핵심 변수가 "변수 1:"과 "변수 2:" 정확히 두 개, 확인 항목이 정확히 {checklist_item_count}개인지 확인한다.
+- 조건별 시나리오에 상승(또는 상방) 조건과 하락(또는 하방) 조건이 모두 있는지 확인한다.
+- 초보자 설명이 오늘 시장과 연결된 개념 하나를 3~5문장으로 설명하는지, 번호가 붙은 "BG Market Note 판단" 섹션이 있는지 확인한다.
+- 댓글·공감·이웃·투표 요청이나 질문형 참여 유도를 요구하지 않는다.
+""".strip()
     next_week_preview = (
-        reference_bundle.get("contentType") == "NEXT_WEEK_MARKET_PREVIEW"
+        content_type == "NEXT_WEEK_MARKET_PREVIEW"
         or "다음 주" in f"{topic} {title}"
         or "다음주" in f"{topic} {title}"
     )
@@ -679,8 +711,7 @@ def build_qa_audit_prompt(payload: dict[str, Any]) -> str:
 """.strip()
     qa_policy = f"""
 - 글이 최근 움직임 → 근거에 기반한 이유 → 이어질 시장 영향 → 투자자 확인사항의 흐름으로 자연스럽게 이어지는지 확인한다.
-- 공개 본문이 공백 포함 2,000~3,000자, section heading 6개 이상, 내용 있는 문단 10개 이상, 줄바꿈 15개 이상, "- " 불릿 5개 이상인지 확인한다.
-- 개인 투자자 체크리스트가 4~6개이고 기회·위험이 각각 2~3개이며 각 불릿이 "- 기회:" 또는 "- 위험:"으로 명확히 구분됐는지 확인한다.
+- 공개 본문이 공백 포함 {body_min:,}~{body_max:,}자, section heading 6개 이상, 내용 있는 문단 10개 이상, 줄바꿈 15개 이상, "- " 불릿 5개 이상인지 확인한다.
 - "함께 확인한 기사"에 실제 활용한 신뢰 가능한 기사 정확히 3개와 서로 다른 원문 링크 3개만 있고, 링크가 본문 중간·일정·시장 데이터 문단에 노출되지 않았는지 확인한다.
 - API 주소, JSON 필드명, asOf, 데이터 수집·내부 분석 과정, AI 설정, 이미지 설명 문구, 기계적인 "시장 영향" 항목명이 노출되면 필수 수정으로 판정한다.
 - 수급 단위가 불확실하거나 비정상적인 값은 숫자 대신 방향성으로 설명했는지, 확인되지 않은 일정·수치·기사를 만들지 않았는지 검사한다.
@@ -691,10 +722,11 @@ def build_qa_audit_prompt(payload: dict[str, Any]) -> str:
 - 같은 문장 반복, 한 덩어리 장문, 같은 어미의 연속 사용, 기사 제목·설명 복사, 경쟁 글 문장·비유·체크리스트 복제가 없는지 확인한다.
 - finalTitle이 날짜나 포괄적인 "장전 브리핑·마감 정리"로 시작하지 않고, 검증된 구체 검색 의도와 제목 끝의 자연어 날짜 형식을 갖췄는지 확인한다.
 - introduction 첫 3문장 안에 시장 움직임·확인 원인·투자자 확인 변수가 있고, usedSeoKeywords가 중복 없는 5~8개인지 확인한다.
-- cta에 독자가 답하기 쉬운 구체 질문 한 문장과 지정 투자 유의 문구가 함께 있는지 확인한다.
-- 모든 필수 조건을 충족하고 사실성 문제와 requiredRevisions가 없으면 qaScore를 90점 이상, publishReadiness=ready, finalRecommendation=approve로 판정한다. 선택 개선 의견만으로 90점 미만을 주지 않는다.
-- requiredRevisions가 비어 있고 게시를 막을 사실성 문제가 없으면 90~100점을 사용한다. 실제 필수 수정이 하나 이상일 때만 89점 이하와 needs_revision/revise를 사용한다.
+- cta에 지정 투자 유의 문구가 정확히 한 번 있고 참여 유도 문구가 없는지 확인한다.
+- 모든 필수 조건을 충족하고 사실성 문제와 requiredRevisions가 없으면 qaScore를 {quality_target}점 이상, publishReadiness=ready, finalRecommendation=approve로 판정한다. 선택 개선 의견만으로 {quality_target}점 미만을 주지 않는다.
+- requiredRevisions가 비어 있고 게시를 막을 사실성 문제가 없으면 {quality_target}~100점을 사용한다. 실제 필수 수정이 하나 이상일 때만 {quality_target - 1}점 이하와 needs_revision/revise를 사용한다.
 - 입력에 없는 실적·가이던스·일정은 필수 수정으로 지적하되, 단순히 일반적으로 확인하면 좋은 변수를 새 필수 조건으로 만들지 않는다.
+{qa_contract_policy}
 {qa_schedule_policy}
 """.strip()
     return f"""
@@ -746,7 +778,7 @@ content-planner, marketing-manager, content-writer가 만든 결과를 바탕으
   "requiredRevisions": ["필수 수정 1"],
   "optionalSuggestions": ["선택 개선 1"],
   "publishReadiness": "ready",
-  "qaScore": 92,
+  "qaScore": {max(quality_target, 97)},
   "finalRecommendation": "approve",
   "reason": "최종 판단 이유"
 }}

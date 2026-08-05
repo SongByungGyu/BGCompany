@@ -152,6 +152,21 @@ export function getStockBlogEditorialGuidelines(contentType: StockReferenceBrief
   ];
 }
 
+const EDITORIAL_SECTION_HEADING_PATTERNS = [
+  /^\d+\.\s*30초\s*요약$/,
+  /^\d+\..*핵심\s*숫자/,
+  /^\d+\..*핵심\s*변수\s*2가지/,
+  /^\d+\..*(?:상승.*하락|하락.*상승).*(?:조건|시나리오)/,
+  /^\d+\..*(?:주요|핵심)\s*일정/,
+  /^\d+\..*초보자\s*설명/,
+  /^\d+\..*볼\s*것\s*3가지/,
+  /^\d+\.\s*BG\s*Market\s*Note\s*(?:의\s*)?판단$/i,
+] as const;
+
+function isEditorialSectionHeading(value: string) {
+  return EDITORIAL_SECTION_HEADING_PATTERNS.some((pattern) => pattern.test(value));
+}
+
 function sectionBody(body: string, headingPattern: RegExp) {
   const lines = body.replace(/\r\n?/g, "\n").split("\n");
   const start = lines.findIndex((line) => headingPattern.test(line.trim()));
@@ -159,14 +174,14 @@ function sectionBody(body: string, headingPattern: RegExp) {
   const collected: string[] = [];
   for (let index = start + 1; index < lines.length; index += 1) {
     const line = lines[index].trim();
-    if (/^\d+\.\s+/.test(line) || line === "함께 확인한 기사" || line === "마무리") break;
+    if (isEditorialSectionHeading(line) || line === "함께 확인한 기사" || line === "마무리") break;
     collected.push(lines[index]);
   }
   return collected.join("\n").trim();
 }
 
-function bulletCount(value: string) {
-  return value.split("\n").filter((line) => /^\s*[-*•]\s+\S/.test(line)).length;
+function listItemCount(value: string) {
+  return value.split("\n").filter((line) => /^\s*(?:[-*•]|\d+[.)])\s+\S/.test(line)).length;
 }
 
 function sentenceCount(value: string) {
@@ -204,20 +219,28 @@ export function inspectStockBlogEditorialContract(
   const scenarios = sectionBody(body, /^\d+\..*(?:상승.*하락|하락.*상승).*(?:조건|시나리오)/);
   const beginner = sectionBody(body, /^\d+\..*초보자\s*설명/);
   const checklist = sectionBody(body, /^\d+\..*볼\s*것\s*3가지/);
-  const summaryLabelCount = ["판단", "상방 조건", "하방 조건", "다음 확인"]
-    .filter((label) => new RegExp(`(?:^|\\n)\\s*[-*•]?\\s*${label}\\s*[:：]`, "m").test(summary))
+  const summaryLabelPatterns = [
+    /(?:^|\n)\s*(?:[-*•]|\d+[.)])?\s*(?:(?:기본|오늘(?:의)?|시장)\s*)?판단\s*[:：]/m,
+    /(?:^|\n)\s*(?:[-*•]|\d+[.)])?\s*(?:상방|상승)\s*조건\s*[:：]/m,
+    /(?:^|\n)\s*(?:[-*•]|\d+[.)])?\s*(?:하방|하락)\s*조건\s*[:：]/m,
+    /(?:^|\n)\s*(?:[-*•]|\d+[.)])?\s*다음\s*확인(?:\s*지표)?\s*[:：]/m,
+  ];
+  const summaryLabelCount = summaryLabelPatterns
+    .filter((pattern) => pattern.test(summary))
     .length;
-  const coreVariableMarkers = Array.from(coreVariables.matchAll(/(?:^|\n)\s*[-*•]?\s*변수\s*([12])\s*[:：]/g))
+  const coreVariableMarkers = Array.from(coreVariables.matchAll(/(?:^|\n)\s*(?:[-*•]|\d+[.)])?\s*변수\s*([12])\s*(?:[:：]|은|는)\s*/g))
     .map((match) => match[1]);
   const coreVariableCount = new Set(coreVariableMarkers).size;
-  const coreNumberCount = bulletCount(coreNumbers);
+  const coreNumberCount = listItemCount(coreNumbers);
   const beginnerExplanationSentenceCount = sentenceCount(beginner);
-  const checklistItemCount = bulletCount(checklist);
+  const checklistItemCount = listItemCount(checklist);
   const forbiddenPhraseMatches = STOCK_BLOG_HARD_PROHIBITED_PHRASES.filter((phrase) => body.includes(phrase));
   const hasForbiddenEngagementCta = FORBIDDEN_ENGAGEMENT_PATTERNS.some((pattern) => pattern.test(body));
   const excessiveBlankLineRunCount = (body.replace(/\r\n?/g, "\n").match(/\n{3,}|\n[ \t]+\n/g) ?? []).length;
   const hasThirtySecondSummary = Boolean(summary) && summaryLabelCount === 4;
-  const hasConditionalScenarios = Boolean(scenarios) && /상승/.test(scenarios) && /하락/.test(scenarios);
+  const hasConditionalScenarios = Boolean(scenarios)
+    && /(?:상승|상방)/.test(scenarios)
+    && /(?:하락|하방)/.test(scenarios);
   const hasBgMarketNoteJudgment = /(?:^|\n)\s*\d+\.\s*BG\s*Market\s*Note\s*(?:의\s*)?판단\s*$/im.test(body);
   const violations: string[] = [];
 
