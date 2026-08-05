@@ -9,6 +9,7 @@ import { evaluateStockBlogPublishQuality } from "@/lib/stock-blog/quality-gate";
 import {
   evaluateStockBlogRecoveryDate,
   evaluateStockBlogSchedulerRetry,
+  isNaverDraftAssemblyQualityFailure,
   isStockContentQualityFailure,
   isStockReferencePreflightFailure,
   shouldClearRecoverablePipelineCircuitBreaker,
@@ -549,6 +550,17 @@ async function runOneSchedule(
   const retry = retryState(existing, now, config, options.manualRecovery);
   if (!retry.allowed) return { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "already_ran", attempt: retry.attempt, reason: retry.reason };
   const attempt = retry.attempt;
+  const previousPayload = existing ? eventPayload(existing.payload) : {};
+  const previousReason = typeof previousPayload.reason === "string" ? previousPayload.reason : "";
+  const resumablePipelineId = options.manualRecovery
+    && previousPayload.status === "partial_failed"
+    && isNaverDraftAssemblyQualityFailure(previousReason)
+    && typeof previousPayload.pipelineId === "string"
+    ? previousPayload.pipelineId
+    : null;
+  const resumableApprovalId = typeof previousPayload.approvalId === "string"
+    ? previousPayload.approvalId
+    : undefined;
 
   await writeSchedulerEvent({
     key,
@@ -561,6 +573,69 @@ async function runOneSchedule(
 
   try {
     const hermesUsageBefore = usageSnapshot(await getHermesUsageSummary({ recentLimit: 4 }));
+    if (resumablePipelineId) {
+      try {
+        const job = await createNaverDraftJobFromPipeline({
+          contentPipelineId: resumablePipelineId,
+          approvalId: resumableApprovalId,
+          allowPublish: config.autoPublish,
+          publishKey: config.autoPublish ? publishKey : null,
+          marketDate: config.autoPublish ? marketDate : null,
+          scheduleSlot: config.autoPublish ? definition.scheduledTime : null,
+        });
+        const result: StockBlogSchedulerRunResult = {
+          scheduleId: definition.scheduleId,
+          contentType,
+          scheduleKey: key,
+          scheduledFor,
+          status: "succeeded",
+          attempt,
+          reason: "기존 고품질 파이프라인에서 네이버 작업 조립 복구 완료",
+          pipelineId: resumablePipelineId,
+          approvalId: resumableApprovalId,
+          naverDraftJobId: job.id,
+          hermesUsageBefore,
+          hermesUsageAfter: hermesUsageBefore,
+        };
+        await writeSchedulerEvent({
+          key,
+          contentType,
+          scheduledFor,
+          status: "succeeded",
+          summary: `${contentType} 네이버 작업 조립 복구 완료`,
+          payload: result as unknown as Prisma.InputJsonObject,
+        });
+        return result;
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "네이버 작업 조립 복구 실패";
+        const qualityFailure = isStockContentQualityFailure(reason);
+        const result: StockBlogSchedulerRunResult = {
+          scheduleId: definition.scheduleId,
+          contentType,
+          scheduleKey: key,
+          scheduledFor,
+          status: "partial_failed",
+          attempt,
+          reason: qualityFailure ? `STOCK_CONTENT_QUALITY_FAILED: ${reason}` : reason,
+          pipelineId: resumablePipelineId,
+          approvalId: resumableApprovalId,
+          hermesUsageBefore,
+          hermesUsageAfter: hermesUsageBefore,
+        };
+        await writeSchedulerEvent({
+          key,
+          contentType,
+          scheduledFor,
+          status: "partial_failed",
+          summary: `${contentType} 네이버 작업 조립 복구 실패`,
+          payload: result as unknown as Prisma.InputJsonObject,
+        });
+        if (config.autoPublish && !qualityFailure) {
+          await activateSchedulerPublishCircuitBreaker({ status: "publish_blocked", reason, scheduleKey: key });
+        }
+        return result;
+      }
+    }
     if (config.runnerMode === "hermes") {
       const requiredRuns = getExpectedHermesRunsForStockBlog(contentType);
       if (hermesUsageBefore.remaining < requiredRuns) {

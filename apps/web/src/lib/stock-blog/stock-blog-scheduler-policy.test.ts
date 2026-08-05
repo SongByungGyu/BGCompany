@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   evaluateStockBlogRecoveryDate,
   evaluateStockBlogSchedulerRetry,
+  isNaverDraftAssemblyQualityFailure,
   isStockContentQualityFailure,
   isStockReferencePreflightFailure,
   shouldClearRecoverablePipelineCircuitBreaker,
@@ -46,6 +47,13 @@ test("네이버 작업 조립 단계의 품질 실패도 콘텐츠 품질 복구
     true,
   );
   assert.equal(isStockContentQualityFailure("NAVER_PUBLISH_FAILED: 발행 버튼 오류"), false);
+  assert.equal(
+    isNaverDraftAssemblyQualityFailure(
+      "STOCK_CONTENT_QUALITY_FAILED: NAVER_DRAFT_QUALITY_FAILED: 본문 분량 초과",
+    ),
+    true,
+  );
+  assert.equal(isNaverDraftAssemblyQualityFailure("NAVER_PUBLISH_FAILED: 발행 버튼 오류"), false);
 });
 
 test("자동발행 사전검증 실패는 설정된 지연 뒤 한 번 재시도한다", () => {

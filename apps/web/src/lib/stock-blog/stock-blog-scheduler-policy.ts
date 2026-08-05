@@ -37,6 +37,10 @@ export function isStockContentQualityFailure(reason: string) {
     || normalized.startsWith(NAVER_DRAFT_QUALITY_PREFIX);
 }
 
+export function isNaverDraftAssemblyQualityFailure(reason: string) {
+  return reason.includes(NAVER_DRAFT_QUALITY_PREFIX);
+}
+
 export function shouldClearReferencePreflightCircuitBreaker(input: {
   active: boolean;
   reason: string;
