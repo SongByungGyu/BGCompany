@@ -41,6 +41,13 @@ test("관련 글은 마무리 앞에 넣고 다음 주 프리뷰에는 외부 �
   assert.equal(appendRelatedPostSection({ body, template: "NEXT_WEEK_MARKET_PREVIEW", posts }), body);
 });
 
+test("관련 글은 편집 정책의 본문 상한을 넘기면 추가하지 않는다", () => {
+  const body = "가".repeat(2790);
+  const posts = [{ title: "삼성전자 수급 정리", url: "https://blog.naver.com/bgmarketnote/2" }];
+
+  assert.equal(appendRelatedPostSection({ body, template: "KOREA_DAILY_PREVIEW", posts }), body);
+});
+
 test("최근 발행 제목 회피 가이드는 최대 6개 제목만 포함한다", () => {
   const guideline = buildRecentTitleAvoidanceGuideline(Array.from({ length: 8 }, (_, index) => `제목 ${index + 1}`));
   assert.match(guideline ?? "", /제목 6/);

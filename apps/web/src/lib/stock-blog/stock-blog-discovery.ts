@@ -1,4 +1,5 @@
 import type { StockBriefingTemplate } from "@/features/content-pipeline/content-pipeline-types";
+import { getStockBlogEditorialPolicy } from "./stock-blog-editorial-policy.ts";
 
 export type PublishedPostCandidate = {
   title: string;
@@ -208,7 +209,8 @@ export function appendRelatedPostSection(input: {
   const result = input.body.includes(marker)
     ? input.body.replace(marker, `\n\n${section}${marker}`)
     : `${input.body.trim()}\n\n${section}`;
-  if (result.length <= 3200) return result;
+  const maxBodyLength = getStockBlogEditorialPolicy(input.template).bodyLength.max;
+  if (result.length <= maxBodyLength) return result;
   if (input.posts.length > 1) return appendRelatedPostSection({ ...input, posts: input.posts.slice(0, 1) });
   return input.body;
 }

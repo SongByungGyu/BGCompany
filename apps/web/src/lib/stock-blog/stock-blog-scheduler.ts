@@ -630,9 +630,10 @@ async function runOneSchedule(
       } catch (error) {
         status = "partial_failed";
         const reason = error instanceof Error ? error.message : "네이버 임시저장 job 생성 실패";
-        const duplicateContentBlocked = reason.startsWith("NAVER_DRAFT_DUPLICATE_CONTENT_BLOCKED:");
-        notes.push(duplicateContentBlocked ? `STOCK_CONTENT_QUALITY_FAILED: ${reason}` : reason);
-        if (config.autoPublish && !duplicateContentBlocked) {
+        const contentQualityBlocked = reason.startsWith("NAVER_DRAFT_DUPLICATE_CONTENT_BLOCKED:")
+          || reason.startsWith("NAVER_DRAFT_QUALITY_FAILED:");
+        notes.push(contentQualityBlocked ? `STOCK_CONTENT_QUALITY_FAILED: ${reason}` : reason);
+        if (config.autoPublish && !contentQualityBlocked) {
           await activateSchedulerPublishCircuitBreaker({ status: "publish_blocked", reason, scheduleKey: key });
         }
       }

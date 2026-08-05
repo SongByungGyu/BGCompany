@@ -25,13 +25,16 @@ export type StockBlogRecoveryDateDecision = {
 
 const STOCK_REFERENCE_PREFLIGHT_PREFIX = "STOCK_REFERENCE_PREFLIGHT_BLOCKED:";
 const STOCK_CONTENT_QUALITY_PREFIX = "STOCK_CONTENT_QUALITY_FAILED:";
+const NAVER_DRAFT_QUALITY_PREFIX = "NAVER_DRAFT_QUALITY_FAILED:";
 
 export function isStockReferencePreflightFailure(reason: string) {
   return reason.trimStart().startsWith(STOCK_REFERENCE_PREFLIGHT_PREFIX);
 }
 
 export function isStockContentQualityFailure(reason: string) {
-  return reason.trimStart().startsWith(STOCK_CONTENT_QUALITY_PREFIX);
+  const normalized = reason.trimStart();
+  return normalized.startsWith(STOCK_CONTENT_QUALITY_PREFIX)
+    || normalized.startsWith(NAVER_DRAFT_QUALITY_PREFIX);
 }
 
 export function shouldClearReferencePreflightCircuitBreaker(input: {

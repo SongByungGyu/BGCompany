@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   evaluateStockBlogRecoveryDate,
   evaluateStockBlogSchedulerRetry,
+  isStockContentQualityFailure,
   isStockReferencePreflightFailure,
   shouldClearRecoverablePipelineCircuitBreaker,
   shouldClearReferencePreflightCircuitBreaker,
@@ -37,6 +38,14 @@ test("시장 참고자료 사전검증 실패만 재시도 가능한 데이터 �
     isStockReferencePreflightFailure("네이버 이미지 업로드 실패"),
     false,
   );
+});
+
+test("네이버 작업 조립 단계의 품질 실패도 콘텐츠 품질 복구 대상으로 분류한다", () => {
+  assert.equal(
+    isStockContentQualityFailure("NAVER_DRAFT_QUALITY_FAILED: 본문 분량 1,800~2,800자"),
+    true,
+  );
+  assert.equal(isStockContentQualityFailure("NAVER_PUBLISH_FAILED: 발행 버튼 오류"), false);
 });
 
 test("자동발행 사전검증 실패는 설정된 지연 뒤 한 번 재시도한다", () => {
