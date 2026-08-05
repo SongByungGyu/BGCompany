@@ -9,6 +9,7 @@ if (-not (Test-Path -LiteralPath $packageJson)) { throw "package.json not found:
 if (-not (Test-Path -LiteralPath $envFile)) { throw ".env not found: $envFile" }
 
 $npm = (Get-Command npm.cmd -ErrorAction Stop).Source
+$agentSingletonPort = 43923
 $logDir = Join-Path $AgentRoot "logs"
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 $logFile = Join-Path $logDir "naver-draft-agent.log"
@@ -18,6 +19,11 @@ Set-Location -LiteralPath $AgentRoot
 
 while ($true) {
   try {
+    $agentAlreadyRunning = [bool](Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort $agentSingletonPort -State Listen -ErrorAction SilentlyContinue)
+    if ($agentAlreadyRunning) {
+      Start-Sleep -Seconds 15
+      continue
+    }
     & $npm run start *>> $logFile
     $exitCode = $LASTEXITCODE
     "[$(Get-Date -Format o)] Agent exited with code $exitCode. Restarting in 10 seconds." | Add-Content -LiteralPath $logFile

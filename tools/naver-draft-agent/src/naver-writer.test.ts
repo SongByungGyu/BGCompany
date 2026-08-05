@@ -6,6 +6,7 @@ import {
   buildMultilineEditorInputSteps,
   hasSavedDraftTitle,
   normalizeNaverCategoryLabel,
+  normalizeNaverTags,
   pickMostReadableEditorText,
   prepareNaverPublicationBody,
   resolveNaverPublishCategory,
@@ -21,6 +22,19 @@ test("본문 이미지 설명과 출처를 네이버 기본 캡션 한 문단으
     "원·달러 환율과 미국 국채금리 비교 · 기준일 2026. 08. 14. | 출처 KIS · FRED",
   );
   assert.equal(buildNaverImageCaption("이미지 설명", "출처", false), "이미지 설명");
+});
+
+test("네이버 태그는 공백과 구두점을 제거하고 중복 없이 정규화한다", () => {
+  assert.deepEqual(normalizeNaverTags([
+    "오늘 코스피 마감 원인",
+    "#KOSPI 외국인 순매수",
+    "기계·장비 강세",
+    "오늘 코스피 마감 원인",
+  ]), [
+    "오늘코스피마감원인",
+    "KOSPI외국인순매수",
+    "기계장비강세",
+  ]);
 });
 
 test("네이버 하위 카테고리 표시 문구를 실제 카테고리명으로 정규화한다", () => {

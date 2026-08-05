@@ -1010,31 +1010,42 @@ export function hasSavedDraftTitle(listText: string, title: string) {
   return token.length >= 8 && listText.replace(/\s+/g, " ").includes(token);
 }
 
+export function normalizeNaverTags(tags: string[]) {
+  return [...new Set(tags
+    .map((tag) => tag.replace(/^#+/, "").replace(/[^\p{L}\p{N}_]/gu, "").trim())
+    .filter(Boolean)
+    .map((tag) => [...tag].slice(0, 30).join("")))];
+}
+
 async function fillNaverTags(page: import("playwright").Page, tags: string[]) {
   if (tags.length === 0) return true;
   const selectors = [
+    '#tag-input',
     'input[placeholder*="태그"]',
     'input[aria-label*="태그"]',
     'input[class*="tag"]',
   ];
   for (const selector of selectors) {
-    const input = page.locator(selector).first();
+    const input = page.locator(`${selector}:visible`).first();
     if (!(await input.count().catch(() => 0))) continue;
-    const normalizedTags = tags.map((tag) => tag.replace(/^#/, "").trim()).filter(Boolean);
-    const publishLayer = page.locator('div[class*="layer_publish"]:visible').last();
+    const normalizedTags = normalizeNaverTags(tags);
+    const readCommittedTags = () => page.locator('[id^="tag-item-"]:visible').evaluateAll((nodes) =>
+      nodes.map((node) => (node.getAttribute("aria-label") || node.textContent || "").replace(/^#/, "").trim()),
+    ).catch(() => [] as string[]);
+
     for (const tag of normalizedTags) {
-      const existingText = await publishLayer.innerText().catch(() => "");
-      if (existingText.includes(tag)) continue;
-      await input.fill(tag, { timeout: 10000 });
+      if ((await readCommittedTags()).includes(tag)) continue;
+      await input.fill("", { timeout: 10000 });
+      await input.pressSequentially(tag, { delay: 25, timeout: 10000 });
       await input.press("Enter");
-      await page.waitForTimeout(150);
+      await page.waitForTimeout(250);
       if (await input.inputValue().catch(() => tag)) {
         console.warn(`[naver-agent] tag was not committed: ${tag}`);
         return false;
       }
     }
-    const confirmedText = await publishLayer.innerText().catch(() => "");
-    const missingTags = normalizedTags.filter((tag) => !confirmedText.includes(tag));
+    const committedTags = await readCommittedTags();
+    const missingTags = normalizedTags.filter((tag) => !committedTags.includes(tag));
     if (missingTags.length > 0) {
       console.warn(`[naver-agent] tag chips were not confirmed: ${missingTags.join(",")}`);
       return false;

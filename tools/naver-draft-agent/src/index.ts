@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
+import { createServer, type Server } from "node:net";
 import path from "node:path";
 import { runNaverWriter, testNaverBrowser, type NaverDraftJob } from "./naver-writer.js";
 
@@ -105,31 +106,62 @@ async function processJob(cfg: AgentConfig, job: NaverDraftJob) {
   console.log(`[naver-agent] ${claimed.job.id} -> ${result.status}`);
 }
 
+function singletonPort() {
+  const parsed = Number.parseInt(process.env.NAVER_AGENT_SINGLETON_PORT ?? "43923", 10);
+  return Number.isFinite(parsed) && parsed >= 1024 && parsed <= 65535 ? parsed : 43923;
+}
+
+async function acquireSingletonLock(): Promise<Server> {
+  const port = singletonPort();
+  const server = createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen({ host: "127.0.0.1", port, exclusive: true }, () => {
+      server.off("error", reject);
+      resolve();
+    });
+  }).catch((error: NodeJS.ErrnoException) => {
+    server.close();
+    if (error.code === "EADDRINUSE") throw new Error(`NAVER_AGENT_ALREADY_RUNNING:${port}`);
+    throw error;
+  });
+  console.log(`[naver-agent] singleton lock acquired on 127.0.0.1:${port}`);
+  return server;
+}
+
 async function main() {
   const cfg = config();
   if (process.argv.includes("--browser-test")) {
     await testNaverBrowser();
     return;
   }
+  const singletonLock = await acquireSingletonLock();
   console.log(`[naver-agent] polling ${cfg.baseUrl} every ${cfg.pollIntervalMs}ms`);
   const dryRunSetting = process.env.NAVER_AGENT_DRY_RUN ?? process.env.NAVER_DRAFT_AGENT_DRY_RUN;
   const singleJob = process.env.NAVER_AGENT_SINGLE_JOB === "true";
   console.log(`[naver-agent] dry-run=${dryRunSetting !== "false"}, save=${process.env.NAVER_ALLOW_DRAFT_SAVE === "true"}, publish=${process.env.NAVER_ALLOW_PUBLISH === "true"}`);
-  for (;;) {
-    let attemptedJob = false;
-    try {
-      const { job } = await nextJob(cfg);
-      if (job) {
-        attemptedJob = true;
-        await processJob(cfg, job);
-        if (singleJob) return;
+  try {
+    for (;;) {
+      let attemptedJob = false;
+      try {
+        const { job } = await nextJob(cfg);
+        if (job) {
+          attemptedJob = true;
+          await processJob(cfg, job);
+          if (singleJob) return;
+        }
+      } catch (error) {
+        console.error("[naver-agent]", error instanceof Error ? error.message : error);
+        if (singleJob && attemptedJob) return;
       }
-    } catch (error) {
-      console.error("[naver-agent]", error instanceof Error ? error.message : error);
-      if (singleJob && attemptedJob) return;
+      await new Promise((resolve) => setTimeout(resolve, cfg.pollIntervalMs));
     }
-    await new Promise((resolve) => setTimeout(resolve, cfg.pollIntervalMs));
+  } finally {
+    singletonLock.close();
   }
 }
 
-void main();
+void main().catch((error) => {
+  console.error("[naver-agent]", error instanceof Error ? error.message : error);
+  process.exitCode = 1;
+});
