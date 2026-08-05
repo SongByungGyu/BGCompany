@@ -1,5 +1,5 @@
-import type { MarketSnapshot, StockReferenceBriefingTemplate } from "./references/reference-types";
-import { STOCK_BLOG_INVESTMENT_DISCLAIMER } from "./stock-blog-editorial-policy";
+import type { MarketSnapshot, StockReferenceBriefingTemplate } from "./references/reference-types.ts";
+import { STOCK_BLOG_INVESTMENT_DISCLAIMER } from "./stock-blog-editorial-policy.ts";
 
 export type VerifiedScheduleEvent = {
   date: string;
@@ -152,9 +152,9 @@ function scheduleImportance(event: string, market?: string) {
   if (/unemployment|employment|payroll/.test(normalized)) {
     return "고용 흐름이 경기 기대와 달러, 미국 국채금리에 미치는 반응을 확인할 필요가 있습니다.";
   }
-  if (market === "KR") return "국내 경기 기대와 원·달러 환율, 외국인 수급에 미치는 영향을 함께 봐야 합니다.";
-  if (market === "US") return "미국 국채금리와 달러, 성장주 투자심리의 반응을 함께 확인해야 합니다.";
-  return "글로벌 금리·환율과 위험선호가 어떻게 반응하는지 확인할 필요가 있습니다.";
+  if (market === "KR") return `${event} 이후 국내 경기 기대와 원·달러 환율, 외국인 수급의 반응을 함께 봐야 합니다.`;
+  if (market === "US") return `${event} 이후 미국 국채금리와 달러, 성장주 투자심리의 반응을 함께 확인해야 합니다.`;
+  return `${event} 이후 글로벌 금리·환율과 위험선호가 어떻게 반응하는지 확인할 필요가 있습니다.`;
 }
 
 function renderScheduleBody(schedule: VerifiedSchedule) {
@@ -311,7 +311,7 @@ export function applyVerifiedSchedule(
   const scheduleSections = originalSections.filter((section) => SCHEDULE_HEADING_PATTERN.test(stringValue(section.heading)));
   const writerScheduleText = scheduleSections.map((section) => stringValue(section.body)).join("\n").toLowerCase();
   const writerSelectedEvents = verifiedEvents.filter((item) => writerScheduleText.includes(item.event.toLowerCase()));
-  const eventLimit = options.contentType === "NEXT_WEEK_MARKET_PREVIEW" ? 6 : 4;
+  const eventLimit = options.contentType === "NEXT_WEEK_MARKET_PREVIEW" ? 6 : 2;
   const events = (writerSelectedEvents.length > 0 ? writerSelectedEvents : verifiedEvents).slice(0, eventLimit);
   const markets = [...new Set(events.map((item) => item.market).filter((item): item is string => Boolean(item)))];
   const expectedMarkets = options.contentType === "NEXT_WEEK_MARKET_PREVIEW" ? ["KR", "US"] : [];

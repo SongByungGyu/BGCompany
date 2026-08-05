@@ -195,17 +195,36 @@ test("일일 마감 글은 원래 번호 제목을 유지하고 가까운 일정
   assert.equal(applied.validation.checkedEventCount, 2);
 });
 
+test("일일 글은 검증 일정을 핵심 2개로 제한하고 일반 설명도 이벤트별로 구분한다", () => {
+  const applied = applyVerifiedSchedule(writerResult([
+    { heading: "함께 확인한 기사", body: "1. 기사 – 언론사, 발행일\nhttps://news.example.com/article" },
+  ]), snapshot({
+    marketDate: "2026-08-05",
+    upcoming: [
+      { date: "2026-08-05", event: "Alpha Market Data", market: "US", url: "https://example.com/alpha" },
+      { date: "2026-08-05", event: "Beta Market Data", market: "US", url: "https://example.com/beta" },
+      { date: "2026-08-05", event: "Gamma Market Data", market: "US", url: "https://example.com/gamma" },
+    ],
+  }), { contentType: "KOREA_MARKET_CLOSE_US_PREVIEW" });
+  const fullDraft = String(applied.result.fullDraft);
+
+  assert.equal(applied.validation.checkedEventCount, 2);
+  assert.match(fullDraft, /Alpha Market Data 이후 미국 국채금리/);
+  assert.match(fullDraft, /Beta Market Data 이후 미국 국채금리/);
+  assert.doesNotMatch(fullDraft, /Gamma Market Data/);
+});
+
 test("FOMC·환율·금리 일정은 서로 다른 중요도 문장으로 설명한다", () => {
   const applied = applyVerifiedSchedule(writerResult([
-    { heading: "4. 금리·환율·핵심 일정", body: "FOMC와 환율, 금리 자료를 확인합니다." },
+    { heading: "4. 다음 주 핵심 일정", body: "FOMC와 환율, 금리 자료를 확인합니다." },
   ]), snapshot({
     marketDate: "2026-07-20",
     upcoming: [
-      { date: "2026-07-20", event: "FOMC Press Release", market: "US", url: "https://example.com/fomc" },
-      { date: "2026-07-20", event: "H.10 Foreign Exchange Rates", market: "US", url: "https://example.com/fx" },
-      { date: "2026-07-20", event: "H.15 Selected Interest Rates", market: "US", url: "https://example.com/rates" },
+      { date: "2026-07-21", event: "FOMC Press Release", market: "US", url: "https://example.com/fomc" },
+      { date: "2026-07-21", event: "H.10 Foreign Exchange Rates", market: "US", url: "https://example.com/fx" },
+      { date: "2026-07-21", event: "H.15 Selected Interest Rates", market: "US", url: "https://example.com/rates" },
     ],
-  }), { contentType: "KOREA_MARKET_CLOSE_US_PREVIEW" });
+  }), { contentType: "NEXT_WEEK_MARKET_PREVIEW" });
   const scheduleBody = String(applied.result.fullDraft);
 
   assert.match(scheduleBody, /통화정책 신호/);
