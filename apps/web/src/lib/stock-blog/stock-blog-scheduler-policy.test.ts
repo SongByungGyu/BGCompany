@@ -174,6 +174,23 @@ test("인증된 수동 복구의 추가 실행도 한 번으로 제한한다", (
   assert.equal(decision.allowed, false);
 });
 
+test("인증된 수동 복구는 운영 복구 상한 안에서 연속된 품질 수정 뒤 다시 실행한다", () => {
+  const decision = evaluateStockBlogSchedulerRetry({
+    exists: true,
+    status: "failed",
+    previousAttempt: 4,
+    elapsedMs: 60 * 60 * 1000,
+    autoPublish: true,
+    autoPublishRetryLimit: 2,
+    maxRetries: 12,
+    retryDelayMinutes: 10,
+    retryableGenerationFailure: true,
+    manualRecovery: true,
+  });
+
+  assert.deepEqual(decision, { allowed: true, attempt: 5 });
+});
+
 test("인증된 수동 복구도 실제 발행 실패의 재시도 한도는 우회하지 않는다", () => {
   const decision = evaluateStockBlogSchedulerRetry({
     exists: true,

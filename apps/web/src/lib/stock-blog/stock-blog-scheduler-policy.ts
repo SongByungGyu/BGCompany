@@ -109,7 +109,7 @@ export function evaluateStockBlogSchedulerRetry(
     && input.status !== "running"
     && input.status !== "deferred"
     && (input.referencePreflightFailure || input.retryableGenerationFailure)
-    && input.previousAttempt < maxAttempts + 1;
+    && input.previousAttempt < Math.max(maxAttempts + 1, input.maxRetries);
   if (manualRecoveryAllowed) {
     return { allowed: true, attempt: input.previousAttempt + 1 };
   }
