@@ -36,6 +36,14 @@ const validBody = [
   "방향보다 판단이 달라지는 조건을 먼저 확인하겠습니다.",
 ].join("\n\n");
 
+const validWeeklyReviewBody = validBody
+  .replace("2. 전일 한국장 코멘트와 간밤 미국장 핵심 숫자", "2. 이번 주 한국·미국 시장 핵심 숫자")
+  .replace("3. 오늘 한국장 핵심 변수 2가지", "3. 이번 주 핵심 변수 2가지")
+  .replace("4. 한국장 상승·하락 조건", "4. 이번 주 상승·하락을 가른 조건")
+  .replace("5. 오늘의 초보자 설명", "5. 이번 주 수급·주도 업종\n\n외국인 수급과 반도체·금융 업종의 상대 흐름을 복기합니다.\n\n6. 이번 주 초보자 설명")
+  .replace("6. 오늘 한국장 볼 것 3가지", "7. 다음 주에 다시 볼 것 3가지")
+  .replace("7. BG Market Note 판단", "8. BG Market Note 판단");
+
 test("일일·주간 템플릿에 서로 다른 분량과 고정 구조를 제공한다", () => {
   const daily = getStockBlogEditorialPolicy("KOREA_DAILY_PREVIEW");
   const weekly = getStockBlogEditorialPolicy("NEXT_WEEK_MARKET_PREVIEW");
@@ -48,10 +56,20 @@ test("일일·주간 템플릿에 서로 다른 분량과 고정 구조를 제�
     getStockBlogEditorialPolicy("KOREA_MARKET_CLOSE_US_PREVIEW").bodyStructure[1],
     "2. 전일 미국장 핵심 숫자와 오늘 연결 신호",
   );
+  assert.deepEqual(getStockBlogEditorialPolicy("WEEKLY_MARKET_REVIEW").bodyStructure.slice(1, 7), [
+    "2. 이번 주 한국·미국 시장 핵심 숫자",
+    "3. 이번 주 핵심 변수 2가지",
+    "4. 이번 주 상승·하락을 가른 조건",
+    "5. 이번 주 수급·주도 업종",
+    "6. 이번 주 초보자 설명",
+    "7. 다음 주에 다시 볼 것 3가지",
+  ]);
   assert.ok(weekly.bodyStructure.includes("4. 다음 주 핵심 일정"));
   assert.match(getStockBlogEditorialGuidelines("KOREA_DAILY_PREVIEW").join("\n"), /댓글·공감·이웃·투표/);
   assert.match(getStockBlogEditorialGuidelines("KOREA_DAILY_PREVIEW").join("\n"), /전일 한국장 마감을 2~3문장/);
   assert.match(getStockBlogEditorialGuidelines("KOREA_MARKET_CLOSE_US_PREVIEW").join("\n"), /전일 S&P500·나스닥·다우/);
+  assert.match(getStockBlogEditorialGuidelines("WEEKLY_MARKET_REVIEW").join("\n"), /본문의 70% 이상을 이번 주 한국·미국/);
+  assert.match(getStockBlogEditorialGuidelines("NEXT_WEEK_MARKET_PREVIEW").join("\n"), /본문의 70% 이상을 다음 주/);
 });
 
 test("30초 요약·숫자·변수·시나리오·초보자 설명·확인 항목 계약을 검증한다", () => {
@@ -63,6 +81,18 @@ test("30초 요약·숫자·변수·시나리오·초보자 설명·확인 항�
   assert.equal(result.hasConditionalScenarios, true);
   assert.equal(result.beginnerExplanationSentenceCount, 3);
   assert.equal(result.checklistItemCount, 3);
+  assert.deepEqual(result.violations, []);
+});
+
+test("토요일 주간 복기에 다음 주 전망·일정 구조가 섞이면 차단한다", () => {
+  const result = inspectStockBlogEditorialContract(validBody, "WEEKLY_MARKET_REVIEW");
+
+  assert.ok(result.violations.some((item) => item.includes("토요일 주간 복기 섹션 누락")));
+});
+
+test("토요일 주간 복기 전용 구조는 편집 계약을 통과한다", () => {
+  const result = inspectStockBlogEditorialContract(validWeeklyReviewBody, "WEEKLY_MARKET_REVIEW");
+
   assert.deepEqual(result.violations, []);
 });
 

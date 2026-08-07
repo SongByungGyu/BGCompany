@@ -8,6 +8,7 @@ import {
   STOCK_BLOG_EDITORIAL_QUALITY_TARGET,
 } from "@/lib/stock-blog/stock-blog-editorial-benchmark";
 import {
+  BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION,
   getStockBlogEditorialPolicy,
   inspectStockBlogEditorialContract,
   STOCK_BLOG_INVESTMENT_DISCLAIMER,
@@ -409,7 +410,7 @@ export function evaluateStockBlogPublishQuality(input: {
   if (d.sectionHeadingCount < policy.minimumHeadingCount) reasons.push(`섹션 제목 ${policy.minimumHeadingCount}개 이상 필요`);
   if (d.paragraphCount < policy.minimumParagraphCount) reasons.push(`최종 본문 문단 ${policy.minimumParagraphCount}개 이상 필요`);
   if (requireReal && publicEditorialContract.violations.length > 0) {
-    reasons.push(...publicEditorialContract.violations.map((reason) => `편집 정책 v2: ${reason}`));
+    reasons.push(...publicEditorialContract.violations.map((reason) => `편집 정책 v${BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION}: ${reason}`));
   }
   if (requireReal && d.distinctUrlCount < 5) reasons.push("최종 본문용 실제 URL 5개 이상 필요");
   if (nextWeekPreview && editorialContract) {

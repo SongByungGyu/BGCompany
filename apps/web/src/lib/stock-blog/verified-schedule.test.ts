@@ -134,6 +134,19 @@ test("다음 주 전망은 검증 범위 일정이 비어 있으면 계속 차�
   assert.match(applied.validation.issues.join("\n"), /검증 일정이 없습니다/);
 });
 
+test("토요일 주간 복기에는 다음 주 일정을 삽입하지 않는다", () => {
+  const applied = applyVerifiedSchedule(writerResult([
+    { heading: "2. 이번 주 한국·미국 시장 핵심 숫자", body: "이번 주 지수 흐름입니다." },
+    { heading: "4. 다음 주 주요 일정", body: "FOMC 일정을 확인합니다." },
+    { heading: "함께 확인한 기사", body: "기사 목록" },
+  ]), snapshot(), { contentType: "WEEKLY_MARKET_REVIEW" });
+  const sections = applied.result.sections as Array<{ heading: string; body: string }>;
+
+  assert.equal(applied.validation.ok, true);
+  assert.equal(applied.validation.checkedEventCount, 0);
+  assert.equal(sections.some((section) => /다음 주 주요 일정|검증된.*일정/.test(section.heading)), false);
+});
+
 test("다음 주 글은 검증 범위 밖 일정을 제외하고 누락 시장을 고지한다", () => {
   const applied = applyVerifiedSchedule(writerResult([
     { heading: "데이터 기준", body: "시장 데이터의 기준일은 2026-07-19입니다." },

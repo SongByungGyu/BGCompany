@@ -110,6 +110,9 @@ function normalizeVerifiedEvents(snapshot?: MarketSnapshot, contentType?: StockR
   });
 
   events.sort((left, right) => left.date.localeCompare(right.date) || left.event.localeCompare(right.event));
+  if (contentType === "WEEKLY_MARKET_REVIEW") {
+    return { events: [] as VerifiedScheduleEvent[], issues, from: undefined, through: undefined };
+  }
   if (!ISO_DATE_PATTERN.test(snapshot.marketDate)) {
     return { events: events.slice(0, MAX_VERIFIED_EVENTS), issues, from: undefined, through: undefined };
   }

@@ -1,5 +1,6 @@
 import type { StockReferenceBriefingTemplate } from "./references/reference-types.ts";
 import {
+  BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION,
   getStockBlogEditorialPolicy,
   inspectStockBlogEditorialContract,
 } from "./stock-blog-editorial-policy.ts";
@@ -41,7 +42,7 @@ function editorialContractRevisions(
 ) {
   if (typeof writerResult?.fullDraft !== "string") return [];
   return inspectStockBlogEditorialContract(writerResult.fullDraft, contentType).violations
-    .map((violation) => `편집 정책 v2 필수 수정: ${violation}`);
+    .map((violation) => `편집 정책 v${BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION} 필수 수정: ${violation}`);
 }
 
 export function shouldRetryStockBlogQa(

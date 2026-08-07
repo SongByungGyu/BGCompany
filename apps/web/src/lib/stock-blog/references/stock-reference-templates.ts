@@ -50,16 +50,16 @@ export const STOCK_REFERENCE_TEMPLATES: Record<StockReferenceBriefingTemplate, S
   },
   WEEKLY_MARKET_REVIEW: {
     contentType: "WEEKLY_MARKET_REVIEW",
-    label: "주간 시장 리뷰",
-    market: "KR",
+    label: "이번 주 한국·미국 시장 복기",
+    market: "GLOBAL",
     minimumRealReferences: 3,
     minimumDistinctUrls: 3,
     minimumPublishers: 2,
     requiresMarketData: true,
     requirements: [
-      { id: "weekly-index", label: "주간 KOSPI/KOSDAQ 흐름", sourceTypes: ["market_data"], markets: ["KR"], keywords: ["주간", "KOSPI", "KOSDAQ"] },
-      { id: "weekly-sector-flow", label: "주간 섹터/수급", sourceTypes: ["sector", "market_data"], markets: ["KR"], keywords: ["섹터", "외국인", "기관"] },
-      { id: "next-week-risk", label: "다음 주 체크포인트", sourceTypes: ["calendar", "macro", "news"], markets: ["KR", "GLOBAL"], keywords: ["다음 주", "경제 일정", "환율", "금리"] },
+      { id: "weekly-global-index", label: "주간 KOSPI/KOSDAQ/S&P500/Nasdaq 흐름", sourceTypes: ["market_data", "news"], markets: ["KR", "US", "GLOBAL"], keywords: ["KOSPI", "KOSDAQ", "S&P500", "Nasdaq", "주간"] },
+      { id: "weekly-sector-flow", label: "이번 주 수급/주도 업종", sourceTypes: ["sector", "market_data", "news"], markets: ["KR", "US", "GLOBAL"], keywords: ["외국인", "기관", "섹터", "주도 업종"] },
+      { id: "weekly-drivers", label: "이번 주 금리/환율/주요 이벤트", sourceTypes: ["macro", "calendar", "news"], markets: ["KR", "US", "GLOBAL"], keywords: ["이번 주", "환율", "국채금리", "경제지표"] },
     ],
   },
   NEXT_WEEK_MARKET_PREVIEW: {
@@ -71,7 +71,7 @@ export const STOCK_REFERENCE_TEMPLATES: Record<StockReferenceBriefingTemplate, S
     minimumPublishers: 2,
     requiresMarketData: true,
     requirements: [
-      { id: "last-week-global", label: "지난주 한국/미국 증시 요약", sourceTypes: ["market_data", "news"], markets: ["KR", "US", "GLOBAL"], keywords: ["지난주", "한국 증시", "미국 증시"] },
+      { id: "last-week-global", label: "지난주 한국/미국 증시 짧은 요약", sourceTypes: ["market_data", "news"], markets: ["KR", "US", "GLOBAL"], keywords: ["지난주", "한국 증시", "미국 증시"] },
       { id: "next-week-calendar", label: "다음 주 주요 경제 일정", sourceTypes: ["calendar", "macro"], markets: ["GLOBAL", "US", "KR"], keywords: ["경제 일정", "실적", "FOMC", "물가"] },
       { id: "investor-checklist", label: "투자자 체크리스트", sourceTypes: ["macro", "sector", "news"], markets: ["GLOBAL", "KR", "US"], keywords: ["환율", "금리", "섹터", "리스크"] },
     ],

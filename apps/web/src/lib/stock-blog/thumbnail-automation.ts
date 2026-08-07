@@ -75,14 +75,14 @@ export const STOCK_BLOG_THUMBNAIL_TEMPLATES: Record<StockBriefingTemplate, Thumb
     templateType: "WEEKLY_MARKET_REVIEW",
     mainTitle: "한국·미국 주간 시장 정리",
     subtitle: "이번 주 증시 흐름",
-    hook: "수급·섹터·주요 이벤트를 한눈에",
+    hook: "지수·수급·주도 업종을 한눈에",
     style: "BG Market Note 전용 16:9 주간 리포트 표지, 딥 네이비 그라데이션, 도시 실루엣, 골드 라인, 주간 지수 그래프",
     colors: "deep navy / white / soft green",
-    promptFocus: "한국·미국 주간 증시 리뷰, 타사 로고 없는 글로벌 도시 실루엣, 주간 캘린더, 주요 이벤트 점검표, 상승·하락 섹터 추상 그래프",
-    keywords: ["주간증시", "시장정리", "섹터", "이벤트", "체크리스트"],
+    promptFocus: "한국·미국 한 주 증시 복기, 타사 로고 없는 글로벌 도시 실루엣, 코스피·나스닥 주간 흐름, 외국인 수급과 주도 업종을 보여주는 추상 그래프",
+    keywords: ["주간증시", "시장정리", "코스피", "나스닥", "주간수급", "주도업종"],
     variants: [
       { label: "주간 리뷰", title: "한국·미국 주간 시장 정리", subtitle: "이번 주 핵심 흐름", hook: "수급·섹터·리스크 정리" },
-      { label: "섹터 복기", title: "주간 섹터 흐름 한눈에", subtitle: "한국·미국 증시", hook: "다음 주로 이어질 포인트" },
+      { label: "섹터 복기", title: "주간 섹터 흐름 한눈에", subtitle: "한국·미국 증시", hook: "주도 업종·수급 복기" },
     ],
   },
   NEXT_WEEK_MARKET_PREVIEW: {

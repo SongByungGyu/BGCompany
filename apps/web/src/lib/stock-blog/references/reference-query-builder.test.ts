@@ -25,3 +25,21 @@ test("17시 글은 전일 미국장과 오늘 미국장 전망을 우선하고 �
   assert.ok(queries.includes("오늘 미국 증시 전망 나스닥 S&P500"));
   assert.ok(queries.includes("오늘 한국 증시 마감 미국장 연결 신호"));
 });
+
+test("토요일은 이번 주 복기 자료만, 일요일은 다음 주 전망 자료만 우선 조회한다", () => {
+  const saturday = buildReferenceQueries({
+    contentType: "WEEKLY_MARKET_REVIEW",
+    topic: "이번 주 한국·미국 시장 복기",
+    title: "이번 주 증시 정리: 코스피·나스닥·주도 업종",
+  });
+  const sunday = buildReferenceQueries({
+    contentType: "NEXT_WEEK_MARKET_PREVIEW",
+    topic: "다음 주 한국·미국 증시 전망",
+    title: "다음 주 증시를 움직일 일정과 핵심 변수",
+  });
+
+  assert.ok(saturday.includes("이번 주 한국 미국 증시 정리"));
+  assert.ok(saturday.includes("이번 주 미국 증시 S&P500 나스닥"));
+  assert.equal(saturday.some((query) => query.includes("다음 주")), false);
+  assert.ok(sunday.every((query) => query.includes("다음 주")));
+});

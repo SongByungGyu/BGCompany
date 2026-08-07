@@ -60,6 +60,18 @@ test("오전 한국장과 17시 미국장 글은 서로 다른 1차 검색 의�
   assert.match(getStockBlogSearchIntentGuidelines("KOREA_MARKET_CLOSE_US_PREVIEW").join(" "), /오늘 한국장 마감은.*2~3문장/);
 });
 
+test("토요일 복기와 일요일 전망은 서로 다른 검색 의도와 본문 비중을 갖는다", () => {
+  const saturday = getStockBlogSearchIntentGuidelines("WEEKLY_MARKET_REVIEW").join(" ");
+  const sunday = getStockBlogSearchIntentGuidelines("NEXT_WEEK_MARKET_PREVIEW").join(" ");
+
+  assert.match(saturday, /이번 주 증시 정리/);
+  assert.match(saturday, /본문의 70% 이상을 이번 주/);
+  assert.match(saturday, /다음 주 전망이나 일정은 메인 검색어로 사용하지 않습니다/);
+  assert.match(sunday, /다음 주 증시 전망/);
+  assert.match(sunday, /본문의 70% 이상을.*경제지표·실적 일정/);
+  assert.match(sunday, /토요일 글의 이번 주 수급·주도 업종 복기를 반복하지 않습니다/);
+});
+
 test("검색 최적화가 댓글 질문형 CTA를 요구하지 않는다", () => {
   const guidelines = STOCK_BLOG_DISCOVERY_GUIDELINES.join("\n");
   assert.match(guidelines, /CTA는 만들지 않습니다/);

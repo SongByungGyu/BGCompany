@@ -171,9 +171,9 @@ const STOCK_BRIEFING_COPY: Record<StockBriefingTemplate, {
     requiredTags: ["미국장전망", "나스닥", "S&P500", "미국금리", "경제일정"],
   },
   WEEKLY_MARKET_REVIEW: {
-    fallbackTitle: "이번 주 한국·미국 증시 주간 정리",
+    fallbackTitle: "이번 주 증시 정리: 코스피·나스닥·주도 업종",
     category: "주간 시장 정리",
-    requiredTags: ["주간증시", "한국증시", "미국증시", "섹터정리", "다음주체크"],
+    requiredTags: ["주간증시", "한국증시", "미국증시", "주간수급", "주도업종"],
   },
   NEXT_WEEK_MARKET_PREVIEW: {
     fallbackTitle: "다음 주 증시 일정과 체크포인트",

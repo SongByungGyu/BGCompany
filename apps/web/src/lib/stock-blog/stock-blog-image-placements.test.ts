@@ -24,9 +24,9 @@ test("각 자동발행 템플릿의 실제 절 제목과 이미지 위치가 일
       fxAndUsYields: "4. 미국장 상승·하락 조건",
     },
     WEEKLY_MARKET_REVIEW: {
-      majorIndexChange: "2. 이번 주 시장 핵심 숫자",
-      kospiInvestorFlow: "3. 다음 주 핵심 변수 2가지",
-      fxAndUsYields: "5. 다음 주 상승·하락 조건",
+      majorIndexChange: "2. 이번 주 한국·미국 시장 핵심 숫자",
+      kospiInvestorFlow: "5. 이번 주 수급·주도 업종",
+      fxAndUsYields: "3. 이번 주 핵심 변수 2가지",
     },
     NEXT_WEEK_MARKET_PREVIEW: {
       majorIndexChange: "2. 지난주 시장 핵심 숫자",

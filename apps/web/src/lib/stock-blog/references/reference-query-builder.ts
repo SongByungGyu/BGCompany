@@ -16,10 +16,11 @@ const templateQueries: Record<StockReferenceBriefingTemplate, string[]> = {
     "오늘 한국 증시 마감 미국장 연결 신호",
   ],
   WEEKLY_MARKET_REVIEW: [
-    "이번 주 한국 증시 정리",
+    "이번 주 한국 미국 증시 정리",
     "주간 코스피 코스닥 섹터 수급",
     "이번 주 미국 증시 S&P500 나스닥",
-    "주간 외국인 기관 수급",
+    "이번 주 외국인 기관 수급 주도 업종",
+    "이번 주 원달러 환율 미국 국채금리 경제지표",
     "이번 주 강세 약세 업종 주요 경제 뉴스",
   ],
   NEXT_WEEK_MARKET_PREVIEW: [
