@@ -395,6 +395,19 @@ async function countNaverImages(page: import("playwright").Page) {
   return count;
 }
 
+async function dismissNaverImageSidebar(page: import("playwright").Page) {
+  for (const scope of [page, ...page.frames()]) {
+    const closeButtons = scope.locator(".se-sidebar:visible .se-sidebar-close-button:visible");
+    const count = await closeButtons.count().catch(() => 0);
+    for (let index = count - 1; index >= 0; index -= 1) {
+      await closeButtons.nth(index).click({ timeout: 5000, force: true });
+    }
+  }
+  await page.waitForTimeout(250);
+  const remaining = await page.locator(".se-sidebar:visible").count().catch(() => 0);
+  if (remaining > 0) throw new Error(`NAVER_IMAGE_SIDEBAR_CLOSE_FAILED_${remaining}`);
+}
+
 async function selectBodyForThumbnailReplacement(page: import("playwright").Page, selectors: string[]) {
   for (const scope of [page, ...page.frames()]) {
     for (const selector of selectors) {
@@ -444,6 +457,7 @@ async function attachNaverImage(page: import("playwright").Page, imageFile: stri
   const after = await countNaverImages(page);
   if (after <= before) throw new Error(`NAVER_IMAGE_ATTACH_NOT_CONFIRMED_${before}_${after}`);
   if (after !== before + 1) throw new Error(`NAVER_IMAGE_ATTACH_COUNT_UNEXPECTED_${before}_${after}`);
+  await dismissNaverImageSidebar(page);
   console.log(`[naver-agent] ${label} attachment confirmed: images=${before}->${after}`);
 }
 
@@ -692,8 +706,12 @@ async function applyNaverArticleLinks(page: import("playwright").Page, urls: str
     const { scope, paragraph } = targets[index];
     await paragraph.click({ clickCount: 3, delay: 80, timeout: 5000 });
     await scope.locator(".se-link-toolbar-button:visible").first().click({ timeout: 5000 });
-    await scope.locator("input.se-custom-layer-link-input:visible").fill(urls[index], { timeout: 5000 });
-    await scope.locator("button.se-custom-layer-link-apply-button:visible").click({ timeout: 5000 });
+    const linkInput = scope.locator("input.se-custom-layer-link-input:visible").first();
+    await linkInput.fill(urls[index], { timeout: 5000 });
+    await linkInput.press("Enter", { timeout: 5000 }).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`NAVER_ARTICLE_LINK_APPLY_FAILED_${index + 1}:${message}`);
+    });
     await page.waitForTimeout(200);
   }
   const linkedUrls: string[] = [];
