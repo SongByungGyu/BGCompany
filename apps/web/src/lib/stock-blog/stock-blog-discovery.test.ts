@@ -54,9 +54,10 @@ test("최근 발행 제목 회피 가이드는 최대 6개 제목만 포함한�
   assert.doesNotMatch(guideline ?? "", /제목 7/);
 });
 
-test("장전과 마감 글은 서로 다른 1차 검색 의도를 갖는다", () => {
+test("오전 한국장과 17시 미국장 글은 서로 다른 1차 검색 의도를 갖는다", () => {
   assert.match(getStockBlogSearchIntentGuidelines("KOREA_DAILY_PREVIEW").join(" "), /오늘 코스피 전망/);
-  assert.match(getStockBlogSearchIntentGuidelines("KOREA_MARKET_CLOSE_US_PREVIEW").join(" "), /오늘 코스피 마감 원인/);
+  assert.match(getStockBlogSearchIntentGuidelines("KOREA_MARKET_CLOSE_US_PREVIEW").join(" "), /오늘 미국장 전망/);
+  assert.match(getStockBlogSearchIntentGuidelines("KOREA_MARKET_CLOSE_US_PREVIEW").join(" "), /오늘 한국장 마감은.*2~3문장/);
 });
 
 test("검색 최적화가 댓글 질문형 CTA를 요구하지 않는다", () => {

@@ -3,17 +3,17 @@ import type { ReferenceSearchInput, StockReferenceBriefingTemplate } from "./ref
 const templateQueries: Record<StockReferenceBriefingTemplate, string[]> = {
   KOREA_DAILY_PREVIEW: [
     "오늘 한국 증시 전망",
+    "전일 한국 증시 마감 요약",
     "전일 미국 증시 마감",
     "코스피 코스닥 장전 체크포인트",
     "원달러 환율 금리 외국인 수급 한국 증시",
-    "반도체 자동차 2차전지 수급",
   ],
   KOREA_MARKET_CLOSE_US_PREVIEW: [
-    "오늘 한국 증시 마감 정리",
-    "외국인 기관 수급 코스피 코스닥",
-    "오늘 강세 약세 업종",
+    "전일 미국 증시 마감 나스닥 S&P500 다우",
     "오늘 미국 증시 전망 나스닥 S&P500",
     "미국 선물 국채금리 달러",
+    "오늘 미국 경제 일정 기업 실적",
+    "오늘 한국 증시 마감 미국장 연결 신호",
   ],
   WEEKLY_MARKET_REVIEW: [
     "이번 주 한국 증시 정리",

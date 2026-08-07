@@ -8,13 +8,13 @@ export type StockBlogImagePlacementHeadings = {
 
 const EDITORIAL_PLACEMENTS: Record<StockBriefingTemplate, StockBlogImagePlacementHeadings> = {
   KOREA_DAILY_PREVIEW: {
-    majorIndexChange: "2. 오늘 시장 핵심 숫자",
-    kospiInvestorFlow: "3. 오늘의 핵심 변수 2가지",
-    fxAndUsYields: "4. 상승·하락 조건별 시나리오",
+    majorIndexChange: "2. 전일 한국장 코멘트와 간밤 미국장 핵심 숫자",
+    kospiInvestorFlow: "3. 오늘 한국장 핵심 변수 2가지",
+    fxAndUsYields: "4. 한국장 상승·하락 조건",
   },
   KOREA_MARKET_CLOSE_US_PREVIEW: {
-    majorIndexChange: "2. 오늘 한국장 핵심 숫자",
-    kospiInvestorFlow: "3. 오늘 밤 핵심 변수 2가지",
+    majorIndexChange: "2. 전일 미국장 핵심 숫자와 오늘 연결 신호",
+    kospiInvestorFlow: "3. 오늘 밤 미국장 핵심 변수 2가지",
     fxAndUsYields: "4. 미국장 상승·하락 조건",
   },
   WEEKLY_MARKET_REVIEW: {

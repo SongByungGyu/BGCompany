@@ -161,14 +161,14 @@ const STOCK_BRIEFING_COPY: Record<StockBriefingTemplate, {
   requiredTags: string[];
 }> = {
   KOREA_DAILY_PREVIEW: {
-    fallbackTitle: "오늘의 한국 증시 장전 브리핑",
+    fallbackTitle: "오늘 코스피 전망: 전일 한국장과 간밤 미국장 체크",
     category: "오늘의 한국장 전망",
     requiredTags: ["한국증시", "장전브리핑", "코스피", "코스닥", "시장체크"],
   },
   KOREA_MARKET_CLOSE_US_PREVIEW: {
-    fallbackTitle: "오늘 한국 증시 마감 정리와 미국장 체크포인트",
+    fallbackTitle: "오늘 미국장 전망: 전일 나스닥과 금리·일정 체크",
     category: "오늘의 미국장 전망",
-    requiredTags: ["한국장마감", "미국장", "수급", "섹터", "시장브리핑"],
+    requiredTags: ["미국장전망", "나스닥", "S&P500", "미국금리", "경제일정"],
   },
   WEEKLY_MARKET_REVIEW: {
     fallbackTitle: "이번 주 한국·미국 증시 주간 정리",
@@ -303,9 +303,9 @@ function buildChecklist(template: StockBriefingTemplate) {
   }
   if (template === "KOREA_MARKET_CLOSE_US_PREVIEW") {
     return [
-      "한국장 마감 후 미국 선물과 금리 흐름 확인",
-      "국내 장중 강했던 섹터가 미국장 테마와 연결되는지 확인",
-      "환율 변화가 다음 거래일 외국인 수급에 부담이 될지 점검",
+      "전일 나스닥·S&P500 방향과 현재 미국 선물의 차이 확인",
+      "미국 2년물·10년물 금리와 달러 방향 확인",
+      "오늘 밤 경제지표·연준 발언·주요 기업 실적 시간 확인",
     ];
   }
   if (template === "NEXT_WEEK_MARKET_PREVIEW") {

@@ -36,16 +36,16 @@ export const STOCK_REFERENCE_TEMPLATES: Record<StockReferenceBriefingTemplate, S
   },
   KOREA_MARKET_CLOSE_US_PREVIEW: {
     contentType: "KOREA_MARKET_CLOSE_US_PREVIEW",
-    label: "한국 마감·미국 장전 브리핑",
-    market: "GLOBAL",
+    label: "전일 미국장 리뷰·오늘 미국장 전망",
+    market: "US",
     minimumRealReferences: 3,
     minimumDistinctUrls: 3,
     minimumPublishers: 2,
     requiresMarketData: true,
     requirements: [
-      { id: "kr-close", label: "금일 KOSPI/KOSDAQ 마감 흐름", sourceTypes: ["market_data"], markets: ["KR"], keywords: ["KOSPI", "KOSDAQ", "마감"] },
-      { id: "kr-flow-sector", label: "수급/섹터/특징주", sourceTypes: ["market_data", "sector", "news", "company"], markets: ["KR"], keywords: ["외국인", "기관", "섹터", "특징주"] },
-      { id: "us-preview", label: "미국장 체크포인트", sourceTypes: ["calendar", "macro", "news"], markets: ["US", "GLOBAL"], keywords: ["미국장", "금리", "실적", "경제지표"] },
+      { id: "us-previous-close", label: "전일 S&P500/Nasdaq/Dow 마감 흐름", sourceTypes: ["market_data", "news"], markets: ["US", "GLOBAL"], keywords: ["S&P500", "Nasdaq", "Dow", "전일 마감"] },
+      { id: "us-preview", label: "오늘 미국장 금리/달러/일정", sourceTypes: ["calendar", "macro", "news", "company"], markets: ["US", "GLOBAL"], keywords: ["미국장", "국채금리", "달러", "실적", "경제지표"] },
+      { id: "kr-handoff", label: "오늘 한국장의 미국장 연결 신호", sourceTypes: ["market_data", "sector", "news"], markets: ["KR", "GLOBAL"], keywords: ["KOSPI", "환율", "반도체", "연결 신호"] },
     ],
   },
   WEEKLY_MARKET_REVIEW: {

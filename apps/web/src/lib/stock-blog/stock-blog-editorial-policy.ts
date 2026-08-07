@@ -1,6 +1,6 @@
 import type { StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 
-export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 2;
+export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 3;
 
 export const STOCK_BLOG_INVESTMENT_DISCLAIMER = "본 글은 시장 정보를 정리한 투자 참고 자료이며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 최종 투자 판단과 책임은 투자자 본인에게 있습니다.";
 
@@ -71,21 +71,21 @@ const WEEKLY_LENGTH: StockBlogEditorialLengthRule = {
 const BODY_STRUCTURES: Record<StockReferenceBriefingTemplate, string[]> = {
   KOREA_DAILY_PREVIEW: [
     "1. 30초 요약",
-    "2. 오늘 시장 핵심 숫자",
-    "3. 오늘의 핵심 변수 2가지",
-    "4. 상승·하락 조건별 시나리오",
+    "2. 전일 한국장 코멘트와 간밤 미국장 핵심 숫자",
+    "3. 오늘 한국장 핵심 변수 2가지",
+    "4. 한국장 상승·하락 조건",
     "5. 오늘의 초보자 설명",
-    "6. 오늘 볼 것 3가지",
+    "6. 오늘 한국장 볼 것 3가지",
     "7. BG Market Note 판단",
     "함께 확인한 기사",
   ],
   KOREA_MARKET_CLOSE_US_PREVIEW: [
     "1. 30초 요약",
-    "2. 오늘 한국장 핵심 숫자",
-    "3. 오늘 밤 핵심 변수 2가지",
+    "2. 전일 미국장 핵심 숫자와 오늘 연결 신호",
+    "3. 오늘 밤 미국장 핵심 변수 2가지",
     "4. 미국장 상승·하락 조건",
     "5. 오늘의 초보자 설명",
-    "6. 오늘 밤 볼 것 3가지",
+    "6. 오늘 밤 미국장 볼 것 3가지",
     "7. BG Market Note 판단",
     "함께 확인한 기사",
   ],
@@ -134,6 +134,17 @@ export function getStockBlogEditorialPolicy(contentType: StockReferenceBriefingT
 export function getStockBlogEditorialGuidelines(contentType: StockReferenceBriefingTemplate) {
   const policy = getStockBlogEditorialPolicy(contentType);
   const { bodyLength } = policy;
+  const dailyHandoffGuidelines = contentType === "KOREA_DAILY_PREVIEW"
+    ? [
+      "오전 한국장 전망 글에서는 전일 한국장 마감을 2~3문장 코멘트로만 복기하고, 간밤 미국 지수·금리·환율을 오늘 한국장 전망의 근거로 사용합니다. 본문의 70% 이상은 오늘 한국장 변수·조건·확인 항목에 배정합니다.",
+      "제목과 30초 요약은 오늘 코스피·한국장 전망을 중심으로 쓰며, 전일 한국장 마감 원인을 메인 제목으로 다시 소비하지 않습니다.",
+    ]
+    : contentType === "KOREA_MARKET_CLOSE_US_PREVIEW"
+      ? [
+        "17시 미국장 전망 글에서는 전일 S&P500·나스닥·다우 흐름을 검증 숫자로 먼저 짧게 복기하고, 오늘 한국장 마감은 미국장과 연결되는 신호를 2~3문장으로만 언급합니다. 본문의 70% 이상은 오늘 밤 미국장 변수·조건·확인 항목에 배정합니다.",
+        "제목과 30초 요약의 1차 검색 의도는 오늘 미국장·나스닥 전망입니다. 오늘 코스피 마감 원인이나 외국인 수급을 메인 제목과 결론으로 사용하지 않습니다.",
+      ]
+      : [];
   return [
     `BG MARKET NOTE 편집 정책 v${BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION}: 기존 API·데이터 계산·이미지 생성·JSON 필드·카테고리·예약 발행 구조는 바꾸지 않고 공개 글의 구성과 문체만 개선합니다.`,
     "제목은 실제 검색어와 오늘의 결론을 앞부분에 두고 핵심 변수는 1~2개만 사용합니다. 공포·확정·수익 보장 표현과 최근 제목의 중심 문구 반복을 금지합니다.",
@@ -144,6 +155,7 @@ export function getStockBlogEditorialGuidelines(contentType: StockReferenceBrief
     "초보자 설명은 오늘 시장과 직접 연결된 개념 하나만 3~5문장으로 설명하고, 독자를 가르치려는 말투나 같은 설명의 반복을 피합니다.",
     `체크 섹션은 실제로 확인할 시간·지표·조건 ${policy.checklistItemCount}개만 제시합니다. 댓글·공감·이웃·투표를 요구하거나 질문형 참여를 유도하지 않습니다.`,
     "'어제 전망 확인'은 이전 글의 구조화된 판단과 실제 결과가 입력으로 함께 제공된 경우에만 작성합니다. 근거가 없으면 섹션 자체를 생략하고 맞았다고 추정하지 않습니다.",
+    ...dailyHandoffGuidelines,
     "검증된 referenceBundle과 MarketSnapshot에 있는 자료만 사실 근거로 사용합니다. 누락값은 생략하고 전망치와 실제치를 구분하며, 확인되지 않은 원인은 '영향을 줬을 가능성'처럼 범위를 제한합니다.",
     `대표 이미지 1장과 본문 이미지 ${policy.bodyImageMin}~${policy.bodyImageMax}장만 사용합니다. 이미지마다 한 메시지만 담고 캡션·기준일·단위·출처를 표시한 뒤 본문 숫자와 중복 설명하지 않습니다.`,
     "마지막에는 실제 사용 기사와 원문만 표시하고 투자 유의문구를 정확히 한 번 둡니다. 내부 링크는 실제 발행 URL이 있을 때만 1~2개 사용하며 생성·추정하지 않습니다.",

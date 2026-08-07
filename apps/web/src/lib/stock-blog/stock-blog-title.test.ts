@@ -2,13 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildStockBlogEditorialTitle, selectBestStockBlogEditorialTitle } from "./stock-blog-title.ts";
 
-test("날짜와 시장이 들어간 완성형 에디터 제목은 검색어를 앞에 두고 날짜를 뒤로 옮긴다", () => {
-  const title = "2026년 7월 20일 한국 증시 마감｜코스피 급락·환율·미국 10년물로 보는 오늘 밤 미국 증시";
+test("날짜와 시장이 들어간 완성형 미국장 제목은 검색어를 앞에 두고 날짜를 뒤로 옮긴다", () => {
+  const title = "2026년 7월 20일 오늘 미국장 전망｜나스닥·미국 10년물·실적 일정";
   assert.equal(buildStockBlogEditorialTitle({
     template: "KOREA_MARKET_CLOSE_US_PREVIEW",
     marketDate: "2026-07-20",
     sourceTitle: title,
-  }), "한국 증시 마감｜코스피 급락·환율·미국 10년물로 보는 오늘 밤 미국 증시｜7월 20일");
+  }), "오늘 미국장 전망｜나스닥·미국 10년물·실적 일정｜7월 20일");
 });
 
 test("완성형 제목이 없으면 시장 의도와 날짜 후행 형식을 사용한다", () => {
@@ -41,12 +41,12 @@ test("제목 후보는 검색 의도가 구체적이고 최근 제목과 덜 겹
     template: "KOREA_MARKET_CLOSE_US_PREVIEW",
     marketDate: "2026-08-03",
     candidates: [
-      "오늘 미국장 전망",
+      "오늘 미국장 전망: 나스닥과 미국 10년물 금리",
       "오늘 코스피 마감 원인: 외국인 수급과 반도체",
       "코스피 마감 정리",
     ],
     recentTitles: ["코스피 마감 정리｜8월 2일"],
   });
-  assert.match(selected.title, /오늘 코스피 마감 원인/);
+  assert.match(selected.title, /오늘 미국장 전망: 나스닥과 미국 10년물 금리/);
   assert.equal(selected.candidates.length, 3);
 });

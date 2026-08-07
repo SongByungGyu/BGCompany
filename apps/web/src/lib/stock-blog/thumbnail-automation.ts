@@ -60,15 +60,15 @@ export const STOCK_BLOG_THUMBNAIL_TEMPLATES: Record<StockBriefingTemplate, Thumb
   KOREA_MARKET_CLOSE_US_PREVIEW: {
     templateType: "KOREA_MARKET_CLOSE_US_PREVIEW",
     mainTitle: "오늘의 미국장 전망",
-    subtitle: "한국장 마감 이후 체크",
-    hook: "금리·선물·실적·빅테크 흐름 정리",
+    subtitle: "전일 미국장 복기·오늘 밤 전망",
+    hook: "나스닥·금리·선물·실적 체크",
     style: "BG Market Note 전용 16:9 금융 에디토리얼 카드, 야간 도시 실루엣, 네이비 배경, 화이트 대형 제목, 골드 포인트",
     colors: "deep navy / white / gold",
-    promptFocus: "한국 증시 마감과 미국장 프리뷰, 타사 로고 없는 글로벌 도시 실루엣, 이중 차트 패널, 추상 세계 지도, 야간 시장 모니터",
-    keywords: ["한국장마감", "미국장", "나스닥", "수급", "프리뷰"],
+    promptFocus: "전일 미국 증시 마감과 오늘 미국장 전망, 타사 로고 없는 글로벌 도시 실루엣, 나스닥·S&P500 추상 차트 패널, 미국 국채금리와 야간 시장 모니터",
+    keywords: ["미국장전망", "나스닥", "S&P500", "미국금리", "경제일정"],
     variants: [
-      { label: "미국장 전망", title: "오늘의 미국장 전망", subtitle: "한국장 마감 이후", hook: "선물·금리·실적 체크" },
-      { label: "마감+프리뷰", title: "한국 마감·미국 프리뷰", subtitle: "글로벌 시장 연결", hook: "다음 장을 위한 체크리스트" },
+      { label: "미국장 전망", title: "오늘의 미국장 전망", subtitle: "전일 미국장 복기", hook: "나스닥·금리·실적 체크" },
+      { label: "미장 복기+전망", title: "전일 미장·오늘 전망", subtitle: "S&P500·나스닥", hook: "오늘 밤 핵심 변수" },
     ],
   },
   WEEKLY_MARKET_REVIEW: {

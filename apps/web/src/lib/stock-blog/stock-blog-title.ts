@@ -31,7 +31,7 @@ const TITLE_GENERIC_TOKENS = new Set([
 
 const TEMPLATE_INTENT_TERMS: Record<StockBriefingTemplate, string[]> = {
   KOREA_DAILY_PREVIEW: ["오늘", "한국장", "코스피", "장전", "환율", "수급"],
-  KOREA_MARKET_CLOSE_US_PREVIEW: ["마감", "원인", "외국인", "수급", "미국장", "나스닥"],
+  KOREA_MARKET_CLOSE_US_PREVIEW: ["오늘", "미국장", "나스닥", "S&P500", "금리", "선물", "실적"],
   WEEKLY_MARKET_REVIEW: ["주간", "이번 주", "수급", "주도 업종", "변화"],
   NEXT_WEEK_MARKET_PREVIEW: ["다음 주", "일정", "실적", "경제지표", "리스크"],
 };
