@@ -435,7 +435,7 @@ export async function generateStockBlogImages(input: {
         title: thumbnailTitle,
         placementAfterHeading: "__thumbnail__",
         imageUrl: `${relativeDir}/thumbnail.svg`,
-        caption: "다음 주 한국·미국 증시 전망",
+        caption: thumbnailTitle,
         sourceLabel: "BG Market Note 자체 제작",
         sourceName: "BG Market Note",
         licenseType: "generated",
