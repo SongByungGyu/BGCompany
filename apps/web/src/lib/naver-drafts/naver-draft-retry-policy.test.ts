@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   evaluateNaverDraftSafeRetry,
   getNaverDraftSafeRetryLimit,
+  shouldActivateNaverPublishCircuitBreaker,
 } from "./naver-draft-retry-policy.ts";
 
 test("발행 전 이미지 업로드 실패는 설정 한도 안에서 자동 재시도한다", () => {
@@ -79,4 +80,17 @@ test("안전 재시도 한도는 기본 2회, 최대 5회다", () => {
   assert.equal(getNaverDraftSafeRetryLimit(), 2);
   assert.equal(getNaverDraftSafeRetryLimit("9"), 5);
   assert.equal(getNaverDraftSafeRetryLimit("invalid"), 2);
+});
+
+test("발행 버튼 전 오류는 다음 예약 글을 막는 전역 차단기를 켜지 않는다", () => {
+  for (const status of ["failed", "readability_failed", "image_upload_failed", "image_quality_failed", "draft_save_failed"]) {
+    assert.equal(shouldActivateNaverPublishCircuitBreaker({ status, allowPublish: true }), false);
+  }
+});
+
+test("발행 결과 불확실 또는 네이버 보안 오류만 전역 차단기를 켠다", () => {
+  for (const status of ["publish_failed", "login_required", "captcha_required", "security_check_required"]) {
+    assert.equal(shouldActivateNaverPublishCircuitBreaker({ status, allowPublish: true }), true);
+  }
+  assert.equal(shouldActivateNaverPublishCircuitBreaker({ status: "publish_failed", allowPublish: false }), false);
 });

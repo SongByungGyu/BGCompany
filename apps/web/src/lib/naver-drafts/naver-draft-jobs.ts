@@ -11,7 +11,11 @@ import { ensureFredDegradedDisclosure, FRED_DEGRADED_DISCLOSURE, isAllowedFredDe
 import { ensureKisSectorDegradedDisclosure, KIS_SECTOR_DEGRADED_DISCLOSURE, isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
 import { renderNaverBody, type NaverBodyBlock } from "@/lib/stock-blog/naver-body";
 import { selectBestStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
-import { evaluateNaverDraftSafeRetry, getNaverDraftSafeRetryLimit } from "@/lib/naver-drafts/naver-draft-retry-policy";
+import {
+  evaluateNaverDraftSafeRetry,
+  getNaverDraftSafeRetryLimit,
+  shouldActivateNaverPublishCircuitBreaker,
+} from "@/lib/naver-drafts/naver-draft-retry-policy";
 import {
   appendRelatedPostSection,
   buildNaverDiscoveryTags,
@@ -135,20 +139,6 @@ type DraftBuildResult = {
 };
 
 const activeStatuses = ["queued", "claimed", "in_progress", "image_uploading", "draft_saving", "draft_saved", "publish_ready", "publishing", "user_publish_required"];
-const publishFailureStatuses: NaverDraftJobStatus[] = [
-  "failed",
-  "login_required",
-  "security_check_required",
-  "captcha_required",
-  "readability_failed",
-  "image_upload_failed",
-  "image_quality_failed",
-  "draft_save_failed",
-  "publish_failed",
-  "quality_failed",
-  "reference_failed",
-  "market_data_failed",
-];
 const PUBLISH_CIRCUIT_BREAKER_EVENT_ID = "event-stock-auto-publish-circuit-breaker";
 
 const INVESTMENT_DISCLAIMER = STOCK_BLOG_INVESTMENT_DISCLAIMER;
@@ -625,7 +615,7 @@ function automaticPublishBlockReasons(pipeline: ContentPipelineRun, body: string
 }
 
 async function activatePublishCircuitBreaker(job: NaverDraftJob, status: NaverDraftJobStatus, reason?: string) {
-  if (!job.allowPublish || !publishFailureStatuses.includes(status)) return;
+  if (!shouldActivateNaverPublishCircuitBreaker({ allowPublish: job.allowPublish, status })) return;
   await prisma.eventLog.upsert({
     where: { id: PUBLISH_CIRCUIT_BREAKER_EVENT_ID },
     create: {
