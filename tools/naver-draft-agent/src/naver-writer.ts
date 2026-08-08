@@ -549,23 +549,73 @@ async function insertImageCaption(
   caption: string,
   sourceLabel: string,
   includeSource = true,
+  placementAfterHeading?: string,
 ) {
   const value = buildNaverImageCaption(caption, sourceLabel, includeSource);
-  for (const scope of [page, ...page.frames()]) {
-    const images = scope.locator(".se-component.se-image");
-    if (!(await images.count().catch(() => 0))) continue;
-    const image = images.last();
-    const resource = image.locator("img.se-image-resource, img").first();
-    if (!(await resource.count().catch(() => 0))) continue;
-    await resource.click({ timeout: 5000 });
-    const nativeCaption = image.locator(".se-caption p").first();
-    if (!(await nativeCaption.count().catch(() => 0))) continue;
-    await nativeCaption.waitFor({ state: "visible", timeout: 5000 });
-    await nativeCaption.click({ timeout: 5000 });
-    if (!(await page.keyboard.insertText(value).then(() => true, () => false))) return false;
-    await page.waitForTimeout(200);
-    const actual = (await nativeCaption.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
-    return actual === value.replace(/\s+/g, " ").trim();
+  const expected = value.replace(/\s+/g, " ").trim();
+
+  // SmartEditor sometimes attaches the image before its native caption editor is
+  // ready. Wait for that editor and retry the same caption in place instead of
+  // failing the whole post or uploading the image again.
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    if (attempt > 1) await page.waitForTimeout(350 * attempt);
+
+    for (const scope of [page, ...page.frames()]) {
+      const images = scope.locator(".se-component.se-image");
+      const imageCount = await images.count().catch(() => 0);
+      if (!imageCount) continue;
+      const imageIndex = placementAfterHeading
+        ? await scope.evaluate((heading) => {
+          const root = document.querySelector(".se-main-container") ?? document.body;
+          const paragraphs = Array.from(new Set(Array.from(root.querySelectorAll<HTMLElement>(
+            ".se-text-paragraph, .se-component-content p, [contenteditable='true'] p",
+          ))));
+          const normalizedHeading = heading.replace(/\s+/g, " ").trim();
+          const headingNode = paragraphs.find(
+            (node) => (node.innerText ?? "").replace(/\s+/g, " ").trim() === normalizedHeading,
+          );
+          if (!headingNode) return -1;
+          const nextHeading = paragraphs.find((node) => (
+            Boolean(headingNode.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)
+            && /^\d+\.\s+/.test((node.innerText ?? "").replace(/\s+/g, " ").trim())
+          ));
+          const imageComponents = Array.from(root.querySelectorAll<HTMLElement>(".se-component.se-image"));
+          return imageComponents.findIndex((node) => (
+            Boolean(headingNode.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)
+            && (!nextHeading || Boolean(node.compareDocumentPosition(nextHeading) & Node.DOCUMENT_POSITION_FOLLOWING))
+          ));
+        }, placementAfterHeading).catch(() => -1)
+        : imageCount - 1;
+      if (imageIndex < 0 || imageIndex >= imageCount) continue;
+      const image = images.nth(imageIndex);
+      const resource = image.locator("img.se-image-resource, img").first();
+      if (!(await resource.count().catch(() => 0))) continue;
+      if (!(await resource.click({ timeout: 5000 }).then(() => true, () => false))) continue;
+
+      const captionCandidates = image.locator(".se-caption p");
+      const candidateCount = await captionCandidates.count().catch(() => 0);
+      for (let index = 0; index < candidateCount; index += 1) {
+        const nativeCaption = captionCandidates.nth(index);
+        if (!(await nativeCaption.isVisible().catch(() => false))) continue;
+
+        const current = (await nativeCaption.locator("span:not(.se-placeholder)").allInnerTexts().catch(() => []))
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (current.includes(expected)) return true;
+        if (!(await nativeCaption.click({ timeout: 5000, force: true, clickCount: current ? 3 : 1 }).then(() => true, () => false))) continue;
+        if (!(await page.keyboard.insertText(value).then(() => true, () => false))) continue;
+
+        await page.waitForTimeout(300);
+        const actual = (await nativeCaption.locator("span:not(.se-placeholder)").allInnerTexts().catch(() => []))
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (actual.includes(expected)) return true;
+      }
+    }
+
+    console.warn(`[naver-agent] image caption editor was not ready (${attempt}/4).`);
   }
   return false;
 }
@@ -1414,7 +1464,7 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
             fileStem: `inline-${index + 1}`,
           });
           await attachNaverImage(page, inlineFile, `inline-${index + 1}`);
-          if (!(await insertImageCaption(page, image.caption, image.sourceLabel))) {
+          if (!(await insertImageCaption(page, image.caption, image.sourceLabel, true, image.placementAfterHeading))) {
             throw new Error(`NAVER_IMAGE_CAPTION_INSERT_FAILED_${image.id}`);
           }
           if (!(await removeNaverSourceParagraphAfterImage(page, image.caption, image.sourceLabel))) {
