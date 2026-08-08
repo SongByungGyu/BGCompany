@@ -612,9 +612,6 @@ async function runOneSchedule(
           summary: `${contentType} 네이버 작업 조립 복구 실패`,
           payload: result as unknown as Prisma.InputJsonObject,
         });
-        if (config.autoPublish && !qualityFailure) {
-          await activateSchedulerPublishCircuitBreaker({ status: "publish_blocked", reason, scheduleKey: key });
-        }
         return result;
       }
     }
