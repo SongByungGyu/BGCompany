@@ -166,9 +166,19 @@ const STOCK_BRIEFING_COPY: Record<StockBriefingTemplate, {
     requiredTags: ["주간증시", "한국증시", "미국증시", "주간수급", "주도업종"],
   },
   NEXT_WEEK_MARKET_PREVIEW: {
-    fallbackTitle: "다음 주 증시 일정과 체크포인트",
-    category: "차주 시장 전망",
-    requiredTags: ["다음주증시", "경제일정", "실적시즌", "투자체크리스트", "시장프리뷰"],
+    fallbackTitle: "다음 주 주요 이슈와 영향 섹터·일정",
+    category: "주요 이슈/섹터",
+    requiredTags: ["다음주증시", "주요이슈", "수혜섹터", "경제일정", "투자체크리스트"],
+  },
+  INVESTMENT_STUDY: {
+    fallbackTitle: "주식 기초 공부: 숫자로 이해하는 투자 개념",
+    category: "투자 공부",
+    requiredTags: ["투자공부", "주식기초", "재무제표", "주식용어", "투자체크리스트"],
+  },
+  LARGE_CAP_DISCLOSURE_EARNINGS: {
+    fallbackTitle: "대형주 공시·실적 발표 핵심 숫자 분석",
+    category: "공시/실적 체크",
+    requiredTags: ["공시분석", "실적발표", "대형주", "기업분석", "실적체크"],
   },
 };
 
@@ -223,7 +233,7 @@ function normalizeNaverBody(value: string, template: StockBriefingTemplate) {
 }
 
 function sanitizeByTemplate(value: string, template: StockBriefingTemplate) {
-  if (template !== "WEEKLY_MARKET_REVIEW" && template !== "NEXT_WEEK_MARKET_PREVIEW") return value;
+  if (template !== "WEEKLY_MARKET_REVIEW" && template !== "NEXT_WEEK_MARKET_PREVIEW" && template !== "INVESTMENT_STUDY") return value;
   return WEEKEND_FORBIDDEN_PHRASES.reduce((text, phrase) => text.replaceAll(phrase, "시장 정리"), value);
 }
 
@@ -303,6 +313,20 @@ function buildChecklist(template: StockBriefingTemplate) {
       "다음 주 주요 경제지표 발표 일정 확인",
       "대형 기술주 실적 또는 가이던스 관련 이벤트 확인",
       "환율·금리 방향이 국내 수급에 미칠 영향 점검",
+    ];
+  }
+  if (template === "INVESTMENT_STUDY") {
+    return [
+      "계산식의 분자·분모와 비교 기준을 같은 시점으로 맞췄는지 확인",
+      "한 기업의 숫자를 업종 평균과 실제 시장 환경에 함께 비교",
+      "지표 하나로 결론 내리지 않고 현금흐름·부채·성장 조건을 함께 점검",
+    ];
+  }
+  if (template === "LARGE_CAP_DISCLOSURE_EARNINGS") {
+    return [
+      "DART 또는 SEC 원문의 발표값과 비교 기준 확인",
+      "일회성 손익을 제외한 매출·영업이익·현금흐름 변화 점검",
+      "다음 분기 가이던스와 주가 판단이 바뀌는 조건 확인",
     ];
   }
   return [
@@ -391,7 +415,7 @@ function buildDraftQualityCheck(
     requireRealReferences: pipeline.runnerMode === "hermes",
   });
   const reasons = [...gate.reasons];
-  if ((template === "WEEKLY_MARKET_REVIEW" || template === "NEXT_WEEK_MARKET_PREVIEW") && WEEKEND_FORBIDDEN_PHRASES.some((phrase) => body.includes(phrase))) {
+  if ((template === "WEEKLY_MARKET_REVIEW" || template === "NEXT_WEEK_MARKET_PREVIEW" || template === "INVESTMENT_STUDY") && WEEKEND_FORBIDDEN_PHRASES.some((phrase) => body.includes(phrase))) {
     reasons.push("주말/주간 글에 장전·장마감 등 일일 브리핑 표현 포함");
   }
   const similarity = inspectPublishedPostSimilarity({ title, body, posts: publishedPosts });

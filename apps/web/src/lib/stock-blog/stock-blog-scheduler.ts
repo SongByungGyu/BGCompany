@@ -6,6 +6,13 @@ import { HermesDailyLimitExceededError, getHermesUsageSummary } from "@/lib/herm
 import { createNaverDraftJobFromPipeline, getPublishCircuitBreaker } from "@/lib/naver-drafts/naver-draft-jobs";
 import type { StockBlogQualityGateResult } from "@/features/content-pipeline/content-pipeline-types";
 import { evaluateStockBlogPublishQuality } from "@/lib/stock-blog/quality-gate";
+import { collectStockBlogReferences } from "@/lib/stock-blog/references/reference-adapter";
+import type { ReferenceBundle } from "@/lib/stock-blog/references/reference-types";
+import {
+  largeCapEventsToReferenceItems,
+  scanLargeCapDisclosureEvents,
+  type LargeCapDisclosureScanResult,
+} from "@/lib/stock-blog/large-cap-disclosure-monitor";
 import {
   evaluateStockBlogRecoveryDate,
   evaluateStockBlogSchedulerRetry,
@@ -47,6 +54,7 @@ export type StockBlogSchedulerConfig = {
   lookbackMinutes: number;
   maxRetries: number;
   retryDelayMinutes: number;
+  largeCapEventsEnabled: boolean;
 };
 
 export type StockBlogSchedulerPlanItem = StockBlogScheduleItem & {
@@ -79,6 +87,8 @@ export type StockBlogSchedulerRunResult = {
   hermesUsageBefore?: { used: number; remaining: number; limit: number };
   hermesUsageAfter?: { used: number; remaining: number; limit: number };
   qualityGate?: StockBlogQualityGateResult;
+  officialEventCount?: number;
+  officialProviders?: LargeCapDisclosureScanResult["providers"];
 };
 
 export type StockBlogSchedulerStatus = {
@@ -96,6 +106,7 @@ export type StockBlogSchedulerStatus = {
   lookbackMinutes: number;
   maxRetries: number;
   retryDelayMinutes: number;
+  largeCapEventsEnabled: boolean;
   now: string;
   plan: StockBlogSchedulerPlanItem[];
   nextRun: StockBlogSchedulerPlanItem | null;
@@ -121,6 +132,26 @@ type StockBlogSchedulerDefinition = StockBlogScheduleItem & {
   title: (date: string) => string;
   topic: string;
 };
+
+const INVESTMENT_STUDY_TOPICS = [
+  { title: "PER이 낮다고 항상 싼 주식은 아닌 이유", topic: "PER 계산법과 업종별 비교, 이익의 질을 함께 보는 방법" },
+  { title: "영업이익보다 현금흐름을 같이 봐야 하는 이유", topic: "영업이익과 영업현금흐름 차이, 현금이익의 질을 실제 사례로 이해하기" },
+  { title: "배당기준일과 배당락일을 제대로 이해하는 법", topic: "배당기준일·배당락일·배당수익률 계산과 주가 조정 원리" },
+  { title: "금리가 오르면 성장주가 흔들리는 이유", topic: "할인율과 미래 현금흐름으로 이해하는 금리와 성장주 가치 관계" },
+  { title: "재고자산이 늘 때 실적에서 확인할 것", topic: "재고자산 회전율과 매출 성장, 현금흐름으로 재고 증가의 질 판단하기" },
+  { title: "ROE가 높아도 꼭 좋은 기업은 아닌 이유", topic: "ROE를 순이익률·자산회전율·재무레버리지로 나눠 기업의 질 판단하기" },
+  { title: "부채비율보다 먼저 확인할 숫자", topic: "부채비율·순차입금·이자보상배율을 함께 보는 재무 안전성 공부" },
+  { title: "매출이 조금 늘어도 이익이 크게 움직이는 이유", topic: "고정비와 영업레버리지로 이해하는 매출 성장과 영업이익 변화" },
+  { title: "자사주 매입과 소각은 무엇이 다른가", topic: "자사주 취득·처분·소각이 주당 가치와 주주환원에 미치는 영향" },
+  { title: "실적 발표에서 가이던스를 먼저 보는 법", topic: "과거 실적과 다음 분기 가이던스를 구분하고 예상치 변화 판단하기" },
+  { title: "원달러 환율이 기업 실적에 미치는 영향", topic: "수출·수입 기업의 매출과 비용 구조로 환율 수혜와 부담 구분하기" },
+  { title: "ETF 추적오차와 괴리율은 왜 생기나", topic: "ETF 기준가격·시장가격·추적오차·괴리율을 숫자와 사례로 이해하기" },
+] as const;
+
+function getInvestmentStudyTopic(now: Date) {
+  const weekIndex = Math.floor(now.getTime() / (7 * 24 * 60 * 60 * 1000));
+  return INVESTMENT_STUDY_TOPICS[weekIndex % INVESTMENT_STUDY_TOPICS.length];
+}
 
 const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
   {
@@ -166,18 +197,46 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     title: (date) => `${date} 이번 주 증시 정리: 코스피·나스닥·주도 업종`,
   },
   {
+    scheduleId: "saturday-investment-study",
+    contentType: "INVESTMENT_STUDY",
+    label: "토요일 투자 공부",
+    cadence: "매주 토요일",
+    scheduledTimeKst: "19:00 KST",
+    scheduledTime: "19:00",
+    weekdays: [6],
+    objective: "매주 다른 투자 개념 하나를 숫자와 실제 사례로 쉽게 설명합니다.",
+    primaryAudience: "주식 기초와 재무제표를 차근차근 공부하는 투자자",
+    recommendedRunnerMode: "hermes",
+    topic: "매주 순환하는 주식 투자 개념 공부",
+    title: (date) => `${date} 주식 투자 공부: 숫자와 사례로 이해하기`,
+  },
+  {
     scheduleId: "sunday-next-week-market-preview",
     contentType: "NEXT_WEEK_MARKET_PREVIEW",
-    label: "다음 주 시장 프리뷰",
+    label: "다음 주 주요 이슈·섹터 프리뷰",
     cadence: "매주 일요일",
     scheduledTimeKst: "19:00 KST",
     scheduledTime: "19:00",
     weekdays: [0],
-    objective: "다음 주 주요 경제 일정, 실적, 리스크와 투자자 체크리스트를 준비합니다.",
+    objective: "다음 주 핵심 이슈와 영향 섹터, 경제·실적 일정과 대응 조건을 준비합니다.",
     primaryAudience: "일요일 저녁 다음 주 투자 계획을 세우는 투자자",
     recommendedRunnerMode: "hermes",
-    topic: "다음 주 한국·미국 증시에 영향을 줄 경제 일정·실적·금리 변수",
-    title: (date) => `${date} 다음 주 증시를 움직일 일정과 핵심 변수`,
+    topic: "다음 주 한국·미국 증시 주요 이슈 3개와 영향 섹터·경제 일정·실적·금리 조건",
+    title: (date) => `${date} 다음 주 증시 주요 이슈와 영향 섹터·일정`,
+  },
+  {
+    scheduleId: "weekday-large-cap-disclosure-earnings",
+    contentType: "LARGE_CAP_DISCLOSURE_EARNINGS",
+    label: "대형주 공시·실적 조건부 체크",
+    cadence: "평일 공식 발표가 있는 날",
+    scheduledTimeKst: "18:30 KST 조건부 확인",
+    scheduledTime: "18:30",
+    weekdays: [1, 2, 3, 4, 5],
+    objective: "OpenDART·SEC 공식 발표가 확인된 대형주가 있을 때만 공시·실적 분석을 발행합니다.",
+    primaryAudience: "대형주 공식 발표와 핵심 숫자를 확인하는 투자자",
+    recommendedRunnerMode: "hermes",
+    topic: "오늘 공식 발표가 확인된 대형주 공시·실적 핵심 숫자와 시장 영향",
+    title: (date) => `${date} 대형주 공시·실적 발표 핵심 숫자 분석`,
   },
 ];
 
@@ -232,6 +291,7 @@ export function getStockBlogSchedulerConfig(): StockBlogSchedulerConfig {
     lookbackMinutes: parsePositiveInt(process.env.STOCK_BLOG_SCHEDULER_LOOKBACK_MINUTES, DEFAULT_LOOKBACK_MINUTES),
     maxRetries: parsePositiveInt(process.env.STOCK_BLOG_SCHEDULER_MAX_RETRIES, DEFAULT_MAX_RETRIES),
     retryDelayMinutes: parsePositiveInt(process.env.STOCK_BLOG_SCHEDULER_RETRY_DELAY_MINUTES, DEFAULT_RETRY_DELAY_MINUTES),
+    largeCapEventsEnabled: parseBoolean(process.env.STOCK_BLOG_LARGE_CAP_EVENTS_ENABLED, false),
   };
 }
 
@@ -327,17 +387,51 @@ function briefDateLabel(now: Date, timezone: string) {
 
 function buildPipelineInput(definition: StockBlogSchedulerDefinition, runnerMode: StockBlogSchedulerRunnerMode, now: Date, timezone: string) {
   const date = briefDateLabel(now, timezone);
+  const study = definition.contentType === "INVESTMENT_STUDY" ? getInvestmentStudyTopic(now) : null;
   return {
-    topic: definition.topic,
+    topic: study?.topic ?? definition.topic,
     title: buildStockBlogEditorialTitle({
       template: definition.contentType,
       marketDate: date,
-      sourceTitle: definition.title(date),
+      sourceTitle: study?.title ?? definition.title(date),
     }),
     channel: "blog",
     runnerMode,
     contentType: definition.contentType,
   };
+}
+
+async function buildLargeCapPipelineInput(
+  definition: StockBlogSchedulerDefinition,
+  runnerMode: StockBlogSchedulerRunnerMode,
+  now: Date,
+  timezone: string,
+  scan: LargeCapDisclosureScanResult,
+) {
+  const date = briefDateLabel(now, timezone);
+  const companies = scan.events.map((event) => event.symbol ? `${event.company}(${event.symbol})` : event.company);
+  const topic = `${companies.join("·")} 공식 공시·실적 핵심 숫자와 주가·업종 영향`;
+  const sourceTitle = `${companies.slice(0, 2).join("·")} 공시·실적 발표 핵심 숫자`;
+  const title = buildStockBlogEditorialTitle({ template: definition.contentType, marketDate: date, sourceTitle });
+  const baseBundle = await collectStockBlogReferences({
+    topic,
+    title,
+    channel: "blog",
+    contentType: "LARGE_CAP_DISCLOSURE_EARNINGS",
+    market: "GLOBAL",
+    keywords: companies,
+    maxResults: 6,
+  });
+  const officialItems = largeCapEventsToReferenceItems(scan.events);
+  const referenceBundle: ReferenceBundle = {
+    ...baseBundle,
+    contentType: "LARGE_CAP_DISCLOSURE_EARNINGS",
+    market: "GLOBAL",
+    items: [...officialItems, ...baseBundle.items.filter((item) => !officialItems.some((official) => official.url === item.url))],
+    keyThemes: Array.from(new Set([...companies, ...baseBundle.keyThemes])),
+    summary: `${scan.events.length}건의 대형주 공식 발표를 확인했습니다. ${baseBundle.summary ?? ""}`.trim(),
+  };
+  return { topic, title, channel: "blog" as const, runnerMode, contentType: definition.contentType, referenceBundle };
 }
 
 function usageSnapshot(usage: Awaited<ReturnType<typeof getHermesUsageSummary>>) {
@@ -494,6 +588,7 @@ export async function getStockBlogSchedulerStatus(now = new Date()): Promise<Sto
     lookbackMinutes: config.lookbackMinutes,
     maxRetries: config.maxRetries,
     retryDelayMinutes: config.retryDelayMinutes,
+    largeCapEventsEnabled: config.largeCapEventsEnabled,
     now: now.toISOString(),
     plan,
     nextRun: plan[0] ?? null,
@@ -554,6 +649,60 @@ async function runOneSchedule(
   });
 
   try {
+    let largeCapScan: LargeCapDisclosureScanResult | null = null;
+    if (contentType === "LARGE_CAP_DISCLOSURE_EARNINGS" && !resumablePipelineId) {
+      if (!config.largeCapEventsEnabled) {
+        const result: StockBlogSchedulerRunResult = {
+          scheduleId: definition.scheduleId,
+          contentType,
+          scheduleKey: key,
+          scheduledFor,
+          status: "skipped",
+          attempt,
+          reason: "대형주 공시·실적 조건부 감지 기능이 비활성화되어 있습니다.",
+        };
+        await writeSchedulerEvent({
+          key,
+          contentType,
+          scheduledFor,
+          status: "skipped",
+          summary: `${contentType} 조건부 감지 비활성화`,
+          payload: result as unknown as Prisma.InputJsonObject,
+        });
+        return result;
+      }
+      largeCapScan = await scanLargeCapDisclosureEvents({ now });
+      if (largeCapScan.events.length === 0) {
+        const providerUnavailable = largeCapScan.providers.openDart !== "ready" && largeCapScan.providers.secEdgar !== "ready";
+        const reason = providerUnavailable
+          ? `공식 공시 제공자를 조회하지 못했습니다. ${largeCapScan.notes.join(" / ")}`
+          : `공식 대형주 공시·실적 발표가 없어 생성하지 않았습니다.${largeCapScan.notes.length ? ` ${largeCapScan.notes.join(" / ")}` : ""}`;
+        const result: StockBlogSchedulerRunResult = {
+          scheduleId: definition.scheduleId,
+          contentType,
+          scheduleKey: key,
+          scheduledFor,
+          status: "deferred",
+          attempt,
+          reason,
+          officialEventCount: 0,
+          officialProviders: largeCapScan.providers,
+        };
+        await writeSchedulerEvent({
+          key,
+          contentType,
+          scheduledFor,
+          status: "deferred",
+          summary: providerUnavailable ? `${contentType} 공식 제공자 조회 실패` : `${contentType} 공식 발표 없음 · 다음 틱 재확인`,
+          payload: {
+            ...(result as unknown as Prisma.InputJsonObject),
+            monitorNotes: largeCapScan.notes,
+            checkedAt: largeCapScan.checkedAt,
+          },
+        });
+        return result;
+      }
+    }
     const hermesUsageBefore = usageSnapshot(await getHermesUsageSummary({ recentLimit: 4 }));
     if (resumablePipelineId) {
       try {
@@ -640,7 +789,10 @@ async function runOneSchedule(
       }
     }
 
-    const pipeline = await startContentPipeline(buildPipelineInput(definition, config.runnerMode, scheduledAt, config.timezone));
+    const pipelineInput = largeCapScan
+      ? await buildLargeCapPipelineInput(definition, config.runnerMode, scheduledAt, config.timezone, largeCapScan)
+      : buildPipelineInput(definition, config.runnerMode, scheduledAt, config.timezone);
+    const pipeline = await startContentPipeline(pipelineInput);
     const approvalId = pipeline.approvalId ?? null;
     let naverDraftJobId: string | undefined;
     let status: StockBlogSchedulerRunStatus = "succeeded";
@@ -705,6 +857,8 @@ async function runOneSchedule(
       hermesUsageBefore,
       hermesUsageAfter,
       qualityGate,
+      officialEventCount: largeCapScan?.events.length,
+      officialProviders: largeCapScan?.providers,
     };
     await writeSchedulerEvent({
       key,

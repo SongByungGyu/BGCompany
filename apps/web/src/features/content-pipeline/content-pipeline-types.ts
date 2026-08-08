@@ -131,7 +131,9 @@ export type StockBriefingTemplate =
   | "KOREA_DAILY_PREVIEW"
   | "KOREA_MARKET_CLOSE_US_PREVIEW"
   | "WEEKLY_MARKET_REVIEW"
-  | "NEXT_WEEK_MARKET_PREVIEW";
+  | "NEXT_WEEK_MARKET_PREVIEW"
+  | "INVESTMENT_STUDY"
+  | "LARGE_CAP_DISCLOSURE_EARNINGS";
 
 export type StockBriefingTemplateConfig = {
   type: StockBriefingTemplate;

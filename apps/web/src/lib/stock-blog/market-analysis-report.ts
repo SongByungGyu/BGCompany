@@ -21,7 +21,10 @@ export type MarketAnalysisReportInput = { contentType: StockBlogContentType; tit
 const INVESTMENT_DISCLAIMER = "본 리포트는 투자 참고용 정보이며 특정 종목의 매수·매도 추천이 아닙니다. 모든 투자 판단과 책임은 투자자 본인에게 있습니다.";
 
 function getMarketScope(contentType: StockBlogContentType): MarketAnalysisReport["marketScope"] {
-  if (contentType === "KOREA_MARKET_CLOSE_US_PREVIEW" || contentType === "NEXT_WEEK_MARKET_PREVIEW") return "KR_US";
+  if (contentType === "KOREA_MARKET_CLOSE_US_PREVIEW"
+    || contentType === "NEXT_WEEK_MARKET_PREVIEW"
+    || contentType === "INVESTMENT_STUDY"
+    || contentType === "LARGE_CAP_DISCLOSURE_EARNINGS") return "KR_US";
   return "KR";
 }
 

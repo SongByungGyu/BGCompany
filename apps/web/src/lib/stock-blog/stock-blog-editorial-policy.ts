@@ -1,6 +1,6 @@
 import type { StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 
-export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 4;
+export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 5;
 
 export const STOCK_BLOG_INVESTMENT_DISCLAIMER = "본 글은 시장 정보를 정리한 투자 참고 자료이며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 최종 투자 판단과 책임은 투자자 본인에게 있습니다.";
 
@@ -102,7 +102,7 @@ const BODY_STRUCTURES: Record<StockReferenceBriefingTemplate, string[]> = {
   ],
   NEXT_WEEK_MARKET_PREVIEW: [
     "1. 30초 요약",
-    "2. 지난주 시장 핵심 숫자",
+    "2. 다음 주 주요 이슈와 핵심 숫자",
     "3. 다음 주 핵심 변수 2가지",
     "4. 다음 주 핵심 일정",
     "5. 다음 주 상승·하락 조건",
@@ -111,10 +111,35 @@ const BODY_STRUCTURES: Record<StockReferenceBriefingTemplate, string[]> = {
     "8. BG Market Note 판단",
     "함께 확인한 기사",
   ],
+  INVESTMENT_STUDY: [
+    "1. 30초 요약",
+    "2. 개념을 이해할 핵심 숫자",
+    "3. 적용할 때 핵심 변수 2가지",
+    "4. 유리·불리해지는 상승·하락 조건",
+    "5. 실제 시장·기업 사례",
+    "6. 오늘의 초보자 설명",
+    "7. 투자공부에서 볼 것 3가지",
+    "8. BG Market Note 판단",
+    "함께 확인한 기사",
+  ],
+  LARGE_CAP_DISCLOSURE_EARNINGS: [
+    "1. 30초 요약",
+    "2. 공시·실적 핵심 숫자",
+    "3. 발표에서 볼 핵심 변수 2가지",
+    "4. 주가 상승·하락 조건",
+    "5. 공식 발표와 시장 반응",
+    "6. 오늘의 초보자 설명",
+    "7. 다음 분기 볼 것 3가지",
+    "8. BG Market Note 판단",
+    "함께 확인한 기사",
+  ],
 };
 
 export function getStockBlogEditorialPolicy(contentType: StockReferenceBriefingTemplate): StockBlogEditorialPolicy {
-  const weekly = contentType === "WEEKLY_MARKET_REVIEW" || contentType === "NEXT_WEEK_MARKET_PREVIEW";
+  const weekly = contentType === "WEEKLY_MARKET_REVIEW"
+    || contentType === "NEXT_WEEK_MARKET_PREVIEW"
+    || contentType === "INVESTMENT_STUDY"
+    || contentType === "LARGE_CAP_DISCLOSURE_EARNINGS";
   return {
     contentType,
     bodyLength: weekly ? WEEKLY_LENGTH : DAILY_LENGTH,
@@ -151,9 +176,19 @@ export function getStockBlogEditorialGuidelines(contentType: StockReferenceBrief
         ]
         : contentType === "NEXT_WEEK_MARKET_PREVIEW"
           ? [
-            "일요일 다음 주 전망 글은 지난주 복기를 핵심 숫자 섹션 안에서 짧게 끝내고, 본문의 70% 이상을 다음 주 경제 일정·실적·금리 변수·상승 및 하락 조건·확인 항목에 배정합니다.",
-            "제목과 30초 요약의 1차 검색 의도는 다음 주 증시 전망과 일정입니다. 토요일 글의 주간 수급·주도 업종 복기를 반복하지 않습니다.",
+            "일요일 글은 지난주 복기를 2~3문장으로 끝내고, 본문의 70% 이상을 다음 주 주요 이슈 3개·영향 섹터·경제 및 실적 일정·대응 조건에 배정합니다.",
+            "제목과 30초 요약의 1차 검색 의도는 다음 주 주요 이슈와 수혜·주의 섹터입니다. 이슈마다 영향 경로와 확인할 공식 일정을 연결하고 단순 테마 나열은 금지합니다.",
           ]
+          : contentType === "INVESTMENT_STUDY"
+            ? [
+              "토요일 투자 공부 글은 한 번에 한 개념만 다룹니다. 정의를 외우게 하지 말고 공식·숫자·실제 기업 또는 시장 사례·틀리기 쉬운 해석 순서로 설명합니다.",
+              "검색 제목에는 PER·현금흐름·배당락처럼 실제로 찾는 구체 용어를 앞에 두고, 최근 지수·금리·업종 사례 하나로 현재 시장과 연결합니다.",
+            ]
+            : contentType === "LARGE_CAP_DISCLOSURE_EARNINGS"
+              ? [
+                "공시·실적 글은 DART 또는 SEC 원문이 확인된 대형주만 다룹니다. 발표값·비교 기준·증감률·가이던스를 구분하고 공식 발표에 없는 원인은 추정하지 않습니다.",
+                "제목에는 기업명과 공시 또는 실적의 핵심 숫자를 앞에 두며, 본문은 발표 요약보다 숫자가 주가·업종에 전달되는 경로와 다음 확인 조건에 더 많은 비중을 둡니다.",
+              ]
           : [];
   return [
     `BG MARKET NOTE 편집 정책 v${BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION}: 기존 API·데이터 계산·이미지 생성·JSON 필드·카테고리·예약 발행 구조는 바꾸지 않고 공개 글의 구성과 문체만 개선합니다.`,

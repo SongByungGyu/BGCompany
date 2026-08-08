@@ -99,6 +99,34 @@ export const STOCK_BLOG_THUMBNAIL_TEMPLATES: Record<StockBriefingTemplate, Thumb
       { label: "다음 주 변수", title: "다음 주 시장 체크", subtitle: "한국·미국 증시", hook: "한 주 전 점검하는 리스크" },
     ],
   },
+  INVESTMENT_STUDY: {
+    templateType: "INVESTMENT_STUDY",
+    mainTitle: "오늘의 투자 공부",
+    subtitle: "숫자와 사례로 이해",
+    hook: "한 가지 개념을 제대로 익히기",
+    style: "BG Market Note 전용 16:9 투자 교육 카드, 딥 네이비 배경, 화이트 대형 제목, 민트 포인트, 정돈된 인포그래픽",
+    colors: "deep navy / white / mint",
+    promptFocus: "초보 투자자를 위한 주식 개념 학습, 재무제표와 계산식을 상징하는 추상 숫자·표·차트, 실제 기업 사례를 보여주는 교육형 인포그래픽, 타사 로고 없음",
+    keywords: ["투자공부", "주식기초", "재무제표", "주식용어", "투자체크리스트"],
+    variants: [
+      { label: "투자 공부", title: "오늘의 투자 공부", subtitle: "숫자로 이해하는 주식", hook: "개념·사례·주의점" },
+      { label: "주식 기초", title: "주식 개념 한 가지", subtitle: "실제 사례로 이해", hook: "초보 투자자 체크" },
+    ],
+  },
+  LARGE_CAP_DISCLOSURE_EARNINGS: {
+    templateType: "LARGE_CAP_DISCLOSURE_EARNINGS",
+    mainTitle: "대형주 공시·실적",
+    subtitle: "공식 발표 핵심 숫자",
+    hook: "매출·이익·가이던스 영향 체크",
+    style: "BG Market Note 전용 16:9 기업 실적 카드, 딥 네이비 배경, 화이트 대형 제목, 골드와 시안 데이터 포인트",
+    colors: "deep navy / white / gold cyan",
+    promptFocus: "대형주 공식 공시와 실적 발표, 기업 로고 없는 재무제표·막대 그래프·컨퍼런스 발표 장면의 추상 금융 인포그래픽",
+    keywords: ["공시분석", "실적발표", "대형주", "기업분석", "가이던스"],
+    variants: [
+      { label: "공시 체크", title: "대형주 공시 체크", subtitle: "공식 발표 핵심", hook: "숫자와 주가 영향" },
+      { label: "실적 분석", title: "대형주 실적 분석", subtitle: "매출·이익·가이던스", hook: "다음 분기 조건 체크" },
+    ],
+  },
 };
 
 function clean(value?: string | null) {
@@ -128,6 +156,8 @@ function trimForThumbnail(value: string, fallback: string, maxLength = 28) {
 
 export function inferStockBriefingTemplateFromPipeline(pipeline: ContentPipelineRun): StockBriefingTemplate {
   const source = `${pipeline.title} ${pipeline.topic} ${pipeline.writerResult?.finalTitle ?? ""}`.toLowerCase();
+  if (source.includes("공시") || source.includes("실적 발표") || source.includes("10-q") || source.includes("10-k")) return "LARGE_CAP_DISCLOSURE_EARNINGS";
+  if (source.includes("투자 공부") || source.includes("재무제표") || source.includes("주식 기초")) return "INVESTMENT_STUDY";
   if (source.includes("다음 주") || source.includes("next week") || source.includes("일정")) return "NEXT_WEEK_MARKET_PREVIEW";
   if (source.includes("주간") || source.includes("금주") || source.includes("weekly")) return "WEEKLY_MARKET_REVIEW";
   if (source.includes("미국") || source.includes("us") || source.includes("나스닥") || source.includes("미장")) return "KOREA_MARKET_CLOSE_US_PREVIEW";

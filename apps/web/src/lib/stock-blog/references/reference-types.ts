@@ -2,7 +2,9 @@ export type StockReferenceBriefingTemplate =
   | "KOREA_DAILY_PREVIEW"
   | "KOREA_MARKET_CLOSE_US_PREVIEW"
   | "WEEKLY_MARKET_REVIEW"
-  | "NEXT_WEEK_MARKET_PREVIEW";
+  | "NEXT_WEEK_MARKET_PREVIEW"
+  | "INVESTMENT_STUDY"
+  | "LARGE_CAP_DISCLOSURE_EARNINGS";
 
 export type ReferenceSourceType = "news" | "blog" | "disclosure" | "market_data" | "calendar" | "sector" | "company" | "macro" | "manual" | "mock";
 export type ReferenceProviderStatus = "ready" | "disabled" | "needs_credentials" | "needs_reference" | "needs_data" | "error";

@@ -73,10 +73,28 @@ const STOCK_BRIEFING_TEMPLATE_CONFIGS: Record<StockBriefingTemplate, StockBriefi
     type: "NEXT_WEEK_MARKET_PREVIEW",
     label: "일요일 19:00 KST · 다음 주 시장 전망",
     recommendedSchedule: "일요일 19:00 KST 발행",
-    recommendedCategory: "차주 시장 전망",
-    requiredSections: ["30초 요약", "지난주 시장 핵심 숫자", "다음 주 핵심 변수 2가지", "다음 주 핵심 일정", "다음 주 상승·하락 조건", "다음 주 초보자 설명", "다음 주 볼 것 3가지", "BG Market Note 판단", "함께 확인한 기사"],
-    defaultTags: ["BGMarketNote", "주식시장", "증시브리핑", "시장전망", "투자공부", "다음주증시", "경제지표", "실적시즌", "금리", "섹터흐름"],
-    thumbnailTextCandidates: ["다음 주 증시 일정", "다음 주 체크포인트", "경제지표 미리보기"],
+    recommendedCategory: "주요 이슈/섹터",
+    requiredSections: ["30초 요약", "다음 주 주요 이슈와 핵심 숫자", "다음 주 핵심 변수 2가지", "다음 주 핵심 일정(이슈별 영향 섹터 포함)", "다음 주 상승·하락 조건", "다음 주 초보자 설명", "다음 주 볼 것 3가지", "BG Market Note 판단", "함께 확인한 기사"],
+    defaultTags: ["BGMarketNote", "다음주증시", "주요이슈", "수혜섹터", "경제지표", "실적시즌", "금리", "섹터흐름"],
+    thumbnailTextCandidates: ["다음 주 주요 이슈", "영향 섹터와 일정", "다음 주 핵심 조건"],
+  },
+  INVESTMENT_STUDY: {
+    type: "INVESTMENT_STUDY",
+    label: "토요일 19:00 KST · 투자 공부",
+    recommendedSchedule: "토요일 19:00 KST 발행",
+    recommendedCategory: "투자 공부",
+    requiredSections: ["30초 요약", "개념을 이해할 핵심 숫자", "적용할 때 핵심 변수 2가지", "유리·불리해지는 상승·하락 조건", "실제 시장·기업 사례", "오늘의 초보자 설명", "투자공부에서 볼 것 3가지", "BG Market Note 판단", "함께 확인한 기사"],
+    defaultTags: ["BGMarketNote", "투자공부", "주식기초", "재무제표", "주식용어", "투자체크리스트"],
+    thumbnailTextCandidates: ["오늘의 투자 공부", "숫자로 이해하는 주식", "투자 개념 한 가지"],
+  },
+  LARGE_CAP_DISCLOSURE_EARNINGS: {
+    type: "LARGE_CAP_DISCLOSURE_EARNINGS",
+    label: "평일 18:30 KST · 대형주 중요 공시·실적 조건부 발행",
+    recommendedSchedule: "중요 공식 발표가 확인된 평일 18:30 KST",
+    recommendedCategory: "공시/실적 체크",
+    requiredSections: ["30초 요약", "공시·실적 핵심 숫자", "발표에서 볼 핵심 변수 2가지", "주가 상승·하락 조건", "공식 발표와 시장 반응", "오늘의 초보자 설명", "다음 분기 볼 것 3가지", "BG Market Note 판단", "함께 확인한 기사"],
+    defaultTags: ["BGMarketNote", "공시분석", "실적발표", "대형주", "기업분석", "실적체크"],
+    thumbnailTextCandidates: ["공시·실적 핵심", "대형주 공식 발표", "실적 숫자 체크"],
   },
 };
 
@@ -117,6 +135,8 @@ function escapeHtml(value: string) {
 
 function inferStockBriefingTemplate(pipeline: ContentPipelineRun): StockBriefingTemplate {
   const source = `${pipeline.title} ${pipeline.topic} ${pipeline.writerResult?.finalTitle ?? ""}`.toLowerCase();
+  if (source.includes("공시") || source.includes("실적 발표") || source.includes("10-q") || source.includes("10-k")) return "LARGE_CAP_DISCLOSURE_EARNINGS";
+  if (source.includes("투자 공부") || source.includes("재무제표") || source.includes("주식 기초")) return "INVESTMENT_STUDY";
   if (source.includes("다음 주") || source.includes("next week") || source.includes("프리뷰")) return "NEXT_WEEK_MARKET_PREVIEW";
   if (source.includes("주간") || source.includes("금주") || source.includes("weekly")) return "WEEKLY_MARKET_REVIEW";
   if (source.includes("미국") || source.includes("us") || source.includes("나스닥")) return "KOREA_MARKET_CLOSE_US_PREVIEW";

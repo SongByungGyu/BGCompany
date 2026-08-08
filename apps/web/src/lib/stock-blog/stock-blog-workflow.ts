@@ -2,7 +2,9 @@ export type StockBlogContentType =
   | "KOREA_DAILY_PREVIEW"
   | "KOREA_MARKET_CLOSE_US_PREVIEW"
   | "WEEKLY_MARKET_REVIEW"
-  | "NEXT_WEEK_MARKET_PREVIEW";
+  | "NEXT_WEEK_MARKET_PREVIEW"
+  | "INVESTMENT_STUDY"
+  | "LARGE_CAP_DISCLOSURE_EARNINGS";
 
 export type StockBlogScheduleItem = {
   contentType: StockBlogContentType;
@@ -38,7 +40,9 @@ const STOCK_BLOG_SCHEDULE: StockBlogScheduleItem[] = [
   { contentType: "KOREA_DAILY_PREVIEW", label: "전일 한국장 리뷰·오늘 한국장 전망", cadence: "평일", scheduledTimeKst: "07:20 KST 생성 시작 · 08:20 이전 발행 목표", objective: "전일 한국장을 짧게 복기하고 간밤 미국장 결과를 반영해 오늘 코스피 전망을 정리합니다.", primaryAudience: "한국 주식 투자자", recommendedRunnerMode: "hermes" },
   { contentType: "KOREA_MARKET_CLOSE_US_PREVIEW", label: "전일 미국장 리뷰·오늘 미국장 전망", cadence: "평일", scheduledTimeKst: "17:00 KST", objective: "전일 미국장을 짧게 복기하고 오늘 밤 미국장 관전 포인트를 정리합니다.", primaryAudience: "미국 주식 투자자", recommendedRunnerMode: "hermes" },
   { contentType: "WEEKLY_MARKET_REVIEW", label: "이번 주 한국·미국 시장 복기", cadence: "매주 토요일", scheduledTimeKst: "09:00 KST", objective: "이번 주 지수·수급·주도 업종과 변동 원인을 중심으로 복기합니다.", primaryAudience: "토요일에 한 주의 시장 흐름을 복기하는 투자자", recommendedRunnerMode: "hermes" },
-  { contentType: "NEXT_WEEK_MARKET_PREVIEW", label: "다음 주 시장 전망", cadence: "매주 일요일", scheduledTimeKst: "19:00 KST", objective: "다음 주 주요 경제 일정·실적·금리 변수와 상승·하락 조건을 준비합니다.", primaryAudience: "일요일 저녁 다음 주 투자 계획을 세우는 투자자", recommendedRunnerMode: "hermes" },
+  { contentType: "INVESTMENT_STUDY", label: "토요일 투자 공부", cadence: "매주 토요일", scheduledTimeKst: "19:00 KST", objective: "한 가지 투자 개념을 실제 숫자와 사례로 쉽게 공부합니다.", primaryAudience: "주식의 원리와 재무제표를 차근차근 공부하는 투자자", recommendedRunnerMode: "hermes" },
+  { contentType: "NEXT_WEEK_MARKET_PREVIEW", label: "주요 이슈·섹터와 다음 주 전망", cadence: "매주 일요일", scheduledTimeKst: "19:00 KST", objective: "다음 주 핵심 이슈와 영향을 받을 섹터, 경제·실적 일정과 대응 조건을 준비합니다.", primaryAudience: "일요일 저녁 다음 주 투자 계획을 세우는 투자자", recommendedRunnerMode: "hermes" },
+  { contentType: "LARGE_CAP_DISCLOSURE_EARNINGS", label: "대형주 공시·실적 체크", cadence: "중요 공식 발표가 있는 평일", scheduledTimeKst: "18:30 KST 조건부 확인", objective: "국내외 대형주의 중요한 공식 공시와 실적 발표가 있는 날에만 핵심 숫자와 투자 영향을 분석합니다.", primaryAudience: "대형주 공시와 실적을 빠르게 이해하려는 투자자", recommendedRunnerMode: "hermes" },
 ];
 
 export function getStockBlogScheduleItems() { return STOCK_BLOG_SCHEDULE; }
@@ -49,6 +53,8 @@ export function getExpectedHermesRunsForStockBlog(contentType: StockBlogContentT
     case "KOREA_MARKET_CLOSE_US_PREVIEW":
     case "WEEKLY_MARKET_REVIEW":
     case "NEXT_WEEK_MARKET_PREVIEW":
+    case "INVESTMENT_STUDY":
+    case "LARGE_CAP_DISCLOSURE_EARNINGS":
       return STOCK_BLOG_MAX_HERMES_RUNS;
   }
 }

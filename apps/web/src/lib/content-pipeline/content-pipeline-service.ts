@@ -109,6 +109,8 @@ const stockContentTypes = new Set<StockReferenceBriefingTemplate>([
   "KOREA_MARKET_CLOSE_US_PREVIEW",
   "WEEKLY_MARKET_REVIEW",
   "NEXT_WEEK_MARKET_PREVIEW",
+  "INVESTMENT_STUDY",
+  "LARGE_CAP_DISCLOSURE_EARNINGS",
 ]);
 const HERMES_PIPELINE_REQUIRED_RUNS = STOCK_BLOG_MAX_HERMES_RUNS;
 
@@ -255,6 +257,8 @@ function asScheduleValidation(value: unknown): VerifiedScheduleValidation | unde
 function inferReferenceTemplate(input: { topic: string; title: string; contentType?: StockReferenceBriefingTemplate }): StockReferenceBriefingTemplate {
   if (input.contentType) return input.contentType;
   const text = `${input.topic} ${input.title}`;
+  if (/공시|실적\s*발표|10-q|10-k|8-k/i.test(text)) return "LARGE_CAP_DISCLOSURE_EARNINGS";
+  if (/투자\s*공부|재무제표|주식\s*기초/i.test(text)) return "INVESTMENT_STUDY";
   if (/다음\s*주|next\s*week/i.test(text)) return "NEXT_WEEK_MARKET_PREVIEW";
   if (/주간|이번\s*주|weekly/i.test(text)) return "WEEKLY_MARKET_REVIEW";
   if (/미국|나스닥|S&P|미장|밤/i.test(text)) return "KOREA_MARKET_CLOSE_US_PREVIEW";
@@ -262,8 +266,10 @@ function inferReferenceTemplate(input: { topic: string; title: string; contentTy
 }
 
 function inferReferenceMarket(template: StockReferenceBriefingTemplate): "KR" | "US" | "GLOBAL" {
-  if (template === "NEXT_WEEK_MARKET_PREVIEW") return "GLOBAL";
-  if (template === "KOREA_MARKET_CLOSE_US_PREVIEW") return "GLOBAL";
+  if (template === "NEXT_WEEK_MARKET_PREVIEW"
+    || template === "KOREA_MARKET_CLOSE_US_PREVIEW"
+    || template === "INVESTMENT_STUDY"
+    || template === "LARGE_CAP_DISCLOSURE_EARNINGS") return "GLOBAL";
   return "KR";
 }
 

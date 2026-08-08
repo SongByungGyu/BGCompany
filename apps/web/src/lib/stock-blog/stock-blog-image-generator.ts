@@ -58,6 +58,20 @@ const THEMES: Record<StockBriefingTemplate, ImageTheme> = {
     secondary: "#D8D2FF",
     skyline: "#28355D",
   },
+  INVESTMENT_STUDY: {
+    eyebrow: "INVESTMENT STUDY",
+    marketLabel: "CONCEPT · NUMBERS · CASE",
+    accent: "#56D7B0",
+    secondary: "#B9F3E2",
+    skyline: "#123F4C",
+  },
+  LARGE_CAP_DISCLOSURE_EARNINGS: {
+    eyebrow: "OFFICIAL FILING · EARNINGS",
+    marketLabel: "DART · SEC · RESULTS",
+    accent: "#D9AB50",
+    secondary: "#A8E5FF",
+    skyline: "#173653",
+  },
 };
 
 function xmlEscape(value: string) {

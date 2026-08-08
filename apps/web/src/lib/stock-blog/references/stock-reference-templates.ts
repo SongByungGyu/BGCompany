@@ -76,6 +76,34 @@ export const STOCK_REFERENCE_TEMPLATES: Record<StockReferenceBriefingTemplate, S
       { id: "investor-checklist", label: "투자자 체크리스트", sourceTypes: ["macro", "sector", "news"], markets: ["GLOBAL", "KR", "US"], keywords: ["환율", "금리", "섹터", "리스크"] },
     ],
   },
+  INVESTMENT_STUDY: {
+    contentType: "INVESTMENT_STUDY",
+    label: "토요일 투자 공부",
+    market: "GLOBAL",
+    minimumRealReferences: 3,
+    minimumDistinctUrls: 3,
+    minimumPublishers: 2,
+    requiresMarketData: true,
+    requirements: [
+      { id: "study-definition", label: "개념 정의와 공식", sourceTypes: ["company", "macro", "news"], markets: ["GLOBAL", "KR", "US"], keywords: ["주식 공부", "재무제표", "투자 지표"] },
+      { id: "study-example", label: "실제 시장·기업 사례", sourceTypes: ["market_data", "company", "news"], markets: ["GLOBAL", "KR", "US"], keywords: ["사례", "업종", "주가"] },
+      { id: "study-caution", label: "해석 시 주의점", sourceTypes: ["news", "macro", "sector"], markets: ["GLOBAL", "KR", "US"], keywords: ["주의", "리스크", "해석"] },
+    ],
+  },
+  LARGE_CAP_DISCLOSURE_EARNINGS: {
+    contentType: "LARGE_CAP_DISCLOSURE_EARNINGS",
+    label: "대형주 공시·실적 체크",
+    market: "GLOBAL",
+    minimumRealReferences: 3,
+    minimumDistinctUrls: 3,
+    minimumPublishers: 2,
+    requiresMarketData: true,
+    requirements: [
+      { id: "official-release", label: "DART·SEC 공식 발표 원문", sourceTypes: ["disclosure"], markets: ["KR", "US"], keywords: ["공시", "10-Q", "10-K", "8-K", "실적"] },
+      { id: "earnings-numbers", label: "실적 핵심 숫자와 비교 기준", sourceTypes: ["company", "disclosure", "news"], markets: ["KR", "US", "GLOBAL"], keywords: ["매출", "영업이익", "가이던스"] },
+      { id: "market-impact", label: "주가·업종 영향", sourceTypes: ["market_data", "sector", "news"], markets: ["KR", "US", "GLOBAL"], keywords: ["주가", "업종", "시장 반응"] },
+    ],
+  },
 };
 
 export function getStockReferenceTemplate(contentType: StockReferenceBriefingTemplate) {

@@ -5,7 +5,7 @@ import { getStockBlogImagePlacementHeadings } from "./stock-blog-image-placement
 
 test("다음 주 전망 이미지를 숫자·변수·시나리오 섹션에 배치한다", () => {
   assert.deepEqual(getStockBlogImagePlacementHeadings("NEXT_WEEK_MARKET_PREVIEW"), {
-    majorIndexChange: "2. 지난주 시장 핵심 숫자",
+    majorIndexChange: "2. 다음 주 주요 이슈와 핵심 숫자",
     kospiInvestorFlow: "3. 다음 주 핵심 변수 2가지",
     fxAndUsYields: "5. 다음 주 상승·하락 조건",
   });
@@ -29,9 +29,19 @@ test("각 자동발행 템플릿의 실제 절 제목과 이미지 위치가 일
       fxAndUsYields: "3. 이번 주 핵심 변수 2가지",
     },
     NEXT_WEEK_MARKET_PREVIEW: {
-      majorIndexChange: "2. 지난주 시장 핵심 숫자",
+      majorIndexChange: "2. 다음 주 주요 이슈와 핵심 숫자",
       kospiInvestorFlow: "3. 다음 주 핵심 변수 2가지",
       fxAndUsYields: "5. 다음 주 상승·하락 조건",
+    },
+    INVESTMENT_STUDY: {
+      majorIndexChange: "2. 개념을 이해할 핵심 숫자",
+      kospiInvestorFlow: "5. 실제 시장·기업 사례",
+      fxAndUsYields: "4. 유리·불리해지는 상승·하락 조건",
+    },
+    LARGE_CAP_DISCLOSURE_EARNINGS: {
+      majorIndexChange: "2. 공시·실적 핵심 숫자",
+      kospiInvestorFlow: "5. 공식 발표와 시장 반응",
+      fxAndUsYields: "4. 주가 상승·하락 조건",
     },
   };
 

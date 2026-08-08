@@ -4,7 +4,9 @@ const DEFAULT_HOOKS: Record<StockBriefingTemplate, string> = {
   KOREA_DAILY_PREVIEW: "금리·환율·수급 체크",
   KOREA_MARKET_CLOSE_US_PREVIEW: "금리·선물·실적 체크",
   WEEKLY_MARKET_REVIEW: "수급·섹터 변화 점검",
-  NEXT_WEEK_MARKET_PREVIEW: "경제지표·실적 일정 체크",
+  NEXT_WEEK_MARKET_PREVIEW: "주요 이슈·영향 섹터 체크",
+  INVESTMENT_STUDY: "숫자와 사례로 이해",
+  LARGE_CAP_DISCLOSURE_EARNINGS: "공식 발표 핵심 숫자",
 };
 
 const PROHIBITED_TITLE_EXPRESSIONS = ["급등 확정", "무조건 상승", "매수 추천", "수익 보장", "상한가 확정", "폭등", "몰빵"];
@@ -33,7 +35,9 @@ const TEMPLATE_INTENT_TERMS: Record<StockBriefingTemplate, string[]> = {
   KOREA_DAILY_PREVIEW: ["오늘", "한국장", "코스피", "장전", "환율", "수급"],
   KOREA_MARKET_CLOSE_US_PREVIEW: ["오늘", "미국장", "나스닥", "S&P500", "금리", "선물", "실적"],
   WEEKLY_MARKET_REVIEW: ["주간", "이번 주", "코스피", "나스닥", "수급", "주도 업종", "변화"],
-  NEXT_WEEK_MARKET_PREVIEW: ["다음 주", "일정", "실적", "경제지표", "리스크"],
+  NEXT_WEEK_MARKET_PREVIEW: ["다음 주", "주요 이슈", "섹터", "일정", "실적", "경제지표"],
+  INVESTMENT_STUDY: ["투자 공부", "주식 기초", "재무제표", "PER", "현금흐름", "배당"],
+  LARGE_CAP_DISCLOSURE_EARNINGS: ["공시", "실적", "대형주", "매출", "영업이익", "가이던스"],
 };
 
 function removeProhibitedExpressions(value: string) {
@@ -57,13 +61,15 @@ function baseTitle(template: StockBriefingTemplate) {
   if (template === "KOREA_DAILY_PREVIEW") return "오늘 한국장 전망";
   if (template === "KOREA_MARKET_CLOSE_US_PREVIEW") return "오늘 미국장 전망";
   if (template === "WEEKLY_MARKET_REVIEW") return "한국·미국 주간 시장 정리";
+  if (template === "INVESTMENT_STUDY") return "주식 투자 공부";
+  if (template === "LARGE_CAP_DISCLOSURE_EARNINGS") return "대형주 공시·실적 분석";
   return "다음 주 증시 전망";
 }
 
 function dateSuffix(template: StockBriefingTemplate, marketDate?: string) {
   const { month, day } = parseDateParts(marketDate);
   if (template === "WEEKLY_MARKET_REVIEW") return `${month}월 ${Math.ceil(day / 7)}주차`;
-  if (template === "NEXT_WEEK_MARKET_PREVIEW") return `${month}월 ${day}일 기준`;
+  if (template === "NEXT_WEEK_MARKET_PREVIEW" || template === "INVESTMENT_STUDY" || template === "LARGE_CAP_DISCLOSURE_EARNINGS") return `${month}월 ${day}일 기준`;
   return `${month}월 ${day}일`;
 }
 
