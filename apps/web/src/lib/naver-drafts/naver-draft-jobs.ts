@@ -785,6 +785,8 @@ async function scheduleSafeNaverDraftRetry(
     publishAttemptCount: job.publishAttemptCount,
     retryCount,
     retryLimit: getNaverDraftSafeRetryLimit(process.env.NAVER_DRAFT_SAFE_RETRY_LIMIT),
+    errorCode: input.errorCode,
+    errorMessage: input.errorMessage,
   });
   if (!decision.allowed) return null;
 

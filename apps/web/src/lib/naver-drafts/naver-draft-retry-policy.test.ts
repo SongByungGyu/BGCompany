@@ -18,6 +18,50 @@ test("발행 전 이미지 업로드 실패는 설정 한도 안에서 자동 �
   );
 });
 
+test("발행 전 네이버 이미지 캡션 입력 실패는 안전 재시도한다", () => {
+  assert.deepEqual(
+    evaluateNaverDraftSafeRetry({
+      status: "image_quality_failed",
+      allowPublish: true,
+      publishAttemptCount: 0,
+      retryCount: 0,
+      retryLimit: 2,
+      errorCode: "NAVER_IMAGE_QUALITY_FAILED",
+      errorMessage: "NAVER_IMAGE_CAPTION_INSERT_FAILED_fx-and-us-yields",
+    }),
+    { allowed: true, nextRetryCount: 1 },
+  );
+});
+
+test("발행 전 네이버 이미지 위치 검증 실패도 안전 재시도한다", () => {
+  assert.deepEqual(
+    evaluateNaverDraftSafeRetry({
+      status: "image_quality_failed",
+      allowPublish: true,
+      publishAttemptCount: 0,
+      retryCount: 0,
+      retryLimit: 2,
+      errorCode: "NAVER_IMAGE_QUALITY_FAILED",
+      errorMessage: "NAVER_IMAGE_PLACEMENT_VERIFY_FAILED_kospi-investor-flow_caption_not_found_images_4",
+    }),
+    { allowed: true, nextRetryCount: 1 },
+  );
+});
+
+test("콘텐츠 자체의 이미지 품질 실패는 같은 원고로 자동 재시도하지 않는다", () => {
+  const decision = evaluateNaverDraftSafeRetry({
+    status: "image_quality_failed",
+    allowPublish: true,
+    publishAttemptCount: 0,
+    retryCount: 0,
+    retryLimit: 2,
+    errorCode: "NAVER_IMAGE_QUALITY_FAILED",
+    errorMessage: "IMAGE_METADATA_INCOMPLETE",
+  });
+
+  assert.equal(decision.allowed, false);
+});
+
 test("발행 버튼 이후 실패는 중복 게시 방지를 위해 자동 재시도하지 않는다", () => {
   const decision = evaluateNaverDraftSafeRetry({
     status: "publish_failed",

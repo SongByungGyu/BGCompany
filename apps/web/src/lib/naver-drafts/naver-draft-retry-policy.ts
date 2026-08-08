@@ -22,11 +22,16 @@ export function evaluateNaverDraftSafeRetry(input: {
   publishAttemptCount: number;
   retryCount: number;
   retryLimit: number;
+  errorCode?: string | null;
+  errorMessage?: string | null;
 }): NaverDraftSafeRetryDecision {
   if (!input.allowPublish) {
     return { allowed: false, nextRetryCount: input.retryCount, reason: "자동 발행 작업이 아닙니다." };
   }
-  if (!SAFE_PRE_PUBLISH_RETRY_STATUSES.has(input.status)) {
+  const recoverableEditorImageFailure = input.status === "image_quality_failed"
+    && input.errorCode === "NAVER_IMAGE_QUALITY_FAILED"
+    && /^NAVER_(?:(?:IMAGE|THUMBNAIL)_CAPTION_INSERT_FAILED(?:_|$)|IMAGE_PLACEMENT_VERIFY_FAILED_)/.test(input.errorMessage ?? "");
+  if (!SAFE_PRE_PUBLISH_RETRY_STATUSES.has(input.status) && !recoverableEditorImageFailure) {
     return { allowed: false, nextRetryCount: input.retryCount, reason: "안전 재시도 대상 상태가 아닙니다." };
   }
   if (input.publishAttemptCount > 0) {
