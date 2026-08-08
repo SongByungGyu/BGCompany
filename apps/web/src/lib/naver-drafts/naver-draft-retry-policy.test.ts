@@ -83,7 +83,17 @@ test("안전 재시도 한도는 기본 2회, 최대 5회다", () => {
 });
 
 test("발행 버튼 전 오류는 다음 예약 글을 막는 전역 차단기를 켜지 않는다", () => {
-  for (const status of ["failed", "readability_failed", "image_upload_failed", "image_quality_failed", "draft_save_failed"]) {
+  for (const status of [
+    "failed",
+    "publish_blocked",
+    "readability_failed",
+    "image_upload_failed",
+    "image_quality_failed",
+    "draft_save_failed",
+    "quality_failed",
+    "reference_failed",
+    "market_data_failed",
+  ]) {
     assert.equal(shouldActivateNaverPublishCircuitBreaker({ status, allowPublish: true }), false);
   }
 });

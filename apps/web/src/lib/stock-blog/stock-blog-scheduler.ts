@@ -382,24 +382,6 @@ async function writeSchedulerEvent(input: {
   });
 }
 
-async function activateSchedulerPublishCircuitBreaker(input: { status: string; reason: string; scheduleKey: string }) {
-  await prisma.eventLog.upsert({
-    where: { id: PUBLISH_CIRCUIT_BREAKER_EVENT_ID },
-    create: {
-      id: PUBLISH_CIRCUIT_BREAKER_EVENT_ID,
-      type: "StockBlogPublishCircuitBreaker",
-      timestamp: new Date(),
-      summary: "첫 자동 발행이 실패해 자동 발행이 일시 중지되었습니다.",
-      payload: { active: true, ...input },
-    },
-    update: {
-      timestamp: new Date(),
-      summary: "첫 자동 발행이 실패해 자동 발행이 일시 중지되었습니다.",
-      payload: { active: true, ...input },
-    },
-  });
-}
-
 function eventPayload(value: Prisma.JsonValue): Record<string, Prisma.JsonValue> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, Prisma.JsonValue>
@@ -708,9 +690,6 @@ async function runOneSchedule(
         const contentQualityBlocked = reason.startsWith("NAVER_DRAFT_DUPLICATE_CONTENT_BLOCKED:")
           || reason.startsWith("NAVER_DRAFT_QUALITY_FAILED:");
         notes.push(contentQualityBlocked ? `STOCK_CONTENT_QUALITY_FAILED: ${reason}` : reason);
-        if (config.autoPublish && !contentQualityBlocked) {
-          await activateSchedulerPublishCircuitBreaker({ status: "publish_blocked", reason, scheduleKey: key });
-        }
       }
     }
 
@@ -770,9 +749,6 @@ async function runOneSchedule(
         retryable: referencePreflightFailure || capacityDeferred,
       },
     });
-    if (config.autoPublish && !referencePreflightFailure && !capacityDeferred) {
-      await activateSchedulerPublishCircuitBreaker({ status: "failed", reason, scheduleKey: key });
-    }
     return result;
   }
 }
