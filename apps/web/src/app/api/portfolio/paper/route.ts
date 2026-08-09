@@ -5,12 +5,14 @@ import {
   initializePaperTradingAccount,
   setPaperTradingStatus,
 } from "@/lib/portfolio/paper-trading-service";
+import { getPaperTradingAutomationStatus } from "@/lib/portfolio/paper-trading-scheduler";
 import type { PaperTradingSystemStatus } from "@/lib/portfolio/paper-trading-types";
 
 export async function GET(request: Request) {
   const denied = await authorizePortfolioApi(request);
   if (denied) return denied;
-  return noStoreJson(await getPaperTradingDashboard());
+  const [dashboard, automation] = await Promise.all([getPaperTradingDashboard(), getPaperTradingAutomationStatus()]);
+  return noStoreJson(dashboard.enabled ? { ...dashboard, automation } : dashboard);
 }
 
 export async function POST(request: Request) {

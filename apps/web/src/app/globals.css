@@ -2299,6 +2299,16 @@
 .control-room .paper-trading-rule-strip article { padding: 10px 12px; background: #0a1b28; border: 1px solid #203d51; border-radius: 11px; }
 .control-room .paper-trading-rule-strip span { display: block; color: #6f899b; font-size: 8px; }
 .control-room .paper-trading-rule-strip strong { display: block; margin-top: 5px; color: #dce9f0; font-size: 13px; }
+.control-room .paper-automation { display: grid; grid-template-columns: minmax(280px, 1.35fr) minmax(420px, 1fr); align-items: center; gap: 14px; padding: 14px 16px; background: linear-gradient(135deg, #0b2530, #0c1d2b); border: 1px solid #286071; border-radius: 13px; }
+.control-room .paper-automation > div > span { color: #56d9ca; font-size: 8px; font-weight: 900; letter-spacing: .14em; }
+.control-room .paper-automation h3 { margin: 5px 0; color: #e8fbf6; font-size: 15px; }
+.control-room .paper-automation p { margin: 0; color: #8fa9bc; font-size: 10px; line-height: 1.55; }
+.control-room .paper-automation dl { display: grid; grid-template-columns: repeat(4, minmax(85px, 1fr)); gap: 7px; margin: 0; }
+.control-room .paper-automation dl div { padding: 9px; background: #091822; border: 1px solid #1e4253; border-radius: 9px; }
+.control-room .paper-automation dt { color: #6f899b; font-size: 8px; }
+.control-room .paper-automation dd { margin: 4px 0 0; color: #e0edf3; font-size: 10px; font-weight: 800; }
+.control-room .paper-automation.failed { border-color: #7a443c; background: #2b1c1d; }
+.control-room .paper-automation .paper-automation-error { grid-column: 1 / -1; padding: 7px 9px; color: #ffc3bb; background: #321c1c; border-radius: 7px; }
 .control-room .paper-trading-columns { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr); gap: 12px; }
 .control-room .paper-position-list,
 .control-room .paper-activity-list { display: grid; gap: 8px; }
@@ -2325,6 +2335,7 @@
 
 @media (max-width: 1100px) {
   .control-room .paper-trading-start { grid-template-columns: 1fr; }
+  .control-room .paper-automation { grid-template-columns: 1fr; }
   .control-room .paper-trading-columns { grid-template-columns: 1fr; }
   .control-room .paper-trading-rule-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
@@ -2333,6 +2344,7 @@
   .control-room .paper-trading-status { align-items: flex-start; flex-direction: column; }
   .control-room .paper-trading-controls { flex-wrap: wrap; }
   .control-room .paper-trading-start dl,
+  .control-room .paper-automation dl,
   .control-room .paper-trading-rule-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .control-room .paper-position-list > article { grid-template-columns: 1fr; }
   .control-room .paper-position-list dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }

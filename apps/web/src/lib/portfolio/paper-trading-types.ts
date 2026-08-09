@@ -102,6 +102,26 @@ export type PaperTradingDashboard = {
     rejectedSignalsToday: number;
     closedTrades: number;
   };
+  automation?: PaperTradingAutomationStatus;
+};
+
+export type PaperTradingAutomationStatus = {
+  enabled: boolean;
+  cron: string;
+  timezone: string;
+  retryLimit: number;
+  status: string;
+  lastRunAt: string | null;
+  lastMarketDate: string | null;
+  signalDate: string | null;
+  candidateCount: number;
+  loadedSymbols: number;
+  universeSize: number;
+  nextRunAt: string;
+  attempt: number;
+  error: string | null;
+  provider: string;
+  baselineOnly: boolean;
 };
 
 export type PaperTradingDisabled = {

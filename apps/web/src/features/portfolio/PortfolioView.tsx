@@ -226,11 +226,22 @@ function PaperTradingPanel({
 
   const account = response.account;
   const gain = (number(account.totalReturnPercent) ?? 0) >= 0;
+  const automation = response.automation;
   return <div className="paper-trading-dashboard">
     <section className={`paper-trading-status ${account.status.toLowerCase()}`}>
       <div><span>PAPER · INTERNAL VIRTUAL BROKER</span><h2>{account.name}</h2><p>외부 주문 권한 <b>{response.externalOrderAuthorization}</b> · 마지막 실행 {formatDate(account.lastRunAt, true)} · 기준일 {account.lastMarketDate ?? "대기 중"}</p></div>
       <div className="paper-trading-controls"><strong>{account.status}</strong>{account.status === "ACTIVE" ? <button disabled={working} onClick={() => onAction("pause")}>일시정지</button> : null}{account.status === "PAUSED" ? <button className="primary" disabled={working} onClick={() => onAction("resume")}>재개</button> : null}{account.status !== "KILLED" ? <button className="danger" disabled={working} onClick={() => onAction("kill")}>긴급 정지</button> : null}</div>
     </section>
+    {automation ? <section className={`paper-automation ${automation.status}`}>
+      <div><span>AUTOMATIC PAPER CYCLE</span><h3>{automation.enabled ? "완전 자동 모의투자 실행 중" : "자동 실행 꺼짐"}</h3><p>KIS 읽기 전용 일봉 → 전일 차트 신호 → 다음 거래일 시가 가상 체결 → 손익·리스크 저장</p></div>
+      <dl>
+        <div><dt>상태</dt><dd>{automation.status.toUpperCase()}</dd></div>
+        <div><dt>다음 실행</dt><dd>{formatDate(automation.nextRunAt, true)}</dd></div>
+        <div><dt>마지막 기준일</dt><dd>{automation.lastMarketDate ?? "대기 중"}</dd></div>
+        <div><dt>신호 / 수집</dt><dd>{automation.candidateCount}개 / {automation.loadedSymbols || 0}종목</dd></div>
+      </dl>
+      {automation.error ? <p className="paper-automation-error">{automation.error}</p> : null}
+    </section> : null}
     <div className="portfolio-summary-grid paper-trading-kpis">
       <SummaryCard label="총 자산" value={formatAmount(account.equityKrw, "KRW")} detail={`초기 ${formatAmount(account.initialCapitalKrw, "KRW")}`} />
       <SummaryCard label="현금" value={formatAmount(account.cashKrw, "KRW")} />
@@ -306,6 +317,14 @@ export function PortfolioView() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  useEffect(() => {
+    if (activeTab !== "paper") return;
+    const refresh = () => void fetchPaperTrading().then(setPaperTrading).catch(() => undefined);
+    refresh();
+    const timer = window.setInterval(refresh, 30_000);
+    return () => window.clearInterval(timer);
+  }, [activeTab]);
+
   const changePerformanceRange = (range: PortfolioPerformanceResponse["range"]) => {
     setPerformanceRange(range);
   };
@@ -317,6 +336,7 @@ export function PortfolioView() {
     try {
       const data = await updatePaperTrading(action);
       setPaperTrading(data);
+      setPaperTrading(await fetchPaperTrading());
       setNotice(action === "initialize" ? "가상자금 1,000만원 모의계좌를 만들었습니다." : `모의투자 상태를 변경했습니다: ${action}`);
     } catch (requestError) { setError(errorText(requestError)); }
     finally { setWorking(false); }
