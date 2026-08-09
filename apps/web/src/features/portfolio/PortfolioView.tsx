@@ -233,7 +233,7 @@ function PaperTradingPanel({
       <div className="paper-trading-controls"><strong>{account.status}</strong>{account.status === "ACTIVE" ? <button disabled={working} onClick={() => onAction("pause")}>일시정지</button> : null}{account.status === "PAUSED" ? <button className="primary" disabled={working} onClick={() => onAction("resume")}>재개</button> : null}{account.status !== "KILLED" ? <button className="danger" disabled={working} onClick={() => onAction("kill")}>긴급 정지</button> : null}</div>
     </section>
     {automation ? <section className={`paper-automation ${automation.status}`}>
-      <div><span>AUTOMATIC PAPER CYCLE</span><h3>{automation.enabled ? "완전 자동 모의투자 실행 중" : "자동 실행 꺼짐"}</h3><p>KIS 읽기 전용 일봉 → 전일 차트 신호 → 다음 거래일 시가 가상 체결 → 손익·리스크 저장</p></div>
+      <div><span>AUTOMATIC PAPER CYCLE</span><h3>{automation.enabled ? "완전 자동 모의투자 실행 중" : "자동 실행 꺼짐"}</h3><p>KIS 읽기 전용 일봉 → 전일 차트 신호 → 다음 거래일 시가 가상 체결 → 손익·리스크 저장{automation.trialStartMarketDate && automation.trialEndMarketDate ? ` · 실험 ${automation.trialStartMarketDate} ~ ${automation.trialEndMarketDate}` : ""}</p></div>
       <dl>
         <div><dt>상태</dt><dd>{automation.status.toUpperCase()}</dd></div>
         <div><dt>다음 실행</dt><dd>{formatDate(automation.nextRunAt, true)}</dd></div>

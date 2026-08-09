@@ -6,6 +6,7 @@ import { prepareAutomatedPaperCycle } from "./paper-trading-market-provider";
 import { initializePaperTradingAccount, runPaperTradingCycle } from "./paper-trading-service";
 import {
   decidePaperTradingSchedulerRun,
+  evaluatePaperTradingTrial,
   getPaperTradingSchedule,
   getPaperTradingSchedulerConfig,
 } from "./paper-trading-scheduler-policy";
@@ -74,6 +75,8 @@ export async function getPaperTradingAutomationStatus(now = new Date()) {
     error: text(data.error),
     provider: text(data.provider) ?? "KIS_READ_ONLY",
     baselineOnly: data.baselineOnly === true,
+    trialStartMarketDate: config.trialStartMarketDate,
+    trialEndMarketDate: config.trialEndMarketDate,
   };
 }
 
@@ -88,8 +91,36 @@ export async function executeAutomatedPaperTradingCycle() {
   if (account.status !== "ACTIVE") return { status: account.status.toLowerCase() as "paused" | "killed", reason: `PAPER_ACCOUNT_${account.status}` };
 
   const prepared = await prepareAutomatedPaperCycle(getPaperTradingConfig().strategyVersion);
+  const trial = evaluatePaperTradingTrial(prepared.input.marketDate, schedulerConfig);
+  if (trial.action === "waiting") {
+    return {
+      status: "trial_waiting" as const,
+      reason: `PAPER_TRIAL_STARTS_${schedulerConfig.trialStartMarketDate}`,
+      marketDate: prepared.input.marketDate,
+      signalDate: prepared.signalDate,
+      candidateCount: 0,
+      loadedSymbols: prepared.loadedSymbols,
+      universeSize: prepared.universeSize,
+      provider: prepared.provider,
+      baselineOnly: false,
+    };
+  }
   const baselineOnly = account.lastMarketDate == null;
   await runPaperTradingCycle({ ...prepared.input, signals: baselineOnly ? [] : prepared.input.signals });
+  if (trial.shouldPauseAfterRun) {
+    await prisma.$transaction([
+      prisma.paperTradingAccount.update({ where: { id: account.id }, data: { status: "PAUSED" } }),
+      prisma.paperTradingRiskEvent.create({
+        data: {
+          accountId: account.id,
+          type: "PAPER_TRIAL_COMPLETED",
+          severity: "info",
+          message: `Paper-only trial completed through ${prepared.input.marketDate}; account paused automatically.`,
+          details: { trialStartMarketDate: schedulerConfig.trialStartMarketDate, trialEndMarketDate: schedulerConfig.trialEndMarketDate },
+        },
+      }),
+    ]);
+  }
   return {
     status: "succeeded" as const,
     marketDate: prepared.input.marketDate,
@@ -101,6 +132,7 @@ export async function executeAutomatedPaperTradingCycle() {
     provider: prepared.provider,
     baselineOnly,
     partialErrors: prepared.errors.slice(0, 10),
+    trialCompleted: trial.shouldPauseAfterRun,
   };
 }
 
@@ -133,4 +165,3 @@ export async function runPaperTradingSchedulerTick(now = new Date()) {
     return { ok: false, status: "failed" as const, attempt: decision.attempt, scheduledFor: schedule.scheduledAt.toISOString(), error: reason };
   }
 }
-

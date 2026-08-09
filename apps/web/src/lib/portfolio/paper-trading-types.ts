@@ -122,6 +122,8 @@ export type PaperTradingAutomationStatus = {
   error: string | null;
   provider: string;
   baselineOnly: boolean;
+  trialStartMarketDate: string | null;
+  trialEndMarketDate: string | null;
 };
 
 export type PaperTradingDisabled = {

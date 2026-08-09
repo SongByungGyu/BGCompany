@@ -4,11 +4,18 @@ export type PaperTradingSchedulerConfig = {
   timezone: string;
   retryLimit: number;
   autoInitialize: boolean;
+  trialStartMarketDate: string | null;
+  trialEndMarketDate: string | null;
 };
 
 function enabled(value: string | undefined, fallback = false) {
   if (value == null) return fallback;
   return value.trim().toLowerCase() === "true";
+}
+
+function marketDate(value: string | undefined) {
+  const normalized = value?.trim() ?? "";
+  return /^\d{4}-\d{2}-\d{2}$/.test(normalized) && !Number.isNaN(Date.parse(`${normalized}T00:00:00.000Z`)) ? normalized : null;
 }
 
 export function getPaperTradingSchedulerConfig(env: NodeJS.ProcessEnv = process.env): PaperTradingSchedulerConfig {
@@ -21,6 +28,18 @@ export function getPaperTradingSchedulerConfig(env: NodeJS.ProcessEnv = process.
     cron,
     timezone,
     retryLimit: Number.isFinite(retry) ? Math.max(0, Math.min(retry, 1)) : 1,
+    trialStartMarketDate: marketDate(env.PAPER_TRIAL_START_DATE),
+    trialEndMarketDate: marketDate(env.PAPER_TRIAL_END_DATE),
+  };
+}
+
+export function evaluatePaperTradingTrial(marketDateValue: string, config = getPaperTradingSchedulerConfig()) {
+  if (config.trialStartMarketDate && marketDateValue < config.trialStartMarketDate) {
+    return { action: "waiting" as const, shouldPauseAfterRun: false };
+  }
+  return {
+    action: "run" as const,
+    shouldPauseAfterRun: Boolean(config.trialEndMarketDate && marketDateValue >= config.trialEndMarketDate),
   };
 }
 
@@ -71,7 +90,7 @@ export function decidePaperTradingSchedulerRun(input: {
   if (!input.config.enabled) return { action: "disabled" as const, attempt: 0, schedule };
   if (!schedule.due) return { action: "not_due" as const, attempt: 0, schedule };
   if (!input.previous) return { action: "run" as const, attempt: 1, schedule };
-  if (["succeeded", "running", "paused", "killed"].includes(input.previous.status)) {
+  if (["succeeded", "running", "paused", "killed", "trial_waiting"].includes(input.previous.status)) {
     return { action: "already_ran" as const, attempt: input.previous.attempt, schedule };
   }
   if (input.previous.attempt >= input.config.retryLimit + 1) {
