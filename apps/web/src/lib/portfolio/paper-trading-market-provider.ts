@@ -14,7 +14,7 @@ const DEFAULT_UNIVERSE: UniverseAsset[] = [
   { symbol: "XLF", name: "Financial Select Sector SPDR", exchange: "AMS" },
   { symbol: "XLE", name: "Energy Select Sector SPDR", exchange: "AMS" },
   { symbol: "XLV", name: "Health Care Select Sector SPDR", exchange: "AMS" },
-  { symbol: "SMH", name: "VanEck Semiconductor ETF", exchange: "AMS" },
+  { symbol: "SMH", name: "VanEck Semiconductor ETF", exchange: "NAS" },
   { symbol: "SOXX", name: "iShares Semiconductor ETF", exchange: "NAS" },
   { symbol: "AAPL", name: "Apple", exchange: "NAS" },
   { symbol: "MSFT", name: "Microsoft", exchange: "NAS" },
