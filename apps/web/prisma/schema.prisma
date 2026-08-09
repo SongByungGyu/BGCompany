@@ -515,3 +515,194 @@ model PortfolioReport {
   @@index([portfolioAccountId, reportDate])
   @@index([reportType, status])
 }
+
+// Phase 2-T.1 · internal paper trading only.
+// These models are deliberately separate from read-only PortfolioAccount/Holding data.
+model PaperTradingAccount {
+  id                         String    @id @default(cuid())
+  name                       String    @default("미국주식 모의계좌")
+  mode                       String    @default("PAPER")
+  externalOrderAuthorization String    @default("NONE")
+  executionVenue             String    @default("INTERNAL_VIRTUAL_BROKER")
+  baseCurrency               String    @default("KRW")
+  initialCapitalKrw          Decimal   @db.Decimal(28, 8)
+  cashKrw                    Decimal   @db.Decimal(28, 8)
+  equityKrw                  Decimal   @db.Decimal(28, 8)
+  realizedPnlKrw             Decimal   @default(0) @db.Decimal(28, 8)
+  usdKrw                     Decimal?  @db.Decimal(18, 8)
+  status                     String    @default("ACTIVE")
+  strategyVersion            String
+  rules                      Json
+  lastMarketDate             DateTime? @db.Date
+  lastRunAt                  DateTime?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+
+  positions  PaperTradingPosition[]
+  orders     PaperTradingOrder[]
+  fills      PaperTradingFill[]
+  trades     PaperTradingTrade[]
+  signals    PaperTradingSignal[]
+  snapshots  PaperTradingSnapshot[]
+  riskEvents PaperTradingRiskEvent[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model PaperTradingPosition {
+  id                 String    @id @default(cuid())
+  accountId          String
+  symbol             String
+  name               String
+  strategy           String
+  strategyVersion    String
+  quantity           Int
+  entryDate          DateTime  @db.Date
+  entryPriceUsd      Decimal   @db.Decimal(28, 8)
+  lastPriceUsd       Decimal   @db.Decimal(28, 8)
+  stopPriceUsd       Decimal   @db.Decimal(28, 8)
+  targetPriceUsd     Decimal?  @db.Decimal(28, 8)
+  highestCloseUsd    Decimal   @db.Decimal(28, 8)
+  entryCommissionKrw Decimal   @default(0) @db.Decimal(28, 8)
+  status             String    @default("OPEN")
+  openedAt           DateTime  @default(now())
+  closedAt           DateTime?
+  updatedAt          DateTime  @updatedAt
+
+  account PaperTradingAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@unique([accountId, symbol])
+  @@index([accountId, status])
+}
+
+model PaperTradingSignal {
+  id                 String   @id @default(cuid())
+  accountId          String
+  externalSignalId   String
+  symbol             String
+  name               String
+  strategy           String
+  strategyVersion    String
+  signalDate         DateTime @db.Date
+  referencePriceUsd  Decimal  @db.Decimal(28, 8)
+  stopPriceUsd       Decimal  @db.Decimal(28, 8)
+  targetPriceUsd     Decimal? @db.Decimal(28, 8)
+  score              Decimal  @db.Decimal(12, 6)
+  reasons            Json
+  status             String
+  decisionReason     String?
+  processedAt        DateTime @default(now())
+
+  account PaperTradingAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@unique([accountId, externalSignalId])
+  @@index([accountId, signalDate])
+  @@index([status])
+}
+
+model PaperTradingOrder {
+  id                 String    @id @default(cuid())
+  accountId          String
+  signalId           String?
+  idempotencyKey     String    @unique
+  symbol             String
+  side               String
+  orderType          String
+  status             String
+  quantity           Int
+  requestedPriceUsd  Decimal?  @db.Decimal(28, 8)
+  filledPriceUsd     Decimal?  @db.Decimal(28, 8)
+  decisionReason     String?
+  marketDate         DateTime  @db.Date
+  createdAt          DateTime  @default(now())
+  filledAt           DateTime?
+
+  account PaperTradingAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  fills   PaperTradingFill[]
+
+  @@index([accountId, marketDate])
+  @@index([accountId, status])
+}
+
+model PaperTradingFill {
+  id            String   @id @default(cuid())
+  accountId     String
+  orderId       String
+  symbol        String
+  side          String
+  quantity      Int
+  priceUsd      Decimal  @db.Decimal(28, 8)
+  usdKrw        Decimal  @db.Decimal(18, 8)
+  notionalKrw   Decimal  @db.Decimal(28, 8)
+  commissionKrw Decimal  @db.Decimal(28, 8)
+  slippageBps   Decimal  @db.Decimal(12, 6)
+  filledAt      DateTime @default(now())
+
+  account PaperTradingAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  order   PaperTradingOrder   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, filledAt])
+  @@index([orderId])
+}
+
+model PaperTradingTrade {
+  id                 String   @id @default(cuid())
+  accountId          String
+  symbol             String
+  name               String
+  strategy           String
+  strategyVersion    String
+  quantity           Int
+  entryDate          DateTime @db.Date
+  entryPriceUsd      Decimal  @db.Decimal(28, 8)
+  exitDate           DateTime @db.Date
+  exitPriceUsd       Decimal  @db.Decimal(28, 8)
+  exitReason         String
+  grossPnlKrw        Decimal  @db.Decimal(28, 8)
+  netPnlKrw          Decimal  @db.Decimal(28, 8)
+  returnPercent      Decimal  @db.Decimal(12, 6)
+  entryCommissionKrw Decimal  @db.Decimal(28, 8)
+  exitCommissionKrw  Decimal  @db.Decimal(28, 8)
+  createdAt          DateTime @default(now())
+
+  account PaperTradingAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, exitDate])
+  @@index([symbol])
+}
+
+model PaperTradingSnapshot {
+  id               String   @id @default(cuid())
+  accountId        String
+  marketDate       DateTime @db.Date
+  cashKrw          Decimal  @db.Decimal(28, 8)
+  marketValueKrw   Decimal  @db.Decimal(28, 8)
+  equityKrw        Decimal  @db.Decimal(28, 8)
+  realizedPnlKrw   Decimal  @db.Decimal(28, 8)
+  unrealizedPnlKrw Decimal  @db.Decimal(28, 8)
+  openPositions    Int
+  usdKrw           Decimal  @db.Decimal(18, 8)
+  capturedAt       DateTime @default(now())
+
+  account PaperTradingAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@unique([accountId, marketDate])
+  @@index([accountId, capturedAt])
+}
+
+model PaperTradingRiskEvent {
+  id        String   @id @default(cuid())
+  accountId String
+  symbol    String?
+  type      String
+  severity  String
+  message   String
+  details   Json?
+  createdAt DateTime @default(now())
+
+  account PaperTradingAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, createdAt])
+  @@index([type])
+}

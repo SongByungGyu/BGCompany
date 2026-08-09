@@ -1,5 +1,6 @@
 import type { PortfolioDashboard, PortfolioResponse } from "@/lib/portfolio/portfolio-types";
 import type { PortfolioDailyAssistantDisabled, PortfolioDailyAssistantView, PortfolioPerformanceResponse } from "@/lib/portfolio/portfolio-daily-assistant-types";
+import type { PaperTradingResponse } from "@/lib/portfolio/paper-trading-types";
 
 async function json<T>(response: Response) {
   const body = await response.json() as T & { error?: string };
@@ -79,4 +80,16 @@ export async function fetchPortfolioPerformance(
   return json<PortfolioPerformanceResponse>(
     await fetch(`/api/portfolio/performance?${params}`, { cache: "no-store" }),
   );
+}
+
+export async function fetchPaperTrading() {
+  return json<PaperTradingResponse>(await fetch("/api/portfolio/paper", { cache: "no-store" }));
+}
+
+export async function updatePaperTrading(action: "initialize" | "pause" | "resume" | "kill") {
+  return json<PaperTradingResponse>(await fetch("/api/portfolio/paper", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action }),
+  }));
 }

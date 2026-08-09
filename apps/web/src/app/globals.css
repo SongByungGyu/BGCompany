@@ -2256,6 +2256,87 @@
 }
 .control-room .portfolio-workspace button:hover { color: #f0f8fc; border-color: #4e7998; }
 .control-room .portfolio-workspace button:disabled { opacity: .55; cursor: wait; }
+
+/* Phase 2-T.1 · internal paper trading dashboard */
+.control-room .paper-trading-loading,
+.control-room .paper-trading-disabled,
+.control-room .paper-trading-start {
+  display: grid;
+  gap: 14px;
+  padding: 22px;
+  color: #c9d9e3;
+  background: linear-gradient(135deg, #0d2130, #0a1824);
+  border: 1px solid #294960;
+  border-radius: 16px;
+}
+.control-room .paper-trading-loading { grid-template-columns: auto 1fr; align-items: center; }
+.control-room .paper-trading-loading i { width: 18px; height: 18px; border: 2px solid #345870; border-top-color: #57d9ca; border-radius: 50%; animation: spin .8s linear infinite; }
+.control-room .paper-trading-disabled { color: #ffc3bb; border-color: #7a443c; background: #321c1c; }
+.control-room .paper-trading-disabled span,
+.control-room .paper-trading-start span,
+.control-room .paper-trading-status span { color: #56d9ca; font-size: 9px; font-weight: 900; letter-spacing: .14em; }
+.control-room .paper-trading-disabled h2,
+.control-room .paper-trading-start h2,
+.control-room .paper-trading-status h2 { margin: 5px 0; color: #f2f8fc; font-size: 20px; }
+.control-room .paper-trading-disabled p,
+.control-room .paper-trading-start p,
+.control-room .paper-trading-status p { margin: 0; color: #8fa9bc; font-size: 11px; line-height: 1.6; }
+.control-room .paper-trading-disabled code { width: fit-content; padding: 7px 9px; color: #ffc3bb; background: #1f1313; border-radius: 8px; }
+.control-room .paper-trading-start { grid-template-columns: minmax(260px, 1fr) minmax(360px, 1.4fr) auto; align-items: center; }
+.control-room .paper-trading-start dl { display: grid; grid-template-columns: repeat(4, minmax(80px, 1fr)); gap: 8px; margin: 0; }
+.control-room .paper-trading-start dl div { padding: 10px; background: #0a1925; border: 1px solid #213e52; border-radius: 10px; }
+.control-room .paper-trading-start dt { color: #6f899b; font-size: 9px; }
+.control-room .paper-trading-start dd { margin: 5px 0 0; color: #f2f8fc; font-size: 15px; font-weight: 900; }
+.control-room .paper-trading-dashboard { display: grid; gap: 12px; }
+.control-room .paper-trading-status { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 16px 18px; background: #0d2130; border: 1px solid #2c526a; border-left: 4px solid #57d9ca; border-radius: 14px; }
+.control-room .paper-trading-status.paused { border-left-color: #e4a85f; }
+.control-room .paper-trading-status.killed { border-color: #6e3b39; border-left-color: #ff7b70; background: #2b1c1d; }
+.control-room .paper-trading-controls { display: flex; align-items: center; gap: 7px; }
+.control-room .paper-trading-controls strong { padding: 7px 10px; color: #aaf0d8; background: #123b38; border: 1px solid #286a63; border-radius: 999px; font-size: 9px; letter-spacing: .08em; }
+.control-room .paper-trading-status.paused .paper-trading-controls strong { color: #f5d59f; background: #3b2d1d; border-color: #795947; }
+.control-room .paper-trading-status.killed .paper-trading-controls strong { color: #ffc3bb; background: #46251f; border-color: #7a443c; }
+.control-room .paper-trading-rule-strip { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.control-room .paper-trading-rule-strip article { padding: 10px 12px; background: #0a1b28; border: 1px solid #203d51; border-radius: 11px; }
+.control-room .paper-trading-rule-strip span { display: block; color: #6f899b; font-size: 8px; }
+.control-room .paper-trading-rule-strip strong { display: block; margin-top: 5px; color: #dce9f0; font-size: 13px; }
+.control-room .paper-trading-columns { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr); gap: 12px; }
+.control-room .paper-position-list,
+.control-room .paper-activity-list { display: grid; gap: 8px; }
+.control-room .paper-position-list > article { display: grid; grid-template-columns: minmax(140px, .45fr) minmax(0, 1.55fr); gap: 12px; padding: 11px; background: #091a26; border: 1px solid #203d51; border-radius: 11px; }
+.control-room .paper-position-list > article > div b { display: inline-grid; min-width: 45px; padding: 4px 6px; place-items: center; color: #071522; background: #57d9ca; border-radius: 7px; font-size: 10px; }
+.control-room .paper-position-list > article > div strong,
+.control-room .paper-position-list > article > div small { display: block; margin-top: 5px; }
+.control-room .paper-position-list > article > div strong { color: #e2edf4; font-size: 11px; }
+.control-room .paper-position-list > article > div small { color: #6f899b; font-size: 8px; }
+.control-room .paper-position-list dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.control-room .paper-position-list dt { color: #6f899b; font-size: 8px; }
+.control-room .paper-position-list dd { margin: 4px 0 0; color: #cbdce5; font-size: 9.5px; font-weight: 800; }
+.control-room .paper-position-list dd.gain { color: #67dfb3; }
+.control-room .paper-position-list dd.loss { color: #ff9288; }
+.control-room .paper-activity-list article { display: grid; grid-template-columns: 7px minmax(0, 1fr); gap: 9px; padding: 9px 10px; background: #091a26; border: 1px solid #203d51; border-radius: 10px; }
+.control-room .paper-activity-list i { width: 7px; height: 7px; margin-top: 4px; background: #55d9c7; border-radius: 50%; }
+.control-room .paper-activity-list article.risk i { background: #e4a85f; }
+.control-room .paper-activity-list article.trade i { background: #7ea6ef; }
+.control-room .paper-activity-list span,
+.control-room .paper-activity-list small { color: #6f899b; font-size: 8px; }
+.control-room .paper-activity-list strong { display: block; margin-top: 3px; color: #dce9f0; font-size: 10px; }
+.control-room .paper-activity-list p { margin: 3px 0; color: #91aabb; font-size: 9px; line-height: 1.45; }
+.control-room .paper-trading-disclaimer { margin: 0; padding: 10px 12px; color: #f0ca86; background: #2e291b; border: 1px solid #625735; border-radius: 10px; font-size: 9px; }
+
+@media (max-width: 1100px) {
+  .control-room .paper-trading-start { grid-template-columns: 1fr; }
+  .control-room .paper-trading-columns { grid-template-columns: 1fr; }
+  .control-room .paper-trading-rule-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .control-room .paper-trading-status { align-items: flex-start; flex-direction: column; }
+  .control-room .paper-trading-controls { flex-wrap: wrap; }
+  .control-room .paper-trading-start dl,
+  .control-room .paper-trading-rule-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .control-room .paper-position-list > article { grid-template-columns: 1fr; }
+  .control-room .paper-position-list dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .control-room .portfolio-workspace button.primary {
   color: #061b22;
   background: linear-gradient(135deg, #64e2d6, #5cb6e9);

@@ -13,6 +13,7 @@ import type {
   PortfolioDailyAssistantView,
   PortfolioPerformanceResponse,
 } from "@/lib/portfolio/portfolio-daily-assistant-types";
+import type { PaperTradingResponse } from "@/lib/portfolio/paper-trading-types";
 import {
   createDividendEvent,
   createPortfolioAccount,
@@ -22,13 +23,16 @@ import {
   syncTossPortfolioAccount,
   fetchPortfolioDailyAssistant,
   fetchPortfolioPerformance,
+  fetchPaperTrading,
+  updatePaperTrading,
 } from "./api";
 
 type SortKey = "marketValue" | "profitLoss" | "returnPercent" | "weightPercent" | "name";
-type PortfolioTab = "summary" | "holdings" | "performance" | "dividend" | "schedule" | "news" | "risk" | "settings";
+type PortfolioTab = "summary" | "paper" | "holdings" | "performance" | "dividend" | "schedule" | "news" | "risk" | "settings";
 
 const PORTFOLIO_TABS: Array<{ id: PortfolioTab; label: string }> = [
   { id: "summary", label: "요약" },
+  { id: "paper", label: "모의투자" },
   { id: "holdings", label: "보유종목" },
   { id: "performance", label: "성과" },
   { id: "dividend", label: "배당" },
@@ -203,6 +207,51 @@ function PerformancePanel({
   </section>;
 }
 
+function PaperTradingPanel({
+  response,
+  working,
+  onAction,
+}: {
+  response: PaperTradingResponse | null;
+  working: boolean;
+  onAction: (action: "initialize" | "pause" | "resume" | "kill") => void;
+}) {
+  if (!response) return <section className="paper-trading-loading"><i /><strong>내부 모의계좌를 확인하고 있습니다.</strong></section>;
+  if (!response.enabled) return <section className="paper-trading-disabled"><span>PAPER ENGINE · BLOCKED</span><h2>모의투자 실행 차단</h2><p>{response.message}</p><code>외부 주문 권한 · {response.externalOrderAuthorization}</code></section>;
+  if (!response.account) return <section className="paper-trading-start">
+    <div><span>PHASE 2-T.1 · INTERNAL ONLY</span><h2>가상자금 1,000만원으로 시작</h2><p>백테스트와 같은 위험 한도를 사용하는 내부 가상 브로커입니다. 증권사 주문 API와 실계좌 자금은 사용하지 않습니다.</p></div>
+    <dl><div><dt>종목당 한도</dt><dd>{response.rules.maxPositionPercent * 100}%</dd></div><div><dt>동시 보유</dt><dd>{response.rules.maxOpenPositions}종목</dd></div><div><dt>하루 신규</dt><dd>{response.rules.maxNewPositionsPerDay}종목</dd></div><div><dt>거래당 위험</dt><dd>{response.rules.riskPerTrade * 100}%</dd></div></dl>
+    <button className="primary" disabled={working} onClick={() => onAction("initialize")}>{working ? "준비 중" : "모의계좌 시작"}</button>
+  </section>;
+
+  const account = response.account;
+  const gain = (number(account.totalReturnPercent) ?? 0) >= 0;
+  return <div className="paper-trading-dashboard">
+    <section className={`paper-trading-status ${account.status.toLowerCase()}`}>
+      <div><span>PAPER · INTERNAL VIRTUAL BROKER</span><h2>{account.name}</h2><p>외부 주문 권한 <b>{response.externalOrderAuthorization}</b> · 마지막 실행 {formatDate(account.lastRunAt, true)} · 기준일 {account.lastMarketDate ?? "대기 중"}</p></div>
+      <div className="paper-trading-controls"><strong>{account.status}</strong>{account.status === "ACTIVE" ? <button disabled={working} onClick={() => onAction("pause")}>일시정지</button> : null}{account.status === "PAUSED" ? <button className="primary" disabled={working} onClick={() => onAction("resume")}>재개</button> : null}{account.status !== "KILLED" ? <button className="danger" disabled={working} onClick={() => onAction("kill")}>긴급 정지</button> : null}</div>
+    </section>
+    <div className="portfolio-summary-grid paper-trading-kpis">
+      <SummaryCard label="총 자산" value={formatAmount(account.equityKrw, "KRW")} detail={`초기 ${formatAmount(account.initialCapitalKrw, "KRW")}`} />
+      <SummaryCard label="현금" value={formatAmount(account.cashKrw, "KRW")} />
+      <SummaryCard label="보유 평가금액" value={formatAmount(account.marketValueKrw, "KRW")} />
+      <SummaryCard label="누적 수익률" value={formatPercent(account.totalReturnPercent)} tone={gain ? "positive" : "negative"} />
+      <SummaryCard label="실현 손익" value={formatAmount(account.realizedPnlKrw, "KRW")} tone={(number(account.realizedPnlKrw) ?? 0) >= 0 ? "positive" : "negative"} />
+      <SummaryCard label="미실현 손익" value={formatAmount(account.unrealizedPnlKrw, "KRW")} tone={(number(account.unrealizedPnlKrw) ?? 0) >= 0 ? "positive" : "negative"} />
+    </div>
+    <section className="paper-trading-rule-strip"><article><span>거래당 위험</span><strong>{response.rules.riskPerTrade * 100}%</strong></article><article><span>종목당 최대</span><strong>{response.rules.maxPositionPercent * 100}%</strong></article><article><span>동시 보유</span><strong>{response.counts.openPositions} / {response.rules.maxOpenPositions}</strong></article><article><span>오늘 신규</span><strong>{response.counts.newPositionsToday} / {response.rules.maxNewPositionsPerDay}</strong></article><article><span>거절 신호</span><strong>{response.counts.rejectedSignalsToday}</strong></article><article><span>USD/KRW</span><strong>{formatNumber(account.usdKrw, 2)}</strong></article></section>
+    <div className="paper-trading-columns">
+      <section className="portfolio-section compact"><header><div><span>VIRTUAL POSITIONS</span><h2>모의 보유종목</h2><p>실제 보유종목과 분리된 가상 체결 결과입니다.</p></div><b>{response.positions.length}종목</b></header>
+        <div className="paper-position-list">{response.positions.length ? response.positions.map((position) => <article key={position.id}><div><b>{position.symbol}</b><strong>{position.name}</strong><small>{position.strategy}</small></div><dl><div><dt>수량</dt><dd>{position.quantity}주</dd></div><div><dt>진입/현재</dt><dd>${Number(position.entryPriceUsd).toFixed(2)} / ${Number(position.lastPriceUsd).toFixed(2)}</dd></div><div><dt>손절가</dt><dd>${Number(position.stopPriceUsd).toFixed(2)}</dd></div><div><dt>평가손익</dt><dd className={(number(position.unrealizedPnlKrw) ?? 0) >= 0 ? "gain" : "loss"}>{formatAmount(position.unrealizedPnlKrw, "KRW")} · {formatPercent(position.returnPercent)}</dd></div></dl></article>) : <p className="portfolio-empty-copy">아직 체결된 모의 포지션이 없습니다. 전일 종가 신호가 생기면 다음 거래일 시가 기준으로 모의 체결합니다.</p>}</div>
+      </section>
+      <section className="portfolio-section compact"><header><div><span>AUDIT JOURNAL</span><h2>주문·체결·위험 로그</h2><p>거절된 신호까지 모두 남겨 판단 과정을 추적합니다.</p></div><b>{response.activity.length}건</b></header>
+        <div className="paper-activity-list">{response.activity.length ? response.activity.map((item) => <article key={`${item.type}-${item.id}`} className={item.type}><i /><div><span>{item.symbol ?? item.type} · {item.status}</span><strong>{item.title}</strong><p>{item.detail}</p><small>{formatDate(item.occurredAt, true)}</small></div></article>) : <p className="portfolio-empty-copy">아직 실행 로그가 없습니다.</p>}</div>
+      </section>
+    </div>
+    <p className="paper-trading-disclaimer">모든 주문과 체결은 내부 시뮬레이션입니다. 실계좌 주문·정정·취소·이체 API는 연결되어 있지 않습니다.</p>
+  </div>;
+}
+
 export function PortfolioView() {
   const [response, setResponse] = useState<PortfolioResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -223,14 +272,16 @@ export function PortfolioView() {
   const [assistant, setAssistant] = useState<PortfolioDailyAssistantView | PortfolioDailyAssistantDisabled | null>(null);
   const [performance, setPerformance] = useState<PortfolioPerformanceResponse | null>(null);
   const [performanceRange, setPerformanceRange] = useState<PortfolioPerformanceResponse["range"]>("30d");
+  const [paperTrading, setPaperTrading] = useState<PaperTradingResponse | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async (nextAccountId?: string | null) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchPortfolio(nextAccountId);
+      const [data, paper] = await Promise.all([fetchPortfolio(nextAccountId), fetchPaperTrading()]);
       setResponse(data);
+      setPaperTrading(paper);
       if (data.enabled && data.account) {
         setAccountId(data.account.id);
         const [daily, trend] = await Promise.all([
@@ -257,6 +308,18 @@ export function PortfolioView() {
 
   const changePerformanceRange = (range: PortfolioPerformanceResponse["range"]) => {
     setPerformanceRange(range);
+  };
+
+  const onPaperAction = async (action: "initialize" | "pause" | "resume" | "kill") => {
+    if (action === "kill" && !window.confirm("모의투자 엔진을 KILLED 상태로 전환할까요? UI에서는 다시 활성화할 수 없습니다.")) return;
+    setWorking(true);
+    setError(null);
+    try {
+      const data = await updatePaperTrading(action);
+      setPaperTrading(data);
+      setNotice(action === "initialize" ? "가상자금 1,000만원 모의계좌를 만들었습니다." : `모의투자 상태를 변경했습니다: ${action}`);
+    } catch (requestError) { setError(errorText(requestError)); }
+    finally { setWorking(false); }
   };
 
   const dashboard = response?.enabled ? response : null;
@@ -468,8 +531,9 @@ export function PortfolioView() {
     {!dashboard?.account ? <section className="portfolio-first-step"><b>01</b><div><h2>{dashboard?.accountSync.enabled ? "토스증권 실계좌를 동기화하세요" : "첫 계좌 그룹을 만드세요"}</h2><p>{dashboard?.accountSync.enabled ? "공식 API로 실제 보유종목을 읽어 전용 계좌 그룹과 종목을 자동 생성합니다. 거래 기능은 없습니다." : "실제 보유 종목이나 금액은 자동으로 생성하지 않습니다."}</p></div>{dashboard?.accountSync.enabled ? <button className="primary" disabled={working || !dashboard.accountSync.configured} onClick={() => void onAccountSync()}>실계좌 동기화</button> : <button onClick={() => setShowAccountForm(true)}>계좌 그룹 만들기</button>}</section> : <>
       <nav className="portfolio-tabs" aria-label="포트폴리오 화면">{PORTFOLIO_TABS.map((tab) => <button key={tab.id} className={activeTab === tab.id ? "active" : ""} onClick={() => setActiveTab(tab.id)}>{tab.label}</button>)}</nav>
       {activeTab === "summary" ? <DailyAssistantSummary assistant={assistant} dashboard={dashboard} /> : null}
+      {activeTab === "paper" ? <PaperTradingPanel response={paperTrading} working={working} onAction={(action) => void onPaperAction(action)} /> : null}
       {activeTab === "performance" ? <PerformancePanel performance={performance} range={performanceRange} onRange={changePerformanceRange} currency={dashboard.summary.baseCurrency} /> : null}
-      <div className={`portfolio-legacy-detail tab-${activeTab}`} hidden={activeTab === "summary" || activeTab === "performance"}>
+      <div className={`portfolio-legacy-detail tab-${activeTab}`} hidden={activeTab === "summary" || activeTab === "paper" || activeTab === "performance"}>
       <div className="portfolio-summary-grid" hidden={activeTab !== "holdings"}>
         <SummaryCard label="총 평가금액" value={formatAmount(dashboard.summary.totalMarketValue, dashboard.summary.baseCurrency)} detail={dashboard.summary.dataQuality === "verified" ? "확인 가능한 최신 데이터" : "잠정값 포함"} />
         <SummaryCard label="총 원가" value={formatAmount(dashboard.summary.totalCostBasis, dashboard.summary.baseCurrency)} />
