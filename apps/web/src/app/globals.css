@@ -2309,6 +2309,26 @@
 .control-room .paper-automation dd { margin: 4px 0 0; color: #e0edf3; font-size: 10px; font-weight: 800; }
 .control-room .paper-automation.failed { border-color: #7a443c; background: #2b1c1d; }
 .control-room .paper-automation .paper-automation-error { grid-column: 1 / -1; padding: 7px 9px; color: #ffc3bb; background: #321c1c; border-radius: 7px; }
+.control-room .paper-rotation-plan { display: grid; gap: 12px; padding: 15px 16px; background: linear-gradient(145deg, #111d32, #0a2028); border: 1px solid #34577a; border-radius: 13px; }
+.control-room .paper-rotation-plan header,
+.control-room .paper-rotation-plan footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.control-room .paper-rotation-plan header span { color: #8fb8ff; font-size: 8px; font-weight: 900; letter-spacing: .13em; }
+.control-room .paper-rotation-plan h3 { margin: 5px 0; color: #edf5ff; font-size: 15px; }
+.control-room .paper-rotation-plan header p { margin: 0; color: #8fa9bc; font-size: 10px; }
+.control-room .paper-rotation-plan header > b { color: #c9dcff; font-size: 10px; white-space: nowrap; }
+.control-room .paper-rotation-targets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.control-room .paper-rotation-targets article { display: grid; grid-template-columns: auto 1fr; gap: 8px; padding: 10px; background: #091824; border: 1px solid #27445d; border-radius: 10px; }
+.control-room .paper-rotation-targets article.waiting { border-style: dashed; opacity: .7; }
+.control-room .paper-rotation-targets article > i { display: grid; width: 22px; height: 22px; place-items: center; color: #071522; background: #8fb8ff; border-radius: 50%; font-size: 9px; font-style: normal; font-weight: 900; }
+.control-room .paper-rotation-targets strong,
+.control-room .paper-rotation-targets span { display: block; }
+.control-room .paper-rotation-targets strong { color: #ecf4fa; font-size: 11px; }
+.control-room .paper-rotation-targets span { margin-top: 3px; overflow: hidden; color: #748fa3; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.control-room .paper-rotation-targets dl { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin: 2px 0 0; }
+.control-room .paper-rotation-targets dt { color: #668094; font-size: 7px; }
+.control-room .paper-rotation-targets dd { margin: 2px 0 0; color: #bcd0df; font-size: 8px; font-weight: 800; }
+.control-room .paper-rotation-plan footer { padding-top: 2px; color: #7f99ab; font-size: 9px; }
+.control-room .paper-rotation-plan footer strong { color: #6ee0ba; }
 .control-room .paper-trading-columns { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr); gap: 12px; }
 .control-room .paper-position-list,
 .control-room .paper-activity-list { display: grid; gap: 8px; }
@@ -2336,6 +2356,7 @@
 @media (max-width: 1100px) {
   .control-room .paper-trading-start { grid-template-columns: 1fr; }
   .control-room .paper-automation { grid-template-columns: 1fr; }
+  .control-room .paper-rotation-targets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .control-room .paper-trading-columns { grid-template-columns: 1fr; }
   .control-room .paper-trading-rule-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
@@ -2343,6 +2364,9 @@
 @media (max-width: 720px) {
   .control-room .paper-trading-status { align-items: flex-start; flex-direction: column; }
   .control-room .paper-trading-controls { flex-wrap: wrap; }
+  .control-room .paper-rotation-plan header,
+  .control-room .paper-rotation-plan footer { align-items: flex-start; flex-direction: column; }
+  .control-room .paper-rotation-targets { grid-template-columns: 1fr; }
   .control-room .paper-trading-start dl,
   .control-room .paper-automation dl,
   .control-room .paper-trading-rule-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }

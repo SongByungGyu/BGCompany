@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildPaperTradingSignal, type PaperDailyBar } from "./paper-trading-strategy.ts";
+import {
+  buildPaperTradingSignal,
+  buildQuarterlyMomentumTargets,
+  nextQuarterDate,
+  quarterKeyForMarketDate,
+  type PaperDailyBar,
+} from "./paper-trading-strategy.ts";
 
 function bars(symbol: string, relativeStrength = 1): PaperDailyBar[] {
   const rows: PaperDailyBar[] = [];
@@ -43,4 +49,39 @@ test("benchmark risk-off regime blocks entries", () => {
   const benchmark = bars("SPY").map((bar, index, all) => ({ ...bar, close: 160 - index * 0.7, open: 160 - index * 0.7 + 0.2, high: 160 - index * 0.7 + 0.5, low: 160 - index * 0.7 - 0.5 }));
   const signal = buildPaperTradingSignal({ bars: bars("NVDA", 1.25), benchmarkBars: benchmark, strategyVersion: "v-test" });
   assert.equal(signal, null);
+});
+
+function momentumBars(symbol: string, dailyReturn: number): PaperDailyBar[] {
+  return Array.from({ length: 270 }, (_, index) => {
+    const close = 50 * (1 + dailyReturn) ** index;
+    return {
+      symbol,
+      name: symbol,
+      exchange: "NAS",
+      marketDate: new Date(Date.UTC(2025, 0, index + 1)).toISOString().slice(0, 10),
+      open: close,
+      high: close * 1.01,
+      low: close * 0.99,
+      close,
+      volume: 1_000_000,
+    };
+  });
+}
+
+test("quarterly blend ranks 6-1 and 12-1 momentum with a three-name sector cap", () => {
+  const symbols = ["T1", "T2", "T3", "T4", "T5", "F1", "F2", "H1", "H2", "E1"];
+  const series = new Map(symbols.map((symbol, index) => [symbol, momentumBars(symbol, 0.004 - index * 0.0002)]));
+  const signalDate = series.get("T1")!.at(-1)!.marketDate;
+  const sectors = new Map(symbols.map((symbol) => [symbol, symbol.startsWith("T") ? "tech" : symbol.startsWith("F") ? "finance" : symbol.startsWith("H") ? "healthcare" : "energy"]));
+  const targets = buildQuarterlyMomentumTargets({ series, sectors, signalDate });
+  assert.equal(targets.length, 8);
+  assert.deepEqual(targets.slice(0, 3).map((target) => target.symbol), ["T1", "T2", "T3"]);
+  assert.equal(targets.filter((target) => target.sector === "tech").length, 3);
+  assert.ok(targets.every((target) => target.targetWeightPercent === 10));
+});
+
+test("quarter helpers keep a locked plan on the calendar quarter boundary", () => {
+  assert.equal(quarterKeyForMarketDate("2026-08-10"), "2026-Q3");
+  assert.equal(nextQuarterDate("2026-08-10"), "2026-10-01");
+  assert.equal(nextQuarterDate("2026-12-31"), "2027-01-01");
 });

@@ -10,6 +10,30 @@ export type PaperTradingRules = {
   commissionBps: number;
   maximumEntryGapPercent: number;
   staleAfterHours: number;
+  fxSlippageBps?: number;
+};
+
+export type PaperTradingRotationTarget = {
+  rank: number;
+  symbol: string;
+  name: string;
+  sector: string;
+  score: number;
+  momentum6MonthPercent: number;
+  momentum12MonthPercent: number;
+  targetWeightPercent: number;
+};
+
+export type PaperTradingRotationInput = {
+  strategyKey: "blend_quarterly";
+  quarterKey: string;
+  signalDate: string;
+  targetWeightPercent: number;
+  cashTargetPercent: number;
+  universeSize: number;
+  targets: PaperTradingRotationTarget[];
+  benchmarkSymbol: "SPY";
+  benchmarkCloseUsd: number;
 };
 
 export type PaperTradingQuoteInput = {
@@ -43,6 +67,7 @@ export type PaperTradingCycleInput = {
   usdKrw: number;
   quotes: PaperTradingQuoteInput[];
   signals: PaperTradingSignalInput[];
+  rotation?: PaperTradingRotationInput;
 };
 
 export type PaperTradingPositionDto = {
@@ -59,6 +84,8 @@ export type PaperTradingPositionDto = {
   marketValueKrw: string;
   unrealizedPnlKrw: string;
   returnPercent: string;
+  targetRank?: number;
+  targetWeightPercent?: number;
 };
 
 export type PaperTradingActivityDto = {
@@ -101,6 +128,21 @@ export type PaperTradingDashboard = {
     newPositionsToday: number;
     rejectedSignalsToday: number;
     closedTrades: number;
+  };
+  strategy?: {
+    key: "blend_quarterly";
+    name: string;
+    quarterKey: string;
+    signalDate: string;
+    nextRebalanceDate: string;
+    targetWeightPercent: number;
+    cashTargetPercent: number;
+    universeSize: number;
+    targets: PaperTradingRotationTarget[];
+    benchmarkSymbol: "SPY";
+    benchmarkReturnPercent: string | null;
+    excessReturnPercent: string | null;
+    startMode: "QUARTER_START" | "MID_QUARTER_BASELINE";
   };
   automation?: PaperTradingAutomationStatus;
 };

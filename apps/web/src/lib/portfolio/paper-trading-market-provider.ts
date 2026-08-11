@@ -1,31 +1,37 @@
 import "server-only";
 import { getPortfolioPriceProvider, kisReadOnlyGet } from "./portfolio-price-provider";
-import { buildPaperTradingSignal, type PaperDailyBar } from "./paper-trading-strategy";
+import {
+  buildPaperTradingSignal,
+  buildQuarterlyMomentumTargets,
+  quarterKeyForMarketDate,
+  type PaperDailyBar,
+} from "./paper-trading-strategy";
 import type { PaperTradingCycleInput } from "./paper-trading-types";
 
-type UniverseAsset = { symbol: string; name: string; exchange: "NAS" | "NYS" | "AMS" };
+type UniverseAsset = { symbol: string; name: string; exchange: "NAS" | "NYS" | "AMS"; sector: string };
 
 const DEFAULT_UNIVERSE: UniverseAsset[] = [
-  { symbol: "SPY", name: "SPDR S&P 500 ETF", exchange: "AMS" },
-  { symbol: "QQQ", name: "Invesco QQQ", exchange: "NAS" },
-  { symbol: "IWM", name: "iShares Russell 2000 ETF", exchange: "AMS" },
-  { symbol: "DIA", name: "SPDR Dow Jones ETF", exchange: "AMS" },
-  { symbol: "XLK", name: "Technology Select Sector SPDR", exchange: "AMS" },
-  { symbol: "XLF", name: "Financial Select Sector SPDR", exchange: "AMS" },
-  { symbol: "XLE", name: "Energy Select Sector SPDR", exchange: "AMS" },
-  { symbol: "XLV", name: "Health Care Select Sector SPDR", exchange: "AMS" },
-  { symbol: "SMH", name: "VanEck Semiconductor ETF", exchange: "NAS" },
-  { symbol: "SOXX", name: "iShares Semiconductor ETF", exchange: "NAS" },
-  { symbol: "AAPL", name: "Apple", exchange: "NAS" },
-  { symbol: "MSFT", name: "Microsoft", exchange: "NAS" },
-  { symbol: "NVDA", name: "NVIDIA", exchange: "NAS" },
-  { symbol: "AMZN", name: "Amazon", exchange: "NAS" },
-  { symbol: "GOOGL", name: "Alphabet", exchange: "NAS" },
-  { symbol: "META", name: "Meta Platforms", exchange: "NAS" },
-  { symbol: "AVGO", name: "Broadcom", exchange: "NAS" },
-  { symbol: "TSLA", name: "Tesla", exchange: "NAS" },
-  { symbol: "JPM", name: "JPMorgan Chase", exchange: "NYS" },
-  { symbol: "XOM", name: "Exxon Mobil", exchange: "NYS" },
+  { symbol: "SPY", name: "SPDR S&P 500 ETF", exchange: "AMS", sector: "benchmark" },
+  ...[
+    ["AAPL", "Apple"], ["MSFT", "Microsoft"], ["NVDA", "NVIDIA"], ["AVGO", "Broadcom"],
+    ["AMD", "AMD"], ["MU", "Micron"], ["AMAT", "Applied Materials"], ["LRCX", "Lam Research"],
+    ["KLAC", "KLA"], ["QCOM", "Qualcomm"],
+  ].map(([symbol, name]) => ({ symbol, name, exchange: "NAS" as const, sector: "tech" })),
+  { symbol: "ORCL", name: "Oracle", exchange: "NYS", sector: "tech" },
+  { symbol: "CRM", name: "Salesforce", exchange: "NYS", sector: "tech" },
+  ...[
+    ["GOOGL", "Alphabet"], ["META", "Meta Platforms"], ["AMZN", "Amazon"], ["TSLA", "Tesla"],
+    ["NFLX", "Netflix"], ["PLTR", "Palantir"], ["COST", "Costco"], ["WMT", "Walmart"],
+  ].map(([symbol, name]) => ({ symbol, name, exchange: "NAS" as const, sector: "consumer_comm" })),
+  { symbol: "HD", name: "Home Depot", exchange: "NYS", sector: "consumer_comm" },
+  { symbol: "MCD", name: "McDonald's", exchange: "NYS", sector: "consumer_comm" },
+  ...[["JPM", "JPMorgan Chase"], ["BAC", "Bank of America"], ["GS", "Goldman Sachs"], ["V", "Visa"], ["MA", "Mastercard"]]
+    .map(([symbol, name]) => ({ symbol, name, exchange: "NYS" as const, sector: "finance" })),
+  ...[["LLY", "Eli Lilly"], ["UNH", "UnitedHealth"], ["JNJ", "Johnson & Johnson"], ["ABBV", "AbbVie"], ["TMO", "Thermo Fisher"]]
+    .map(([symbol, name]) => ({ symbol, name, exchange: "NYS" as const, sector: "healthcare" })),
+  ...[["XOM", "Exxon Mobil"], ["CVX", "Chevron"], ["CAT", "Caterpillar"], ["GE", "GE Aerospace"],
+    ["RTX", "RTX"], ["BA", "Boeing"], ["COP", "ConocoPhillips"], ["DE", "Deere"]]
+    .map(([symbol, name]) => ({ symbol, name, exchange: "NYS" as const, sector: "industrial_energy" })),
 ];
 
 function asRecord(value: unknown) {
@@ -65,10 +71,10 @@ export function getPaperTradingUniverse(env: NodeJS.ProcessEnv = process.env): U
     const [rawSymbol, rawExchange] = entry.trim().toUpperCase().split(":");
     const symbol = rawSymbol?.replace(/[^A-Z0-9.-]/g, "") ?? "";
     const exchange = (["NAS", "NYS", "AMS"].includes(rawExchange) ? rawExchange : defaults.get(symbol)?.exchange ?? "NAS") as UniverseAsset["exchange"];
-    return symbol ? { symbol, exchange, name: defaults.get(symbol)?.name ?? symbol } : null;
+    return symbol ? { symbol, exchange, name: defaults.get(symbol)?.name ?? symbol, sector: defaults.get(symbol)?.sector ?? "other" } : null;
   }).filter((asset): asset is UniverseAsset => Boolean(asset));
   const spy = parsed.find((asset) => asset.symbol === "SPY") ?? DEFAULT_UNIVERSE[0];
-  return [spy, ...parsed.filter((asset) => asset.symbol !== "SPY")].slice(0, 40);
+  return [spy, ...parsed.filter((asset) => asset.symbol !== "SPY")].slice(0, 41);
 }
 
 async function readPage(asset: UniverseAsset, before = "", attempt = 0): Promise<PaperDailyBar[]> {
@@ -103,15 +109,23 @@ async function readPage(asset: UniverseAsset, before = "", attempt = 0): Promise
 }
 
 export async function fetchKisPaperDailyBars(asset: UniverseAsset): Promise<PaperDailyBar[]> {
-  const first = await readPage(asset);
-  await wait(intervalMs());
-  const sorted = [...first].sort((left, right) => left.marketDate.localeCompare(right.marketDate));
-  if (!sorted.length) throw new Error(`KIS_DAILY_PRICE_EMPTY:${asset.symbol}`);
-  const second = sorted.length < 125 ? await readPage(asset, previousDate(sorted[0].marketDate)) : [];
-  if (second.length) await wait(intervalMs());
-  return Array.from(new Map([...second, ...first].map((bar) => [bar.marketDate, bar])).values())
+  const pages: PaperDailyBar[] = [];
+  let before = "";
+  for (let page = 0; page < 4 && pages.length < 280; page += 1) {
+    const rows = await readPage(asset, before);
+    if (!rows.length) break;
+    pages.push(...rows);
+    const oldest = [...rows].sort((left, right) => left.marketDate.localeCompare(right.marketDate))[0]?.marketDate;
+    if (!oldest) break;
+    const nextBefore = previousDate(oldest);
+    if (nextBefore === before) break;
+    before = nextBefore;
+    await wait(intervalMs());
+  }
+  if (!pages.length) throw new Error(`KIS_DAILY_PRICE_EMPTY:${asset.symbol}`);
+  return Array.from(new Map(pages.map((bar) => [bar.marketDate, bar])).values())
     .sort((left, right) => left.marketDate.localeCompare(right.marketDate))
-    .slice(-180);
+    .slice(-320);
 }
 
 export type AutomatedPaperCycle = {
@@ -141,7 +155,13 @@ export async function prepareAutomatedPaperCycle(strategyVersion: string): Promi
   const previousDate = benchmark.at(-2)?.marketDate ?? null;
   if (!previousDate) throw new Error("PAPER_BENCHMARK_HISTORY_TOO_SHORT");
   const quotes = Array.from(series.values()).map((bars) => bars.find((bar) => bar.marketDate === latestDate)).filter((bar): bar is PaperDailyBar => Boolean(bar));
-  const signals = Array.from(series.entries())
+  const quarterly = strategyVersion.startsWith("blend-quarterly");
+  const targets = quarterly ? buildQuarterlyMomentumTargets({
+    series,
+    sectors: new Map(universe.map((asset) => [asset.symbol, asset.sector])),
+    signalDate: previousDate,
+  }) : [];
+  const signals = quarterly ? [] : Array.from(series.entries())
     .filter(([symbol]) => symbol !== "SPY")
     .map(([, bars]) => buildPaperTradingSignal({
       bars: bars.filter((bar) => bar.marketDate <= previousDate),
@@ -157,7 +177,7 @@ export async function prepareAutomatedPaperCycle(strategyVersion: string): Promi
     provider: "KIS_READ_ONLY",
     universeSize: universe.length,
     loadedSymbols: series.size,
-    candidateCount: signals.length,
+    candidateCount: quarterly ? targets.length : signals.length,
     signalDate: previousDate,
     errors,
     input: {
@@ -166,6 +186,17 @@ export async function prepareAutomatedPaperCycle(strategyVersion: string): Promi
       usdKrw,
       quotes: quotes.map((bar) => ({ symbol: bar.symbol, name: bar.name, marketDate: latestDate, observedAt, open: bar.open, high: bar.high, low: bar.low, close: bar.close })),
       signals,
+      rotation: quarterly ? {
+        strategyKey: "blend_quarterly",
+        quarterKey: quarterKeyForMarketDate(latestDate),
+        signalDate: previousDate,
+        targetWeightPercent: 10,
+        cashTargetPercent: 20,
+        universeSize: universe.length - 1,
+        targets,
+        benchmarkSymbol: "SPY",
+        benchmarkCloseUsd: benchmark.at(-1)!.close,
+      } : undefined,
     },
   };
 }

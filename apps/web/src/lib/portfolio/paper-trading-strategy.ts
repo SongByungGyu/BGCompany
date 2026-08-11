@@ -1,4 +1,5 @@
 import type { PaperTradingSignalInput } from "./paper-trading-types";
+import type { PaperTradingRotationTarget } from "./paper-trading-types";
 
 export type PaperDailyBar = {
   symbol: string;
@@ -198,4 +199,82 @@ export function buildPaperTradingSignal(input: {
     score: rounded(score),
     reasons,
   };
+}
+
+function crossSectionalZScore(values: Map<string, number>) {
+  const entries = [...values.entries()];
+  if (!entries.length) return new Map<string, number>();
+  const mean = entries.reduce((sum, [, value]) => sum + value, 0) / entries.length;
+  const variance = entries.reduce((sum, [, value]) => sum + (value - mean) ** 2, 0) / entries.length;
+  const deviation = Math.sqrt(variance);
+  return new Map(entries.map(([symbol, value]) => [symbol, deviation > 0 ? (value - mean) / deviation : 0]));
+}
+
+export function quarterKeyForMarketDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(value);
+  if (!match) throw new Error(`Invalid market date: ${value}`);
+  const quarter = Math.floor((Number(match[2]) - 1) / 3) + 1;
+  return `${match[1]}-Q${quarter}`;
+}
+
+export function nextQuarterDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(value);
+  if (!match) throw new Error(`Invalid market date: ${value}`);
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const nextMonth = Math.floor((month - 1) / 3) * 3 + 4;
+  return `${nextMonth > 12 ? year + 1 : year}-${String(nextMonth > 12 ? 1 : nextMonth).padStart(2, "0")}-01`;
+}
+
+export function buildQuarterlyMomentumTargets(input: {
+  series: Map<string, PaperDailyBar[]>;
+  sectors: Map<string, string>;
+  signalDate: string;
+  maximumTargets?: number;
+  maximumPerSector?: number;
+  targetWeightPercent?: number;
+}): PaperTradingRotationTarget[] {
+  const rows = new Map<string, { bar: PaperDailyBar; momentum6: number; momentum12: number }>();
+  for (const [symbol, source] of input.series) {
+    if (symbol === "SPY") continue;
+    const bars = [...source]
+      .filter((bar) => bar.marketDate <= input.signalDate)
+      .sort((left, right) => left.marketDate.localeCompare(right.marketDate));
+    if (bars.length < 253) continue;
+    const latest = bars.at(-1)!;
+    const closeOneMonthAgo = bars.at(-22)!.close;
+    const closeSixMonthsAgo = bars.at(-127)!.close;
+    const closeTwelveMonthsAgo = bars.at(-253)!.close;
+    const momentum6 = closeOneMonthAgo / closeSixMonthsAgo - 1;
+    const momentum12 = closeOneMonthAgo / closeTwelveMonthsAgo - 1;
+    if (![momentum6, momentum12].every(Number.isFinite)) continue;
+    rows.set(symbol, { bar: latest, momentum6, momentum12 });
+  }
+  const six = crossSectionalZScore(new Map([...rows].map(([symbol, row]) => [symbol, row.momentum6])));
+  const twelve = crossSectionalZScore(new Map([...rows].map(([symbol, row]) => [symbol, row.momentum12])));
+  const ordered = [...rows.entries()]
+    .map(([symbol, row]) => ({ symbol, row, score: (six.get(symbol)! + twelve.get(symbol)!) / 2 }))
+    .sort((left, right) => right.score - left.score || left.symbol.localeCompare(right.symbol));
+  const maximumTargets = input.maximumTargets ?? 8;
+  const maximumPerSector = input.maximumPerSector ?? 3;
+  const targetWeightPercent = input.targetWeightPercent ?? 10;
+  const sectorCounts = new Map<string, number>();
+  const selected: PaperTradingRotationTarget[] = [];
+  for (const candidate of ordered) {
+    const sector = input.sectors.get(candidate.symbol) ?? "other";
+    if ((sectorCounts.get(sector) ?? 0) >= maximumPerSector) continue;
+    selected.push({
+      rank: selected.length + 1,
+      symbol: candidate.symbol,
+      name: candidate.row.bar.name,
+      sector,
+      score: rounded(candidate.score),
+      momentum6MonthPercent: rounded(candidate.row.momentum6 * 100),
+      momentum12MonthPercent: rounded(candidate.row.momentum12 * 100),
+      targetWeightPercent,
+    });
+    sectorCounts.set(sector, (sectorCounts.get(sector) ?? 0) + 1);
+    if (selected.length >= maximumTargets) break;
+  }
+  return selected;
 }

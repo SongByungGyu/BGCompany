@@ -18,7 +18,7 @@ export function getPaperTradingConfig(environment: Record<string, string | undef
     safeToRun: !liveRequested && (requestedMode === "PAPER" || requestedMode === "BACKTEST"),
     requestedMode,
     initialCapitalKrw: positiveNumber(environment.PAPER_INITIAL_CAPITAL_KRW, 10_000_000, 10_000_000_000),
-    strategyVersion: environment.PAPER_STRATEGY_VERSION?.trim() || "chart-lab-v3-forward",
+    strategyVersion: environment.PAPER_STRATEGY_VERSION?.trim() || "blend-quarterly-v1",
     rules: {
       riskPerTrade: positiveNumber(environment.PAPER_RISK_PER_TRADE, 0.005, 0.02),
       maxPositionPercent: positiveNumber(environment.PAPER_MAX_POSITION_PERCENT, 0.10, 0.25),
@@ -29,6 +29,7 @@ export function getPaperTradingConfig(environment: Record<string, string | undef
       commissionBps: positiveNumber(environment.PAPER_COMMISSION_BPS, 0.5, 100),
       maximumEntryGapPercent: positiveNumber(environment.PAPER_MAX_ENTRY_GAP_PERCENT, 8, 30),
       staleAfterHours: positiveNumber(environment.PAPER_STALE_AFTER_HOURS, 36, 168),
+      fxSlippageBps: positiveNumber(environment.PAPER_FX_SLIPPAGE_BPS, 10, 100),
     } satisfies PaperTradingRules,
   };
 }

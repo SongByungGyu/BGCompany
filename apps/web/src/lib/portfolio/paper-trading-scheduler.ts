@@ -12,7 +12,12 @@ import {
 } from "./paper-trading-scheduler-policy";
 
 const EVENT_TYPE = "PaperTradingDailyAutomation";
-const EVENT_PREFIX = "event-paper-trading-auto-";
+const EVENT_PREFIX = "event-paper-trading-auto:";
+
+function eventPrefix() {
+  const strategyVersion = getPaperTradingConfig().strategyVersion.replace(/[^a-zA-Z0-9._-]/g, "-");
+  return `${EVENT_PREFIX}${strategyVersion}:`;
+}
 
 function payload(value: Prisma.JsonValue | null | undefined) {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, Prisma.JsonValue> : {};
@@ -39,9 +44,9 @@ async function saveEvent(dateKey: string, state: {
   extra?: Prisma.InputJsonObject;
 }) {
   return prisma.eventLog.upsert({
-    where: { id: `${EVENT_PREFIX}${dateKey}` },
+    where: { id: `${eventPrefix()}${dateKey}` },
     create: {
-      id: `${EVENT_PREFIX}${dateKey}`,
+      id: `${eventPrefix()}${dateKey}`,
       type: EVENT_TYPE,
       summary: state.summary,
       payload: { dateKey, status: state.status, attempt: state.attempt, scheduledFor: state.scheduledFor, brokerOrderAuthorization: "NONE", ...(state.extra ?? {}) },
@@ -56,7 +61,7 @@ async function saveEvent(dateKey: string, state: {
 
 export async function getPaperTradingAutomationStatus(now = new Date()) {
   const config = getPaperTradingSchedulerConfig();
-  const latest = await prisma.eventLog.findFirst({ where: { type: EVENT_TYPE }, orderBy: { timestamp: "desc" }, select: { timestamp: true, payload: true } });
+  const latest = await prisma.eventLog.findFirst({ where: { type: EVENT_TYPE, id: { startsWith: eventPrefix() } }, orderBy: { timestamp: "desc" }, select: { timestamp: true, payload: true } });
   const data = payload(latest?.payload);
   return {
     enabled: config.enabled,
@@ -82,15 +87,16 @@ export async function getPaperTradingAutomationStatus(now = new Date()) {
 
 export async function executeAutomatedPaperTradingCycle() {
   const schedulerConfig = getPaperTradingSchedulerConfig();
-  let account = await prisma.paperTradingAccount.findFirst({ orderBy: { createdAt: "asc" } });
+  const tradingConfig = getPaperTradingConfig();
+  let account = await prisma.paperTradingAccount.findFirst({ where: { strategyVersion: tradingConfig.strategyVersion }, orderBy: { createdAt: "asc" } });
   if (!account && schedulerConfig.autoInitialize) {
     await initializePaperTradingAccount();
-    account = await prisma.paperTradingAccount.findFirst({ orderBy: { createdAt: "asc" } });
+    account = await prisma.paperTradingAccount.findFirst({ where: { strategyVersion: tradingConfig.strategyVersion }, orderBy: { createdAt: "asc" } });
   }
   if (!account) return { status: "paused" as const, reason: "PAPER_ACCOUNT_NOT_INITIALIZED" };
   if (account.status !== "ACTIVE") return { status: account.status.toLowerCase() as "paused" | "killed", reason: `PAPER_ACCOUNT_${account.status}` };
 
-  const prepared = await prepareAutomatedPaperCycle(getPaperTradingConfig().strategyVersion);
+  const prepared = await prepareAutomatedPaperCycle(tradingConfig.strategyVersion);
   const trial = evaluatePaperTradingTrial(prepared.input.marketDate, schedulerConfig);
   if (trial.action === "waiting") {
     return {
@@ -105,7 +111,7 @@ export async function executeAutomatedPaperTradingCycle() {
       baselineOnly: false,
     };
   }
-  const baselineOnly = account.lastMarketDate == null;
+  const baselineOnly = account.lastMarketDate == null && !prepared.input.rotation;
   await runPaperTradingCycle({ ...prepared.input, signals: baselineOnly ? [] : prepared.input.signals });
   if (trial.shouldPauseAfterRun) {
     await prisma.$transaction([
@@ -139,7 +145,7 @@ export async function executeAutomatedPaperTradingCycle() {
 export async function runPaperTradingSchedulerTick(now = new Date()) {
   const config = getPaperTradingSchedulerConfig();
   const schedule = getPaperTradingSchedule(now, config);
-  const previousRow = await prisma.eventLog.findUnique({ where: { id: `${EVENT_PREFIX}${schedule.dateKey}` }, select: { payload: true } });
+  const previousRow = await prisma.eventLog.findUnique({ where: { id: `${eventPrefix()}${schedule.dateKey}` }, select: { payload: true } });
   const previousPayload = payload(previousRow?.payload);
   const decision = decidePaperTradingSchedulerRun({
     now,
