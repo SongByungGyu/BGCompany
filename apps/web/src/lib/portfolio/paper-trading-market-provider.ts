@@ -3,6 +3,7 @@ import { getPortfolioPriceProvider, kisReadOnlyGet } from "./portfolio-price-pro
 import {
   buildPaperTradingSignal,
   buildQuarterlyMomentumTargets,
+  latestCompletedUsMarketDate,
   quarterKeyForMarketDate,
   type PaperDailyBar,
 } from "./paper-trading-strategy";
@@ -151,8 +152,10 @@ export async function prepareAutomatedPaperCycle(strategyVersion: string): Promi
   }
   const benchmark = series.get("SPY");
   if (!benchmark?.length) throw new Error(`PAPER_BENCHMARK_UNAVAILABLE${errors.length ? `:${errors[0]}` : ""}`);
-  const latestDate = benchmark.at(-1)!.marketDate;
-  const previousDate = benchmark.at(-2)?.marketDate ?? null;
+  const latestDate = latestCompletedUsMarketDate(benchmark);
+  if (!latestDate) throw new Error("PAPER_COMPLETED_MARKET_DATE_UNAVAILABLE");
+  const completedBenchmark = benchmark.filter((bar) => bar.marketDate <= latestDate);
+  const previousDate = completedBenchmark.at(-2)?.marketDate ?? null;
   if (!previousDate) throw new Error("PAPER_BENCHMARK_HISTORY_TOO_SHORT");
   const quotes = Array.from(series.values()).map((bars) => bars.find((bar) => bar.marketDate === latestDate)).filter((bar): bar is PaperDailyBar => Boolean(bar));
   const quarterly = strategyVersion.startsWith("blend-quarterly");
@@ -195,7 +198,7 @@ export async function prepareAutomatedPaperCycle(strategyVersion: string): Promi
         universeSize: universe.length - 1,
         targets,
         benchmarkSymbol: "SPY",
-        benchmarkCloseUsd: benchmark.at(-1)!.close,
+        benchmarkCloseUsd: completedBenchmark.at(-1)!.close,
       } : undefined,
     },
   };

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildPaperTradingSignal,
   buildQuarterlyMomentumTargets,
+  latestCompletedUsMarketDate,
   nextQuarterDate,
   quarterKeyForMarketDate,
   type PaperDailyBar,
@@ -84,4 +85,20 @@ test("quarter helpers keep a locked plan on the calendar quarter boundary", () =
   assert.equal(quarterKeyForMarketDate("2026-08-10"), "2026-Q3");
   assert.equal(nextQuarterDate("2026-08-10"), "2026-10-01");
   assert.equal(nextQuarterDate("2026-12-31"), "2027-01-01");
+});
+
+test("incomplete current US session is excluded before the regular close buffer", () => {
+  const history = momentumBars("SPY", 0.001).slice(-2).map((bar, index) => ({
+    ...bar,
+    marketDate: index === 0 ? "2026-08-10" : "2026-08-11",
+  }));
+  assert.equal(latestCompletedUsMarketDate(history, new Date("2026-08-11T12:00:00.000Z")), "2026-08-10");
+});
+
+test("current US session becomes eligible after the regular close buffer", () => {
+  const history = momentumBars("SPY", 0.001).slice(-2).map((bar, index) => ({
+    ...bar,
+    marketDate: index === 0 ? "2026-08-10" : "2026-08-11",
+  }));
+  assert.equal(latestCompletedUsMarketDate(history, new Date("2026-08-11T21:00:00.000Z")), "2026-08-11");
 });

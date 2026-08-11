@@ -226,6 +226,27 @@ export function nextQuarterDate(value: string) {
   return `${nextMonth > 12 ? year + 1 : year}-${String(nextMonth > 12 ? 1 : nextMonth).padStart(2, "0")}-01`;
 }
 
+export function latestCompletedUsMarketDate(bars: PaperDailyBar[], now = new Date()) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = Object.fromEntries(formatter.formatToParts(now).map((part) => [part.type, part.value]));
+  const currentNewYorkDate = `${parts.year}-${parts.month}-${parts.day}`;
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  const regularSessionCompleted = minutes >= 16 * 60 + 15;
+  return [...bars]
+    .map((bar) => bar.marketDate)
+    .filter((marketDate) => regularSessionCompleted ? marketDate <= currentNewYorkDate : marketDate < currentNewYorkDate)
+    .sort()
+    .at(-1) ?? null;
+}
+
 export function buildQuarterlyMomentumTargets(input: {
   series: Map<string, PaperDailyBar[]>;
   sectors: Map<string, string>;
