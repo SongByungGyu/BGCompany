@@ -153,7 +153,7 @@ export async function refreshPaperTradingTeamReviews(accountId: string, marketDa
     prisma.paperTradingTeamMember.findMany({ where: { accountId, status: "ACTIVE" }, orderBy: { displayOrder: "asc" } }),
     prisma.paperTradingSignal.findMany({ where: { accountId, processedAt: { gte: day, lt: nextDay } } }),
     prisma.paperTradingOrder.findMany({ where: { accountId, marketDate: day } }),
-    prisma.paperTradingFill.findMany({ where: { accountId, filledAt: { gte: day, lt: nextDay } } }),
+    prisma.paperTradingFill.findMany({ where: { accountId, order: { marketDate: day } } }),
     prisma.paperTradingPosition.findMany({ where: { accountId, status: "OPEN" } }),
     prisma.paperTradingSnapshot.findUnique({ where: { accountId_marketDate: { accountId, marketDate: day } } }),
     prisma.paperTradingRiskEvent.findMany({ where: { accountId, createdAt: { gte: day, lt: nextDay } } }),
