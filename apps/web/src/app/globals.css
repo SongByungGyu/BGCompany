@@ -882,6 +882,22 @@
 .control-room:has(.office-canvas) .avatar[data-employee="finance-manager"] { --portrait-x: 195; --portrait-y: 159; }
 .control-room:has(.office-canvas) .avatar[data-employee="developer"] { --portrait-x: 272; --portrait-y: 159; }
 .control-room:has(.office-canvas) .avatar[data-employee="local-publisher"] { --portrait-x: 351; --portrait-y: 161; }
+.control-room:has(.office-canvas) .avatar[data-employee="risk-trader"],
+.control-room:has(.office-canvas) .avatar[data-employee="execution-trader"] {
+  color: #f7fbff;
+  background-image: none;
+  text-shadow: 0 1px 4px #0009;
+}
+.control-room:has(.office-canvas) .avatar[data-employee="risk-trader"] {
+  background: linear-gradient(145deg, #47d6b6, #176e75 72%);
+}
+.control-room:has(.office-canvas) .avatar[data-employee="execution-trader"] {
+  background: linear-gradient(145deg, #7aa8ff, #5751a5 72%);
+}
+.control-room:has(.office-canvas) .avatar[data-employee="risk-trader"] > span,
+.control-room:has(.office-canvas) .avatar[data-employee="execution-trader"] > span {
+  opacity: 1;
+}
 .office-employee-portrait {
   --portrait-x: 44;
   --portrait-y: 48;
@@ -908,6 +924,26 @@
 .office-employee-portrait[data-employee="finance-manager"] { --portrait-x: 195; --portrait-y: 159; }
 .office-employee-portrait[data-employee="developer"] { --portrait-x: 272; --portrait-y: 159; }
 .office-employee-portrait[data-employee="local-publisher"] { --portrait-x: 351; --portrait-y: 161; }
+.office-employee-portrait[data-employee="risk-trader"],
+.office-employee-portrait[data-employee="execution-trader"] {
+  display: grid;
+  place-items: center;
+  color: #f7fbff;
+  font-size: 11px;
+  font-weight: 800;
+  background-image: none;
+  text-shadow: 0 1px 3px #000a;
+}
+.office-employee-portrait[data-employee="risk-trader"] {
+  background: linear-gradient(145deg, #47d6b6, #176e75 72%);
+}
+.office-employee-portrait[data-employee="execution-trader"] {
+  background: linear-gradient(145deg, #7aa8ff, #5751a5 72%);
+}
+.office-employee-portrait[data-employee="risk-trader"]::before,
+.office-employee-portrait[data-employee="execution-trader"]::before {
+  content: attr(data-initial);
+}
 .control-room:has(.office-canvas) .viewport,
 .control-room:has(.office-canvas) .office-viewport-status-bar,
 .control-room:has(.office-canvas) .office-canvas-wrap,
@@ -994,6 +1030,7 @@
   inset: 0;
   overflow: hidden;
   isolation: isolate;
+  pointer-events: none;
   background:
     radial-gradient(circle at 50% 38%, #17334b 0, #071422 48%, #020812 100%);
 }
@@ -1015,6 +1052,7 @@
   display: block;
   width: 100%;
   height: 100%;
+  pointer-events: none;
 }
 .hybrid-office-photo {
   filter: saturate(.9) contrast(1.08) brightness(.83);
@@ -1276,6 +1314,7 @@
   padding: 0;
   overflow: visible;
   cursor: pointer;
+  pointer-events: auto;
   appearance: none;
   color: #f4fbff;
   background: transparent;
@@ -1284,6 +1323,9 @@
   filter: drop-shadow(0 9px 12px #01060bd4);
   contain: layout paint;
   will-change: left, top;
+}
+.hybrid-movement-token:active:not(:disabled) {
+  transform: translate3d(-50%, -50%, 0) scale(.96);
 }
 
 .hybrid-movement-token.is-moving {

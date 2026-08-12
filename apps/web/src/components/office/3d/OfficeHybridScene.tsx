@@ -829,6 +829,7 @@ export function OfficeHybridScene({
               <span
                 className="office-employee-portrait hybrid-movement-token-avatar"
                 data-employee={employee.id}
+                data-initial={employee.initial}
                 aria-hidden="true"
               />
               <span className="hybrid-movement-token-state-dot" aria-hidden="true" />

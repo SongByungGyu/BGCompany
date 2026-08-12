@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import dynamic from "next/dynamic";
+import OfficeCanvas from "@/components/office/3d/OfficeCanvas";
 import { createBGCompanyEventBus } from "@/features/events/event-bus";
 import { appendTimelineEntry, reduceEmployeesByEvent } from "@/features/events/event-reducer";
 import { createMockScenarioSteps, mockScenarioDefinitions, type MockScenarioDefinition } from "@/features/events/mock-scenarios";
@@ -18,11 +18,6 @@ import { PortfolioView } from "@/features/portfolio/PortfolioView";
 import { fetchOperationsOverview } from "@/features/operations/api";
 import type { DashboardEmployeeActivity, DashboardSummary, DashboardSummaryCard } from "@/lib/dashboard-summary/summary-types";
 import type { OperationsOverview } from "@/lib/operations/operations-overview-types";
-
-const OfficeCanvas = dynamic(
-  () => import("@/components/office/3d/OfficeCanvas"),
-  { ssr: false },
-);
 
 type View = "selected" | "unselected" | "approval" | "error" | "empty" | "loading";
 type Tab = "summary" | "outputs" | "timeline";
