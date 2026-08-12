@@ -3,6 +3,7 @@ import { authorizePortfolioApi, noStoreJson } from "@/lib/portfolio/portfolio-ap
 import {
   getPaperTradingDashboard,
   initializePaperTradingAccount,
+  initializePaperTradingTeamForCurrentAccount,
   setPaperTradingStatus,
 } from "@/lib/portfolio/paper-trading-service";
 import { getPaperTradingAutomationStatus } from "@/lib/portfolio/paper-trading-scheduler";
@@ -21,6 +22,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json() as { action?: string };
     if (body.action === "initialize") return noStoreJson(await initializePaperTradingAccount());
+    if (body.action === "initialize-team") return noStoreJson(await initializePaperTradingTeamForCurrentAccount());
     const statusByAction: Record<string, PaperTradingSystemStatus> = {
       resume: "ACTIVE",
       pause: "PAUSED",

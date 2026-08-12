@@ -214,7 +214,7 @@ function PaperTradingPanel({
 }: {
   response: PaperTradingResponse | null;
   working: boolean;
-  onAction: (action: "initialize" | "pause" | "resume" | "kill") => void;
+  onAction: (action: "initialize" | "initialize-team" | "pause" | "resume" | "kill") => void;
 }) {
   if (!response) return <section className="paper-trading-loading"><i /><strong>내부 모의계좌를 확인하고 있습니다.</strong></section>;
   if (!response.enabled) return <section className="paper-trading-disabled"><span>PAPER ENGINE · BLOCKED</span><h2>모의투자 실행 차단</h2><p>{response.message}</p><code>외부 주문 권한 · {response.externalOrderAuthorization}</code></section>;
@@ -242,6 +242,21 @@ function PaperTradingPanel({
       </dl>
       {automation.error ? <p className="paper-automation-error">{automation.error}</p> : null}
     </section> : null}
+    <section className="paper-trader-team">
+      <header><div><span>3-PERSON PAPER TRADING DESK · OBSERVE ONLY</span><h3>트레이더 팀 독립 분석</h3><p>서준은 전략·신호, 민서는 위험·노출, 태오는 가상 체결·성과를 각각 검토합니다. 분석 결과는 직원 업무와 감사 기록에 함께 저장됩니다.</p></div><div><b>증권사 주문 권한 · NONE</b>{!response.team?.members.length ? <button className="primary" disabled={working} onClick={() => onAction("initialize-team")}>{working ? "구성 중" : "3인 팀 구성"}</button> : null}</div></header>
+      {response.team?.members.length ? <>
+        <div className="paper-trader-members">{response.team.members.map((member) => {
+          const review = response.team?.latestReviews.find((item) => item.employeeId === member.employeeId);
+          const roleLabel = member.role === "LEAD_ANALYST" ? "전략·신호" : member.role === "RISK_MANAGER" ? "위험·노출" : "체결·성과";
+          return <article key={member.employeeId}>
+            <div><i>{member.displayOrder}</i><span>{roleLabel}</span><strong>{member.displayName}</strong><small>{member.responsibility}</small></div>
+            {review ? <dl><div><dt>결론</dt><dd>{review.recommendation}</dd></div><div><dt>신뢰도</dt><dd>{review.confidence}%</dd></div><div><dt>분석</dt><dd>{review.summary}</dd></div></dl> : <p>첫 시장일 분석 대기</p>}
+            <footer><span>분석 {member.canAnalyze ? "허용" : "차단"}</span><span>가상주문 승인 {member.canApproveVirtualOrder ? "허용" : "차단"}</span><span>실주문 {member.canSubmitBrokerOrder ? "허용" : "차단"}</span></footer>
+          </article>;
+        })}</div>
+        <div className={`paper-trader-consensus ${response.team.consensus?.status === "REVIEW_REQUIRED" ? "review" : "complete"}`}><strong>{response.team.consensus?.status ?? "ANALYSIS_PENDING"}</strong><span>{response.team.consensus?.summary ?? "다음 모의투자 실행 뒤 3인의 독립 검토가 생성됩니다."}</span><small>최근 기준일 {response.team.latestMarketDate ?? "대기 중"}</small></div>
+      </> : <p className="paper-trader-empty">기존 모의계좌 데이터는 그대로 유지됩니다. 팀을 구성하면 현재 기준일부터 분석 기록만 추가됩니다.</p>}
+    </section>
     {response.strategy ? <section className="paper-rotation-plan">
       <header><div><span>LOCKED QUARTERLY PLAN · {response.strategy.quarterKey}</span><h3>{response.strategy.name}</h3><p>최근 1개월을 제외한 6·12개월 상대 모멘텀을 50:50으로 합산했습니다. 이번 분기 중에는 순위를 다시 계산하지 않습니다.</p></div><b>다음 교체 {response.strategy.nextRebalanceDate}</b></header>
       <div className="paper-rotation-targets">{response.strategy.targets.map((target) => <article key={target.symbol} className={response.positions.some((position) => position.symbol === target.symbol) ? "held" : "waiting"}><i>{target.rank}</i><div><strong>{target.symbol}</strong><span>{target.name}</span></div><dl><div><dt>6-1M</dt><dd>{formatPercent(String(target.momentum6MonthPercent))}</dd></div><div><dt>12-1M</dt><dd>{formatPercent(String(target.momentum12MonthPercent))}</dd></div><div><dt>목표</dt><dd>{target.targetWeightPercent}%</dd></div></dl></article>)}</div>
@@ -334,7 +349,7 @@ export function PortfolioView() {
     setPerformanceRange(range);
   };
 
-  const onPaperAction = async (action: "initialize" | "pause" | "resume" | "kill") => {
+  const onPaperAction = async (action: "initialize" | "initialize-team" | "pause" | "resume" | "kill") => {
     if (action === "kill" && !window.confirm("모의투자 엔진을 KILLED 상태로 전환할까요? UI에서는 다시 활성화할 수 없습니다.")) return;
     setWorking(true);
     setError(null);
@@ -342,7 +357,11 @@ export function PortfolioView() {
       const data = await updatePaperTrading(action);
       setPaperTrading(data);
       setPaperTrading(await fetchPaperTrading());
-      setNotice(action === "initialize" ? "가상자금 1,000만원 모의계좌를 만들었습니다." : `모의투자 상태를 변경했습니다: ${action}`);
+      setNotice(action === "initialize"
+        ? "가상자금 1,000만원 모의계좌와 3인 트레이더 팀을 만들었습니다."
+        : action === "initialize-team"
+          ? "서준·민서·태오 3인 트레이더 팀과 현재 기준일 독립 분석을 생성했습니다."
+          : `모의투자 상태를 변경했습니다: ${action}`);
     } catch (requestError) { setError(errorText(requestError)); }
     finally { setWorking(false); }
   };

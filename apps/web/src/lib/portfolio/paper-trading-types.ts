@@ -98,6 +98,40 @@ export type PaperTradingActivityDto = {
   occurredAt: string;
 };
 
+export type PaperTradingTeamDto = {
+  operatingMode: "OBSERVE_ONLY";
+  canSubmitBrokerOrder: false;
+  members: Array<{
+    employeeId: string;
+    displayName: string;
+    role: string;
+    responsibility: string;
+    status: string;
+    canAnalyze: boolean;
+    canApproveVirtualOrder: boolean;
+    canSubmitBrokerOrder: boolean;
+    displayOrder: number;
+  }>;
+  latestMarketDate: string | null;
+  latestReviews: Array<{
+    id: string;
+    employeeId: string;
+    displayName: string;
+    role: string;
+    marketDate: string;
+    reviewType: string;
+    recommendation: string;
+    confidence: number;
+    summary: string;
+    status: string;
+    updatedAt: string;
+  }>;
+  consensus: null | {
+    status: "REVIEW_REQUIRED" | "TEAM_REVIEW_COMPLETE";
+    summary: string;
+  };
+};
+
 export type PaperTradingDashboard = {
   enabled: true;
   mode: "PAPER";
@@ -122,6 +156,7 @@ export type PaperTradingDashboard = {
   rules: PaperTradingRules;
   positions: PaperTradingPositionDto[];
   activity: PaperTradingActivityDto[];
+  team?: PaperTradingTeamDto;
   counts: {
     openPositions: number;
     ordersToday: number;

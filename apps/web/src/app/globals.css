@@ -2309,6 +2309,34 @@
 .control-room .paper-automation dd { margin: 4px 0 0; color: #e0edf3; font-size: 10px; font-weight: 800; }
 .control-room .paper-automation.failed { border-color: #7a443c; background: #2b1c1d; }
 .control-room .paper-automation .paper-automation-error { grid-column: 1 / -1; padding: 7px 9px; color: #ffc3bb; background: #321c1c; border-radius: 7px; }
+.control-room .paper-trader-team { display: grid; gap: 12px; padding: 15px 16px; background: linear-gradient(145deg, #10282a, #0a1b27); border: 1px solid #2e665f; border-radius: 13px; }
+.control-room .paper-trader-team > header { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.control-room .paper-trader-team > header > div:last-child { display: grid; justify-items: end; gap: 8px; }
+.control-room .paper-trader-team header span { color: #70dfc5; font-size: 8px; font-weight: 900; letter-spacing: .13em; }
+.control-room .paper-trader-team h3 { margin: 5px 0; color: #edfff9; font-size: 15px; }
+.control-room .paper-trader-team header p,
+.control-room .paper-trader-empty { margin: 0; color: #8fa9bc; font-size: 10px; line-height: 1.55; }
+.control-room .paper-trader-team header b { color: #8ce7d0; font-size: 9px; white-space: nowrap; }
+.control-room .paper-trader-members { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.control-room .paper-trader-members > article { display: grid; gap: 10px; padding: 12px; background: #081a23; border: 1px solid #28504f; border-radius: 11px; }
+.control-room .paper-trader-members > article > div { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: center; }
+.control-room .paper-trader-members i { grid-row: 1 / 4; display: grid; width: 28px; height: 28px; place-items: center; color: #06201d; background: #70dfc5; border-radius: 50%; font-size: 10px; font-style: normal; font-weight: 900; }
+.control-room .paper-trader-members span { color: #6f9d99; font-size: 8px; }
+.control-room .paper-trader-members strong { color: #e7f7f2; font-size: 12px; }
+.control-room .paper-trader-members small { color: #78928f; font-size: 8px; line-height: 1.4; }
+.control-room .paper-trader-members dl { display: grid; gap: 6px; margin: 0; }
+.control-room .paper-trader-members dl div { display: grid; grid-template-columns: 48px 1fr; gap: 7px; }
+.control-room .paper-trader-members dt { color: #668985; font-size: 8px; }
+.control-room .paper-trader-members dd { margin: 0; color: #c9ddd9; font-size: 8.5px; line-height: 1.45; }
+.control-room .paper-trader-members > article > p { margin: 0; color: #78928f; font-size: 9px; }
+.control-room .paper-trader-members footer { display: flex; flex-wrap: wrap; gap: 4px; }
+.control-room .paper-trader-members footer span { padding: 4px 6px; color: #9ec2ba; background: #102a2b; border: 1px solid #294b48; border-radius: 999px; font-size: 7px; }
+.control-room .paper-trader-consensus { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 9px 11px; background: #102b29; border: 1px solid #2b5b54; border-radius: 9px; }
+.control-room .paper-trader-consensus strong { color: #7fe3c9; font-size: 8px; }
+.control-room .paper-trader-consensus span,
+.control-room .paper-trader-consensus small { color: #93ada8; font-size: 8.5px; }
+.control-room .paper-trader-consensus.review { background: #30291d; border-color: #655736; }
+.control-room .paper-trader-consensus.review strong { color: #f0c77e; }
 .control-room .paper-rotation-plan { display: grid; gap: 12px; padding: 15px 16px; background: linear-gradient(145deg, #111d32, #0a2028); border: 1px solid #34577a; border-radius: 13px; }
 .control-room .paper-rotation-plan header,
 .control-room .paper-rotation-plan footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
@@ -2356,6 +2384,7 @@
 @media (max-width: 1100px) {
   .control-room .paper-trading-start { grid-template-columns: 1fr; }
   .control-room .paper-automation { grid-template-columns: 1fr; }
+  .control-room .paper-trader-members { grid-template-columns: 1fr; }
   .control-room .paper-rotation-targets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .control-room .paper-trading-columns { grid-template-columns: 1fr; }
   .control-room .paper-trading-rule-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -2363,6 +2392,9 @@
 
 @media (max-width: 720px) {
   .control-room .paper-trading-status { align-items: flex-start; flex-direction: column; }
+  .control-room .paper-trader-team > header { align-items: flex-start; flex-direction: column; }
+  .control-room .paper-trader-team > header > div:last-child { justify-items: start; }
+  .control-room .paper-trader-consensus { grid-template-columns: 1fr; }
   .control-room .paper-trading-controls { flex-wrap: wrap; }
   .control-room .paper-rotation-plan header,
   .control-room .paper-rotation-plan footer { align-items: flex-start; flex-direction: column; }

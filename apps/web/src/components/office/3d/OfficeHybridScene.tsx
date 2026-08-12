@@ -28,7 +28,7 @@ type RoomMeta = {
 const roomMeta: Record<string, RoomMeta> = {
   "ceo-office": { number: "1", title: "대표실", subtitle: "병규" },
   "director-room": { number: "2", title: "AI 디렉터실", subtitle: "루나" },
-  "market-analysis-room": { number: "3", title: "시장분석실", subtitle: "서준" },
+  "market-analysis-room": { number: "3", title: "트레이더 팀", subtitle: "서준 · 민서 · 태오" },
   "content-zone": { number: "4", title: "콘텐츠 스튜디오", subtitle: "미나 · 카이 · 지아" },
   "knowledge-audit-zone": { number: "5", title: "QA·감사실", subtitle: "윤아" },
   "meeting-room": { number: "9", title: "중앙 회의실", subtitle: "협업 · 의사결정" },
@@ -209,8 +209,11 @@ function RoomFurniture({ room, seats }: { room: OfficeRoom; seats: OfficeLayout[
             stroke="#49d5d0"
             strokeWidth="3"
           />
-          <Desk x={cx - 57} y={cy + 7} width={114} monitors={3} chart />
-          <Chair x={cx} y={cy + 68} />
+          {[0, 1, 2].map((index) => {
+            const stationWidth = 54;
+            const x = cx - 91 + index * 64;
+            return <g key={index}><Desk x={x} y={cy + 14} width={stationWidth} monitors={1} chart /><Chair x={x + stationWidth / 2} y={cy + 70} /></g>;
+          })}
         </g>
       );
     case "content-zone": {

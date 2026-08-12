@@ -132,6 +132,7 @@ export type OfficeEmployee = {
   department: string;
   status: string;
   group: EmployeeGroup;
+  currentLocation?: string | null;
 };
 
 export type OfficeLayout = {

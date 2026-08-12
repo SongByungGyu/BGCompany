@@ -86,7 +86,7 @@ export async function fetchPaperTrading() {
   return json<PaperTradingResponse>(await fetch("/api/portfolio/paper", { cache: "no-store" }));
 }
 
-export async function updatePaperTrading(action: "initialize" | "pause" | "resume" | "kill") {
+export async function updatePaperTrading(action: "initialize" | "initialize-team" | "pause" | "resume" | "kill") {
   return json<PaperTradingResponse>(await fetch("/api/portfolio/paper", {
     method: "POST",
     headers: { "content-type": "application/json" },

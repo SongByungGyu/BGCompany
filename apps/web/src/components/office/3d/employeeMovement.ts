@@ -44,6 +44,8 @@ const preferredMeetingSeatMap: Record<string, string> = {
   "qa-auditor": "meeting-seat-06",
   "finance-manager": "meeting-seat-01",
   "stock-monitor": "meeting-seat-07",
+  "risk-trader": "meeting-seat-05",
+  "execution-trader": "meeting-seat-06",
   developer: "meeting-seat-09",
 };
 
@@ -167,12 +169,15 @@ function resolveStatusDestinationId(
   occupancy: DestinationOccupancy,
 ) {
   const baseDestinationId = getAssignedDestinationId(layout, employee);
+  const persistedDestinationId = employee.currentLocation && destinationMap.has(employee.currentLocation)
+    ? employee.currentLocation
+    : undefined;
 
   switch (employee.status) {
     case "회의 중":
       return reserveFirstAvailable(preferredMeetingSeatIds(employee), destinationMap, occupancy, employee.id);
       case "조사 중":
-        if (employee.id === "stock-monitor") {
+        if (employee.department === "주식팀") {
           return reserveFirstAvailable([baseDestinationId], destinationMap, occupancy, employee.id);
         }
         return reserveFirstAvailable(
@@ -199,7 +204,7 @@ function resolveStatusDestinationId(
     case "수정 중":
     case "업무 완료":
     default:
-      return reserveFirstAvailable([baseDestinationId, "lobby-center"], destinationMap, occupancy, employee.id);
+      return reserveFirstAvailable([persistedDestinationId ?? baseDestinationId, baseDestinationId, "lobby-center"], destinationMap, occupancy, employee.id);
   }
 }
 

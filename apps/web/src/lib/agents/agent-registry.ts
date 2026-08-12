@@ -36,6 +36,20 @@ export const agentRegistry: Record<string, AgentMetadata> = {
     defaultSeat: "stock-seat-01",
     allowedEvents: ["TaskStarted", "EmployeeStatusChanged", "OutputGenerated", "ApprovalRequested"],
   },
+  "risk-trader": {
+    agentId: "risk-trader",
+    displayName: "민서",
+    department: "주식팀",
+    defaultSeat: "stock-seat-02",
+    allowedEvents: ["TaskStarted", "EmployeeStatusChanged", "OutputGenerated", "ApprovalRequested"],
+  },
+  "execution-trader": {
+    agentId: "execution-trader",
+    displayName: "태오",
+    department: "주식팀",
+    defaultSeat: "stock-seat-03",
+    allowedEvents: ["TaskStarted", "EmployeeStatusChanged", "OutputGenerated", "ApprovalRequested", "ErrorOccurred"],
+  },
   "developer": {
     agentId: "developer",
     displayName: "하늘",

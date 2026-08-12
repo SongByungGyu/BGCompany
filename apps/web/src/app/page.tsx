@@ -31,7 +31,7 @@ type EmployeeStatus = "대기 중" | "업무 중" | "조사 중" | "회의 중" 
 type Employee = {
   id: string; name: string; initial: string; department: string; role: string; status: EmployeeStatus;
   group: Group; task: string; progress: number; started: string; model: string;
-  cost: string; output: string; outputMeta: string; next: string; error?: string;
+  cost: string; output: string; outputMeta: string; next: string; error?: string; currentLocation?: string | null;
 };
 type PlaceholderWorkspaceConfig = {
   phase: string;
@@ -144,6 +144,7 @@ function mergeEmployeeRecords(currentEmployees: Employee[], records: EmployeeRec
     if (!record) return employee;
     const profileOverride = employeeProfileOverrides[employee.id];
     const status = isEmployeeStatus(record.status) ? record.status : employee.status;
+    const currentTask = record.currentTask;
     const nextEmployee = {
       ...employee,
       name: profileOverride?.name ?? (record.displayName || employee.name),
@@ -152,8 +153,18 @@ function mergeEmployeeRecords(currentEmployees: Employee[], records: EmployeeRec
       department: record.department || employee.department,
       status,
       group: statusGroupMap[status],
-      model: record.model ?? employee.model,
-      cost: "미집계",
+      task: currentTask?.title ?? employee.task,
+      progress: currentTask?.progress ?? employee.progress,
+      started: currentTask?.startedAt
+        ? new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(currentTask.startedAt))
+        : employee.started,
+      model: currentTask?.model ?? record.model ?? employee.model,
+      cost: currentTask?.cost ? `$${currentTask.cost}` : record.currentCost ? `$${record.currentCost}` : "미집계",
+      output: currentTask?.recentOutput ?? employee.output,
+      outputMeta: currentTask ? `DB 업무 · ${currentTask.status}` : employee.outputMeta,
+      next: currentTask?.nextAction ?? employee.next,
+      error: currentTask?.error ?? undefined,
+      currentLocation: record.currentLocation,
     };
     if (
       nextEmployee.name === employee.name
@@ -162,14 +173,50 @@ function mergeEmployeeRecords(currentEmployees: Employee[], records: EmployeeRec
       && nextEmployee.department === employee.department
       && nextEmployee.status === employee.status
       && nextEmployee.group === employee.group
+      && nextEmployee.task === employee.task
+      && nextEmployee.progress === employee.progress
+      && nextEmployee.started === employee.started
       && nextEmployee.model === employee.model
       && nextEmployee.cost === employee.cost
+      && nextEmployee.output === employee.output
+      && nextEmployee.outputMeta === employee.outputMeta
+      && nextEmployee.next === employee.next
+      && nextEmployee.error === employee.error
+      && nextEmployee.currentLocation === employee.currentLocation
     ) {
       return employee;
     }
     changed = true;
     return nextEmployee;
   });
+  const knownIds = new Set(currentEmployees.map((employee) => employee.id));
+  for (const record of records) {
+    if (knownIds.has(record.id)) continue;
+    const status = isEmployeeStatus(record.status) ? record.status : "대기 중";
+    const currentTask = record.currentTask;
+    mergedEmployees.push({
+      id: record.id,
+      name: record.displayName,
+      initial: record.initial,
+      department: record.department,
+      role: record.role,
+      status,
+      group: statusGroupMap[status],
+      task: currentTask?.title ?? "배정된 업무 대기",
+      progress: currentTask?.progress ?? 0,
+      started: currentTask?.startedAt
+        ? new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(currentTask.startedAt))
+        : "대기",
+      model: currentTask?.model ?? record.model ?? "Rules Engine",
+      cost: currentTask?.cost ? `$${currentTask.cost}` : record.currentCost ? `$${record.currentCost}` : "미집계",
+      output: currentTask?.recentOutput ?? "아직 생성된 결과물이 없습니다.",
+      outputMeta: currentTask ? `DB 업무 · ${currentTask.status}` : "DB 직원",
+      next: currentTask?.nextAction ?? "다음 업무 배정 대기",
+      error: currentTask?.error ?? undefined,
+      currentLocation: record.currentLocation,
+    });
+    changed = true;
+  }
   return changed ? mergedEmployees : currentEmployees;
 }
 

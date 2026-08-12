@@ -11,6 +11,23 @@ export type EmployeeRecord = {
   currentLocation: string | null;
   model: string | null;
   currentCost: string | null;
+  currentTask: null | {
+    id: string;
+    title: string;
+    description: string | null;
+    department: string;
+    assignedEmployeeId: string | null;
+    status: string;
+    progress: number;
+    startedAt: string | null;
+    completedAt: string | null;
+    model: string | null;
+    cost: string | null;
+    currentStep: string | null;
+    recentOutput: string | null;
+    nextAction: string | null;
+    error: string | null;
+  };
 };
 
 export async function fetchEmployees(): Promise<EmployeeRecord[]> {

@@ -20,10 +20,11 @@ model Employee {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  tasks     Task[]
-  approvals ApprovalRequest[]
-  events    EventLog[]
-  agentRuns AgentRun[]
+  tasks                   Task[]
+  approvals               ApprovalRequest[]
+  events                  EventLog[]
+  agentRuns               AgentRun[]
+  paperTradingMemberships PaperTradingTeamMember[]
 
   @@index([status])
   @@index([department])
@@ -538,16 +539,63 @@ model PaperTradingAccount {
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
 
-  positions  PaperTradingPosition[]
-  orders     PaperTradingOrder[]
-  fills      PaperTradingFill[]
-  trades     PaperTradingTrade[]
-  signals    PaperTradingSignal[]
-  snapshots  PaperTradingSnapshot[]
-  riskEvents PaperTradingRiskEvent[]
+  positions   PaperTradingPosition[]
+  orders      PaperTradingOrder[]
+  fills       PaperTradingFill[]
+  trades      PaperTradingTrade[]
+  signals     PaperTradingSignal[]
+  snapshots   PaperTradingSnapshot[]
+  riskEvents  PaperTradingRiskEvent[]
+  teamMembers PaperTradingTeamMember[]
+  teamReviews PaperTradingTeamReview[]
 
   @@index([status])
   @@index([createdAt])
+}
+
+model PaperTradingTeamMember {
+  id                     String   @id @default(cuid())
+  accountId              String
+  employeeId             String
+  role                   String
+  responsibility         String
+  status                 String   @default("ACTIVE")
+  canAnalyze             Boolean  @default(true)
+  canApproveVirtualOrder Boolean  @default(false)
+  canSubmitBrokerOrder   Boolean  @default(false)
+  displayOrder           Int
+  joinedAt               DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  account  PaperTradingAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  employee Employee                 @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  reviews  PaperTradingTeamReview[]
+
+  @@unique([accountId, employeeId])
+  @@index([accountId, status])
+  @@index([employeeId])
+}
+
+model PaperTradingTeamReview {
+  id             String   @id @default(cuid())
+  accountId      String
+  teamMemberId   String
+  marketDate     DateTime @db.Date
+  reviewType     String
+  recommendation String
+  confidence     Int
+  summary        String
+  details        Json
+  status         String   @default("COMPLETED")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  account    PaperTradingAccount    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  teamMember PaperTradingTeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, teamMemberId, marketDate, reviewType])
+  @@index([accountId, marketDate])
+  @@index([teamMemberId, marketDate])
 }
 
 model PaperTradingPosition {
@@ -577,22 +625,22 @@ model PaperTradingPosition {
 }
 
 model PaperTradingSignal {
-  id                 String   @id @default(cuid())
-  accountId          String
-  externalSignalId   String
-  symbol             String
-  name               String
-  strategy           String
-  strategyVersion    String
-  signalDate         DateTime @db.Date
-  referencePriceUsd  Decimal  @db.Decimal(28, 8)
-  stopPriceUsd       Decimal  @db.Decimal(28, 8)
-  targetPriceUsd     Decimal? @db.Decimal(28, 8)
-  score              Decimal  @db.Decimal(12, 6)
-  reasons            Json
-  status             String
-  decisionReason     String?
-  processedAt        DateTime @default(now())
+  id                String   @id @default(cuid())
+  accountId         String
+  externalSignalId  String
+  symbol            String
+  name              String
+  strategy          String
+  strategyVersion   String
+  signalDate        DateTime @db.Date
+  referencePriceUsd Decimal  @db.Decimal(28, 8)
+  stopPriceUsd      Decimal  @db.Decimal(28, 8)
+  targetPriceUsd    Decimal? @db.Decimal(28, 8)
+  score             Decimal  @db.Decimal(12, 6)
+  reasons           Json
+  status            String
+  decisionReason    String?
+  processedAt       DateTime @default(now())
 
   account PaperTradingAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
 
@@ -602,21 +650,21 @@ model PaperTradingSignal {
 }
 
 model PaperTradingOrder {
-  id                 String    @id @default(cuid())
-  accountId          String
-  signalId           String?
-  idempotencyKey     String    @unique
-  symbol             String
-  side               String
-  orderType          String
-  status             String
-  quantity           Int
-  requestedPriceUsd  Decimal?  @db.Decimal(28, 8)
-  filledPriceUsd     Decimal?  @db.Decimal(28, 8)
-  decisionReason     String?
-  marketDate         DateTime  @db.Date
-  createdAt          DateTime  @default(now())
-  filledAt           DateTime?
+  id                String    @id @default(cuid())
+  accountId         String
+  signalId          String?
+  idempotencyKey    String    @unique
+  symbol            String
+  side              String
+  orderType         String
+  status            String
+  quantity          Int
+  requestedPriceUsd Decimal?  @db.Decimal(28, 8)
+  filledPriceUsd    Decimal?  @db.Decimal(28, 8)
+  decisionReason    String?
+  marketDate        DateTime  @db.Date
+  createdAt         DateTime  @default(now())
+  filledAt          DateTime?
 
   account PaperTradingAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
   fills   PaperTradingFill[]

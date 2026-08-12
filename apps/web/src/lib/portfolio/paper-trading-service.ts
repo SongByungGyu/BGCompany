@@ -12,6 +12,11 @@ import {
   simulatedExitPrice,
 } from "./paper-trading-rules";
 import { nextQuarterDate } from "./paper-trading-strategy";
+import {
+  ensurePaperTradingTeam,
+  getPaperTradingTeamView,
+  refreshPaperTradingTeamReviews,
+} from "./paper-trading-team";
 import type {
   PaperTradingActivityDto,
   PaperTradingCycleInput,
@@ -105,8 +110,11 @@ async function accountOrNull(strategyVersion = getPaperTradingConfig().strategyV
 export async function initializePaperTradingAccount() {
   const config = assertPaperTradingSafe();
   const existing = await accountOrNull();
-  if (existing) return getPaperTradingDashboard();
-  await prisma.paperTradingAccount.create({
+  if (existing) {
+    await ensurePaperTradingTeam(existing.id);
+    return getPaperTradingDashboard();
+  }
+  const account = await prisma.paperTradingAccount.create({
     data: {
       name: "미국주식 모의계좌 · 1,000만원",
       mode: "PAPER",
@@ -122,7 +130,35 @@ export async function initializePaperTradingAccount() {
       rules: config.rules,
     },
   });
+  await ensurePaperTradingTeam(account.id);
   return getPaperTradingDashboard();
+}
+
+export async function initializePaperTradingTeamForCurrentAccount() {
+  assertPaperTradingSafe();
+  const account = await accountOrNull();
+  if (!account) throw new Error("먼저 모의계좌를 시작하세요.");
+  await ensurePaperTradingTeam(account.id);
+  if (account.lastMarketDate) {
+    await refreshPaperTradingTeamReviews(account.id, account.lastMarketDate.toISOString().slice(0, 10));
+  }
+  return getPaperTradingDashboard();
+}
+
+async function refreshPaperTradingTeamReviewsSafely(accountId: string, day: string) {
+  try {
+    await refreshPaperTradingTeamReviews(accountId, day);
+  } catch (error) {
+    await prisma.paperTradingRiskEvent.create({
+      data: {
+        accountId,
+        type: "TEAM_REVIEW_FAILED",
+        severity: "warning",
+        message: error instanceof Error ? error.message : "3인 트레이더 팀 분석 저장에 실패했습니다.",
+        details: { marketDate: day, externalOrderAuthorization: "NONE" },
+      },
+    }).catch(() => undefined);
+  }
 }
 
 function positionDto(position: {
@@ -182,7 +218,7 @@ export async function getPaperTradingDashboard(): Promise<PaperTradingResponse> 
   }
 
   const latestDay = account.lastMarketDate;
-  const [positionRows, orderRows, tradeRows, riskRows, closedTrades, ordersToday, newPositionsToday, rejectedSignalsToday, latestPlan, rotationMarks] = await Promise.all([
+  const [positionRows, orderRows, tradeRows, riskRows, closedTrades, ordersToday, newPositionsToday, rejectedSignalsToday, latestPlan, rotationMarks, team] = await Promise.all([
     prisma.paperTradingPosition.findMany({ where: { accountId: account.id, status: "OPEN" }, orderBy: { symbol: "asc" } }),
     prisma.paperTradingOrder.findMany({ where: { accountId: account.id }, orderBy: { createdAt: "desc" }, take: 20 }),
     prisma.paperTradingTrade.findMany({ where: { accountId: account.id }, orderBy: { createdAt: "desc" }, take: 20 }),
@@ -201,6 +237,7 @@ export async function getPaperTradingDashboard(): Promise<PaperTradingResponse> 
       orderBy: { timestamp: "asc" },
       select: { payload: true },
     }),
+    getPaperTradingTeamView(account.id),
   ]);
 
   const usdKrw = numeric(account.usdKrw);
@@ -277,6 +314,7 @@ export async function getPaperTradingDashboard(): Promise<PaperTradingResponse> 
     positions,
     activity,
     counts: { openPositions: positions.length, ordersToday, newPositionsToday, rejectedSignalsToday, closedTrades },
+    team,
     strategy: planTargets.length ? {
       key: "blend_quarterly",
       name: "6·12개월 상대 모멘텀 분기 로테이션",
@@ -561,10 +599,14 @@ export async function runPaperTradingCycle(input: PaperTradingCycleInput) {
     return getPaperTradingDashboard();
   }
   if (account.lastMarketDate && day < account.lastMarketDate) throw new Error("마지막 처리일보다 이전 날짜를 실행할 수 없습니다.");
-  if (account.lastMarketDate?.getTime() === day.getTime()) return getPaperTradingDashboard();
+  if (account.lastMarketDate?.getTime() === day.getTime()) {
+    await refreshPaperTradingTeamReviewsSafely(account.id, input.marketDate);
+    return getPaperTradingDashboard();
+  }
 
   if (input.rotation) {
     await runQuarterlyMomentumCycle(input, input.rotation);
+    await refreshPaperTradingTeamReviewsSafely(account.id, input.marketDate);
     return getPaperTradingDashboard();
   }
 
@@ -745,5 +787,6 @@ export async function runPaperTradingCycle(input: PaperTradingCycleInput) {
     data: { cashKrw: decimal(cashKrw), equityKrw: decimal(equityKrw), realizedPnlKrw: decimal(realizedPnlKrw), usdKrw: decimal(input.usdKrw), lastMarketDate: day, lastRunAt: new Date(input.observedAt) },
   });
   }, { isolationLevel: "Serializable", maxWait: 5_000, timeout: 30_000 });
+  await refreshPaperTradingTeamReviewsSafely(account.id, input.marketDate);
   return getPaperTradingDashboard();
 }
