@@ -1,6 +1,6 @@
 import type { StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 
-export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 5;
+export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 6;
 
 export const STOCK_BLOG_INVESTMENT_DISCLAIMER = "본 글은 시장 정보를 정리한 투자 참고 자료이며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 최종 투자 판단과 책임은 투자자 본인에게 있습니다.";
 
@@ -163,6 +163,7 @@ export function getStockBlogEditorialGuidelines(contentType: StockReferenceBrief
     ? [
       "오전 한국장 전망 글에서는 전일 한국장 마감을 2~3문장 코멘트로만 복기하고, 간밤 미국 지수·금리·환율을 오늘 한국장 전망의 근거로 사용합니다. 본문의 70% 이상은 오늘 한국장 변수·조건·확인 항목에 배정합니다.",
       "제목과 30초 요약은 오늘 코스피·한국장 전망을 중심으로 쓰며, 전일 한국장 마감 원인을 메인 제목으로 다시 소비하지 않습니다.",
+      "투자자별 순매수 금액은 직전 거래일의 확정값으로만 설명하고 반드시 전일 수급이라고 밝힙니다. 오늘 수급 금액을 예측하지 말고, 원·달러 환율 안정과 외국인 선물 흐름 같은 관찰 조건에 따라 전일 흐름의 연속·반전 가능성을 시나리오로 씁니다.",
     ]
     : contentType === "KOREA_MARKET_CLOSE_US_PREVIEW"
       ? [

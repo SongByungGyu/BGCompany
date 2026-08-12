@@ -37,6 +37,46 @@ test("chart value mismatch blocks automatic publishing", () => {
   assert.ok(result.issues.some((issue) => issue.code === "image_data_mismatch"));
 });
 
+test("전부 0인 KOSPI 투자자 수급 차트는 자동 발행을 차단한다", () => {
+  const flowSnapshot: MarketSnapshot = {
+    ...snapshot,
+    korea: {
+      ...snapshot.korea,
+      investorFlows: ["외국인", "기관", "개인"].map((label) => ({
+        label: `KOSPI ${label} 순매수`,
+        value: 0,
+        unit: "백만원",
+        asOf: "2026-07-18",
+        freshness: "fresh",
+        sourceName: "KIS",
+        url: "https://example.com/kis",
+      })),
+    },
+  };
+  const flowChart = image("kospi-investor-flow", "body", "chart");
+  flowChart.dataKeys = [
+    "korea.investorFlows.0.value",
+    "korea.investorFlows.1.value",
+    "korea.investorFlows.2.value",
+  ];
+  flowChart.dataPoints = flowChart.dataKeys.map((key, index) => ({
+    key,
+    label: ["외국인", "기관", "개인"][index],
+    value: 0,
+    unit: "백만원",
+    asOf: "2026-07-18",
+  }));
+
+  const result = evaluateStockBlogImageQuality([
+    image("thumbnail", "thumbnail", "thumbnail"),
+    flowChart,
+    image("chart-2", "body", "chart"),
+  ], flowSnapshot);
+
+  assert.equal(result.status, "blocked");
+  assert.ok(result.issues.some((issue) => issue.message.includes("전부 0인 수급값")));
+});
+
 test("본문 이미지가 핵심 3장을 넘으면 정보 과밀로 차단한다", () => {
   const result = evaluateStockBlogImageQuality([
     image("thumbnail", "thumbnail", "thumbnail"),

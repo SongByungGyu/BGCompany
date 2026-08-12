@@ -2,6 +2,7 @@ import type { MarketSnapshot } from "@/lib/stock-blog/references/reference-types
 import { isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import { isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
 import type { StockBlogContentImage, StockBlogImageQualityAudit, StockBlogImageQualityIssueCode } from "@/lib/stock-blog/stock-blog-image-types";
+import { hasMeaningfulInvestorFlowValues } from "@/lib/stock-blog/investor-flow-policy";
 
 function resolveSnapshotValue(snapshot: MarketSnapshot, key: string): unknown {
   return key.split(".").reduce<unknown>((value, segment) => {
@@ -61,6 +62,12 @@ export function evaluateStockBlogImageQuality(images: StockBlogContentImage[], s
         if (chart.dataKeys.length === 0 || chart.dataPoints.length !== chart.dataKeys.length) {
           issues.push({ code: "image_data_mismatch", message: `${chart.title}: 차트 데이터 키가 완전하지 않습니다.` });
           continue;
+        }
+        if (
+          chart.id === "kospi-investor-flow"
+          && !hasMeaningfulInvestorFlowValues(chart.dataPoints.map((point) => point.value))
+        ) {
+          issues.push({ code: "image_quality_failed", message: `${chart.title}: 전부 0인 수급값은 유효한 비교 차트로 사용하지 않습니다.` });
         }
         for (const point of chart.dataPoints) {
           const actual = resolveSnapshotValue(snapshot, point.key);

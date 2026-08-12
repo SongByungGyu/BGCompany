@@ -1,4 +1,5 @@
 import { asNumber, asRecord, asRecords, directionFromChange, makeSource, metricFromSource, parseDateTime } from "./market-data-utils";
+import { getInvestorFlowBusinessDateCandidates, hasMeaningfulInvestorFlowValues } from "../investor-flow-policy";
 import {
   getKisMinRequestIntervalMs,
   KIS_MAX_RETRIES,
@@ -6,7 +7,7 @@ import {
   KIS_RETRYABLE_HTTP_STATUSES,
   KIS_RETRYABLE_RESPONSE_CODES,
 } from "./kis-request-policy";
-import type { MarketSnapshot, MarketSnapshotMetric, MarketSnapshotSource, ReferenceSearchInput } from "./reference-types";
+import type { MarketSnapshot, MarketSnapshotSource, ReferenceSearchInput } from "./reference-types";
 
 const KIS_ALLOWED_REQUESTS = new Map<string, string>([
   ["/uapi/domestic-stock/v1/quotations/inquire-index-daily-price", "FHPUP02120000"],
@@ -208,23 +209,28 @@ function indexMetric(label: string, output: unknown, collectedAt: string, endpoi
 }
 
 function investorMetrics(output: unknown, market: string, collectedAt: string, endpoint: string) {
-  const row = asRecords(output)[0];
-  if (!row) return undefined;
-  const asOf = parseDateTime(typeof row.stck_bsop_date === "string" ? row.stck_bsop_date : undefined) ?? collectedAt;
-  const dataSource = source(`${market} 투자자별 매매동향`, asOf, collectedAt, endpoint);
-  const definitions: Array<[string, string, string]> = [
-    ["외국인", "frgn_ntby_tr_pbmn", "frgn_ntby_qty"],
-    ["기관", "orgn_ntby_tr_pbmn", "orgn_ntby_qty"],
-    ["개인", "prsn_ntby_tr_pbmn", "prsn_ntby_qty"],
-  ];
-  const metrics = definitions.map(([name, amountKey, quantityKey]) => {
-    const amount = asNumber(row[amountKey]);
-    const quantity = asNumber(row[quantityKey]);
-    const value = amount ?? quantity;
-    const unit = amount !== undefined ? "백만원" : quantity !== undefined ? "주" : undefined;
-    return value === undefined ? undefined : metricFromSource({ label: `${market} ${name} 순매수`, value, unit, direction: directionFromChange(value), source: dataSource });
-  }).filter((metric): metric is MarketSnapshotMetric => Boolean(metric));
-  return metrics.length ? { metrics, source: dataSource } : undefined;
+  for (const row of asRecords(output)) {
+    const values = [
+      asNumber(row.frgn_ntby_tr_pbmn),
+      asNumber(row.orgn_ntby_tr_pbmn),
+      asNumber(row.prsn_ntby_tr_pbmn),
+    ];
+    if (values.some((value) => value === undefined)) continue;
+    const verifiedValues = values as number[];
+    if (!hasMeaningfulInvestorFlowValues(verifiedValues)) continue;
+    const asOf = parseDateTime(typeof row.stck_bsop_date === "string" ? row.stck_bsop_date : undefined) ?? collectedAt;
+    const dataSource = source(`${market} 투자자별 매매동향`, asOf, collectedAt, endpoint);
+    const names = ["외국인", "기관", "개인"];
+    const metrics = names.map((name, index) => metricFromSource({
+      label: `${market} ${name} 순매수`,
+      value: verifiedValues[index],
+      unit: "백만원",
+      direction: directionFromChange(verifiedValues[index]),
+      source: dataSource,
+    }));
+    return { metrics, source: dataSource };
+  }
+  return undefined;
 }
 
 function sectorNames(output: unknown) {
@@ -254,7 +260,6 @@ function overseasMetric(label: string, body: Record<string, unknown>, collectedA
 }
 
 export async function collectKisMarketData(input: ReferenceSearchInput): Promise<KisResult> {
-  void input;
   const credentials = requiredCredentials();
   if (!credentials) return { status: "needs_credentials", sources: [], missingItems: ["KIS_APP_KEY", "KIS_APP_SECRET"] };
   const collectedAt = new Date().toISOString();
@@ -277,15 +282,26 @@ export async function collectKisMarketData(input: ReferenceSearchInput): Promise
     }
 
     const investorPath = "/uapi/domestic-stock/v1/quotations/inquire-investor-daily-by-market";
-    const businessDate = seoulDate();
+    const businessDates = getInvestorFlowBusinessDateCandidates(input.contentType, new Date(collectedAt));
     for (const [code, marketCode, label] of [["0001", "KSP", "KOSPI"], ["1001", "KSQ", "KOSDAQ"]] as const) {
       try {
-        const body = await kisGet(investorPath, "FHPTJ04040000", {
-          FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: code, FID_INPUT_DATE_1: businessDate,
-          FID_INPUT_ISCD_1: marketCode, FID_INPUT_DATE_2: businessDate, FID_INPUT_ISCD_2: code,
-        }, credentials, token);
-        const result = investorMetrics(body.output, label, collectedAt, investorPath);
-        if (result) { korea.investorFlows?.push(...result.metrics); sources.push(result.source); } else missingItems.push(`${label} 투자자 수급`);
+        let result: ReturnType<typeof investorMetrics>;
+        for (const businessDate of businessDates) {
+          const body = await kisGet(investorPath, "FHPTJ04040000", {
+            FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: code, FID_INPUT_DATE_1: businessDate,
+            FID_INPUT_ISCD_1: marketCode, FID_INPUT_DATE_2: businessDate, FID_INPUT_ISCD_2: code,
+          }, credentials, token);
+          result = investorMetrics(body.output, label, collectedAt, investorPath);
+          if (result) break;
+        }
+        if (result) {
+          korea.investorFlows?.push(...result.metrics);
+          sources.push(result.source);
+        } else {
+          const item = `${label} 투자자 수급`;
+          missingItems.push(item);
+          diagnostics.push({ item, code: "KIS_EMPTY_METRIC" });
+        }
       } catch (error) { const item = `${label} 투자자 수급`; missingItems.push(item); diagnostics.push(safeDiagnostic(item, error)); }
     }
 

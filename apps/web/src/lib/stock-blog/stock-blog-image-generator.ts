@@ -10,6 +10,12 @@ import { isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/
 import { evaluateStockBlogImageQuality } from "@/lib/stock-blog/stock-blog-image-quality";
 import { getStockBlogImagePlacementHeadings } from "@/lib/stock-blog/stock-blog-image-placements";
 import type { StockBlogContentImage, StockBlogImageDataPoint, StockBlogImageQualityAudit } from "@/lib/stock-blog/stock-blog-image-types";
+import {
+  buildInvestorFlowChartCopy,
+  formatInvestorFlowChartValues,
+  hasMeaningfulInvestorFlowValues,
+  isInvestorFlowDateEligible,
+} from "@/lib/stock-blog/investor-flow-policy";
 
 export type GeneratedStockBlogImages = {
   thumbnailImageUrl?: string;
@@ -27,6 +33,13 @@ type ImageTheme = {
   accent: string;
   secondary: string;
   skyline: string;
+};
+
+type VerifiedInvestorFlow = {
+  index: number;
+  label: string;
+  value: number;
+  metric: MarketSnapshotMetric;
 };
 
 const THEMES: Record<StockBriefingTemplate, ImageTheme> = {
@@ -235,6 +248,12 @@ function dateLabel(value: string) {
   return new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
 }
 
+function shortDateLabel(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return value.slice(5, 10).replace("-", "월 ") + "일";
+  return new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric" }).format(date);
+}
+
 function signed(value: number, digits = 2) {
   return `${value > 0 ? "+" : ""}${value.toFixed(digits)}`;
 }
@@ -388,16 +407,37 @@ export async function generateStockBlogImages(input: {
       { index: flows.findIndex((metric) => metric.label === "KOSPI 기관 순매수"), label: "기관" },
       { index: flows.findIndex((metric) => metric.label === "KOSPI 개인 순매수"), label: "개인" },
     ].map((item) => {
-      if (item.index < 0) throw new Error(`IMAGE_DATA_MISSING_KOSPI_FLOW_${item.label}`);
-      const metric = numericMetric(flows[item.index], "value", `KOSPI_FLOW_${item.label}`);
-      return { ...item, ...metric };
-    });
+      if (item.index < 0) return undefined;
+      try {
+        const metric = numericMetric(flows[item.index], "value", `KOSPI_FLOW_${item.label}`);
+        return { ...item, ...metric };
+      } catch {
+        return undefined;
+      }
+    }).filter((flow): flow is VerifiedInvestorFlow => Boolean(flow));
+    const includeInvestorFlowChart = kospiFlows.length === 3
+      && hasMeaningfulInvestorFlowValues(kospiFlows.map((flow) => flow.value))
+      && kospiFlows.every((flow) => flow.metric.unit === "백만원")
+      && isInvestorFlowDateEligible(
+        input.template,
+        input.marketDate ?? snapshot.marketDate,
+        kospiFlows.map((flow) => flow.metric.asOf!),
+      );
+    const formattedInvestorFlows = includeInvestorFlowChart
+      ? formatInvestorFlowChartValues(kospiFlows.map((flow) => flow.value))
+      : undefined;
+    const flowAsOf = formattedInvestorFlows ? kospiFlows[0].metric.asOf! : undefined;
+    const flowCopy = formattedInvestorFlows && flowAsOf
+      ? buildInvestorFlowChartCopy(input.template, shortDateLabel(flowAsOf), formattedInvestorFlows.subtitle)
+      : undefined;
 
     await mkdir(outputDir, { recursive: true });
     const indexSource = `기준일 ${dateLabel(kospi.metric.asOf!)}(한국) · ${dateLabel(sp500.metric.asOf!)}(미국) | 출처 한국투자증권 Open API`;
-    const flowSource = `기준일 ${dateLabel(kospiFlows[0].metric.asOf!)} | 단위 조원 | 출처 한국투자증권 Open API`;
+    const flowSource = formattedInvestorFlows
+      ? `기준일 ${dateLabel(kospiFlows[0].metric.asOf!)} | 단위 ${formattedInvestorFlows.unit} | 출처 한국투자증권 Open API`
+      : undefined;
     const macroSource = `기준일 ${dateLabel(tenYear.metric.asOf!)}(금리) · ${dateLabel(fx.metric.asOf!)}(환율) | 출처 한국투자증권 Open API · FRED`;
-    const files = [
+    const files: Array<{ name: string; svg: string }> = [
       {
         name: "thumbnail.svg",
         svg: svgCard({ width: 1200, height: 675, title: thumbnailTitle, subtitle: thumbnailSubtitle, footer, theme, hero: true }),
@@ -417,27 +457,29 @@ export async function generateStockBlogImages(input: {
           ],
         }),
       },
-      {
+    ];
+    if (formattedInvestorFlows && flowSource && flowCopy) {
+      files.push({
         name: "kospi-investor-flow.svg",
         svg: horizontalComparisonSvg({
-          title: "KOSPI 투자자별 순매수 비교",
-          subtitle: "백만원 단위 원자료를 조원으로 환산했습니다.",
+          title: flowCopy.title,
+          subtitle: flowCopy.subtitle,
           source: flowSource,
-          rows: kospiFlows.map((flow) => ({ label: flow.label, value: flow.value / 1_000_000, display: `${signed(flow.value / 1_000_000)}조원` })),
+          rows: kospiFlows.map((flow, index) => ({ label: flow.label, ...formattedInvestorFlows.values[index] })),
         }),
-      },
-      {
-        name: "fx-and-us-yields.svg",
-        svg: ratesAndFxSvg({
-          fx: fx.value,
-          fxChange: fxChange.value,
-          twoYear: twoYear.value,
-          tenYear: tenYear.value,
-          spread: spread.value,
-          source: macroSource,
-        }),
-      },
-    ];
+      });
+    }
+    files.push({
+      name: "fx-and-us-yields.svg",
+      svg: ratesAndFxSvg({
+        fx: fx.value,
+        fxChange: fxChange.value,
+        twoYear: twoYear.value,
+        tenYear: tenYear.value,
+        spread: spread.value,
+        source: macroSource,
+      }),
+    });
     await Promise.all(files.map((file) => writeFile(path.join(outputDir, file.name), file.svg, "utf8")));
     const sizes = await Promise.all(files.map((file) => stat(path.join(outputDir, file.name))));
     if (sizes.some((file) => !file.isFile() || file.size < 500)) throw new Error("IMAGE_FILE_VERIFICATION_FAILED");
@@ -487,14 +529,16 @@ export async function generateStockBlogImages(input: {
         ],
         width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
       },
-      {
+    ];
+    if (formattedInvestorFlows && flowSource && flowCopy) {
+      contentImages.push({
         id: "kospi-investor-flow",
         role: "body",
         type: "chart",
-        title: "KOSPI 투자자별 순매수 비교",
+        title: flowCopy.title,
         placementAfterHeading: placements.kospiInvestorFlow,
         imageUrl: `${relativeDir}/kospi-investor-flow.svg`,
-        caption: "외국인·기관·개인의 KOSPI 순매수 비교",
+        caption: flowCopy.caption,
         sourceLabel: flowSource,
         sourceName: "한국투자증권 Open API",
         sourceUrl: kospiFlows[0].metric.url,
@@ -504,32 +548,32 @@ export async function generateStockBlogImages(input: {
         dataKeys: kospiFlows.map((flow) => `korea.investorFlows.${flow.index}.value`),
         dataPoints: kospiFlows.map((flow) => dataPoint(`korea.investorFlows.${flow.index}.value`, flow.label, flow.value, "백만원", flow.metric.asOf!)),
         width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
-      },
-      {
-        id: "fx-and-us-yields",
-        role: "body",
-        type: "chart",
-        title: "원·달러 환율과 미국 국채금리 현황",
-        placementAfterHeading: placements.fxAndUsYields,
-        imageUrl: `${relativeDir}/fx-and-us-yields.svg`,
-        caption: "원·달러 환율과 미국 2년물·10년물 국채금리 비교",
-        sourceLabel: macroSource,
-        sourceName: "한국투자증권 Open API · FRED",
-        sourceUrl: tenYear.metric.url,
-        licenseType: "generated-data-chart",
-        collectedAt: snapshot.collectedAt,
-        usageAllowed: true,
-        dataKeys: ["us.fx.value", "us.fx.changePct", "macro.us2Year.value", "macro.us10Year.value", "macro.yieldSpread10Y2Y.value"],
-        dataPoints: [
-          dataPoint("us.fx.value", "USD/KRW", fx.value, "원", fx.metric.asOf!),
-          dataPoint("us.fx.changePct", "USD/KRW 등락률", fxChange.value, "%", fxChange.metric.asOf!),
-          dataPoint("macro.us2Year.value", "미국 2년물", twoYear.value, "%", twoYear.metric.asOf!),
-          dataPoint("macro.us10Year.value", "미국 10년물", tenYear.value, "%", tenYear.metric.asOf!),
-          dataPoint("macro.yieldSpread10Y2Y.value", "10Y-2Y", spread.value, "%p", spread.metric.asOf!),
-        ],
-        width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
-      },
-    ];
+      });
+    }
+    contentImages.push({
+      id: "fx-and-us-yields",
+      role: "body",
+      type: "chart",
+      title: "원·달러 환율과 미국 국채금리 현황",
+      placementAfterHeading: placements.fxAndUsYields,
+      imageUrl: `${relativeDir}/fx-and-us-yields.svg`,
+      caption: "원·달러 환율과 미국 2년물·10년물 국채금리 비교",
+      sourceLabel: macroSource,
+      sourceName: "한국투자증권 Open API · FRED",
+      sourceUrl: tenYear.metric.url,
+      licenseType: "generated-data-chart",
+      collectedAt: snapshot.collectedAt,
+      usageAllowed: true,
+      dataKeys: ["us.fx.value", "us.fx.changePct", "macro.us2Year.value", "macro.us10Year.value", "macro.yieldSpread10Y2Y.value"],
+      dataPoints: [
+        dataPoint("us.fx.value", "USD/KRW", fx.value, "원", fx.metric.asOf!),
+        dataPoint("us.fx.changePct", "USD/KRW 등락률", fxChange.value, "%", fxChange.metric.asOf!),
+        dataPoint("macro.us2Year.value", "미국 2년물", twoYear.value, "%", twoYear.metric.asOf!),
+        dataPoint("macro.us10Year.value", "미국 10년물", tenYear.value, "%", tenYear.metric.asOf!),
+        dataPoint("macro.yieldSpread10Y2Y.value", "10Y-2Y", spread.value, "%p", spread.metric.asOf!),
+      ],
+      width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
+    });
     const imageQuality = evaluateStockBlogImageQuality(contentImages, snapshot);
     if (imageQuality.status !== "passed") throw new Error(imageQuality.issues.map((issue) => `${issue.code}:${issue.message}`).join(" | "));
     return {

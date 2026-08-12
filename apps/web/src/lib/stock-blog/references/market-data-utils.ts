@@ -3,7 +3,9 @@ import type { MarketSnapshotFreshness, MarketSnapshotMetric, MarketSnapshotSourc
 export function asNumber(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value !== "string") return undefined;
-  const parsed = Number(value.replace(/,/g, "").trim());
+  const normalized = value.replace(/,/g, "").trim();
+  if (!normalized) return undefined;
+  const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 

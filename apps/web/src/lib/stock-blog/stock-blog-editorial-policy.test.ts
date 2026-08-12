@@ -67,6 +67,8 @@ test("일일·주간 템플릿에 서로 다른 분량과 고정 구조를 제�
   assert.ok(weekly.bodyStructure.includes("4. 다음 주 핵심 일정"));
   assert.match(getStockBlogEditorialGuidelines("KOREA_DAILY_PREVIEW").join("\n"), /댓글·공감·이웃·투표/);
   assert.match(getStockBlogEditorialGuidelines("KOREA_DAILY_PREVIEW").join("\n"), /전일 한국장 마감을 2~3문장/);
+  assert.match(getStockBlogEditorialGuidelines("KOREA_DAILY_PREVIEW").join("\n"), /직전 거래일의 확정값/);
+  assert.match(getStockBlogEditorialGuidelines("KOREA_DAILY_PREVIEW").join("\n"), /오늘 수급 금액을 예측하지 말고/);
   assert.match(getStockBlogEditorialGuidelines("KOREA_MARKET_CLOSE_US_PREVIEW").join("\n"), /전일 S&P500·나스닥·다우/);
   assert.match(getStockBlogEditorialGuidelines("WEEKLY_MARKET_REVIEW").join("\n"), /본문의 70% 이상을 이번 주 한국·미국/);
   assert.match(getStockBlogEditorialGuidelines("NEXT_WEEK_MARKET_PREVIEW").join("\n"), /본문의 70% 이상을 다음 주/);
