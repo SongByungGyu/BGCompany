@@ -22,6 +22,11 @@ import {
   shouldClearRecoverablePipelineCircuitBreaker,
 } from "@/lib/stock-blog/stock-blog-scheduler-policy";
 import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
+import {
+  qualifiesForConditionalInvestmentStudy,
+  selectInvestmentStudyTopic,
+  type InvestmentStudyTopicSelection,
+} from "@/lib/stock-blog/investment-study-topic";
 import { resolveApproval } from "@/lib/repositories/approval-actions";
 import {
   getExpectedHermesRunsForStockBlog,
@@ -55,6 +60,7 @@ export type StockBlogSchedulerConfig = {
   maxRetries: number;
   retryDelayMinutes: number;
   largeCapEventsEnabled: boolean;
+  weekdayInvestmentStudyEnabled: boolean;
 };
 
 export type StockBlogSchedulerPlanItem = StockBlogScheduleItem & {
@@ -89,6 +95,9 @@ export type StockBlogSchedulerRunResult = {
   qualityGate?: StockBlogQualityGateResult;
   officialEventCount?: number;
   officialProviders?: LargeCapDisclosureScanResult["providers"];
+  studyTopicMode?: InvestmentStudyTopicSelection["mode"];
+  studyIssueScore?: number;
+  studyIssueReasons?: string[];
 };
 
 export type StockBlogSchedulerStatus = {
@@ -107,6 +116,7 @@ export type StockBlogSchedulerStatus = {
   maxRetries: number;
   retryDelayMinutes: number;
   largeCapEventsEnabled: boolean;
+  weekdayInvestmentStudyEnabled: boolean;
   now: string;
   plan: StockBlogSchedulerPlanItem[];
   nextRun: StockBlogSchedulerPlanItem | null;
@@ -131,27 +141,8 @@ type StockBlogSchedulerDefinition = StockBlogScheduleItem & {
   scheduledTime: string;
   title: (date: string) => string;
   topic: string;
+  investmentStudyMode?: "fixed" | "conditional";
 };
-
-const INVESTMENT_STUDY_TOPICS = [
-  { title: "PER이 낮다고 항상 싼 주식은 아닌 이유", topic: "PER 계산법과 업종별 비교, 이익의 질을 함께 보는 방법" },
-  { title: "영업이익보다 현금흐름을 같이 봐야 하는 이유", topic: "영업이익과 영업현금흐름 차이, 현금이익의 질을 실제 사례로 이해하기" },
-  { title: "배당기준일과 배당락일을 제대로 이해하는 법", topic: "배당기준일·배당락일·배당수익률 계산과 주가 조정 원리" },
-  { title: "금리가 오르면 성장주가 흔들리는 이유", topic: "할인율과 미래 현금흐름으로 이해하는 금리와 성장주 가치 관계" },
-  { title: "재고자산이 늘 때 실적에서 확인할 것", topic: "재고자산 회전율과 매출 성장, 현금흐름으로 재고 증가의 질 판단하기" },
-  { title: "ROE가 높아도 꼭 좋은 기업은 아닌 이유", topic: "ROE를 순이익률·자산회전율·재무레버리지로 나눠 기업의 질 판단하기" },
-  { title: "부채비율보다 먼저 확인할 숫자", topic: "부채비율·순차입금·이자보상배율을 함께 보는 재무 안전성 공부" },
-  { title: "매출이 조금 늘어도 이익이 크게 움직이는 이유", topic: "고정비와 영업레버리지로 이해하는 매출 성장과 영업이익 변화" },
-  { title: "자사주 매입과 소각은 무엇이 다른가", topic: "자사주 취득·처분·소각이 주당 가치와 주주환원에 미치는 영향" },
-  { title: "실적 발표에서 가이던스를 먼저 보는 법", topic: "과거 실적과 다음 분기 가이던스를 구분하고 예상치 변화 판단하기" },
-  { title: "원달러 환율이 기업 실적에 미치는 영향", topic: "수출·수입 기업의 매출과 비용 구조로 환율 수혜와 부담 구분하기" },
-  { title: "ETF 추적오차와 괴리율은 왜 생기나", topic: "ETF 기준가격·시장가격·추적오차·괴리율을 숫자와 사례로 이해하기" },
-] as const;
-
-function getInvestmentStudyTopic(now: Date) {
-  const weekIndex = Math.floor(now.getTime() / (7 * 24 * 60 * 60 * 1000));
-  return INVESTMENT_STUDY_TOPICS[weekIndex % INVESTMENT_STUDY_TOPICS.length];
-}
 
 const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
   {
@@ -197,18 +188,49 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     title: (date) => `${date} 이번 주 증시 정리: 코스피·나스닥·주도 업종`,
   },
   {
-    scheduleId: "saturday-investment-study",
+    scheduleId: "weekday-fixed-investment-study-tuesday",
     contentType: "INVESTMENT_STUDY",
-    label: "토요일 투자 공부",
-    cadence: "매주 토요일",
-    scheduledTimeKst: "19:00 KST",
-    scheduledTime: "19:00",
-    weekdays: [6],
-    objective: "매주 다른 투자 개념 하나를 숫자와 실제 사례로 쉽게 설명합니다.",
-    primaryAudience: "주식 기초와 재무제표를 차근차근 공부하는 투자자",
+    label: "화요일 시장 연결 투자 공부",
+    cadence: "매주 화요일",
+    scheduledTimeKst: "12:10 KST",
+    scheduledTime: "12:10",
+    weekdays: [2],
+    objective: "당일 코스피·미국장 이슈가 있으면 그 이슈의 투자 원리를 설명하고, 조용한 날에는 검색형 기초 개념을 발행합니다.",
+    primaryAudience: "당일 시장 움직임의 원리를 이해하려는 투자자",
     recommendedRunnerMode: "hermes",
-    topic: "매주 순환하는 주식 투자 개념 공부",
-    title: (date) => `${date} 주식 투자 공부: 숫자와 사례로 이해하기`,
+    topic: "오늘 코스피·미국장 핵심 이슈와 연결한 주식 투자 공부",
+    title: (date) => `${date} 오늘 시장 이슈로 배우는 주식 투자 원리`,
+    investmentStudyMode: "fixed",
+  },
+  {
+    scheduleId: "weekday-fixed-investment-study-thursday",
+    contentType: "INVESTMENT_STUDY",
+    label: "목요일 시장 연결 투자 공부",
+    cadence: "매주 목요일",
+    scheduledTimeKst: "12:10 KST",
+    scheduledTime: "12:10",
+    weekdays: [4],
+    objective: "당일 코스피·미국장 이슈가 있으면 그 이슈의 투자 원리를 설명하고, 조용한 날에는 검색형 기초 개념을 발행합니다.",
+    primaryAudience: "당일 시장 움직임의 원리를 이해하려는 투자자",
+    recommendedRunnerMode: "hermes",
+    topic: "오늘 코스피·미국장 핵심 이슈와 연결한 주식 투자 공부",
+    title: (date) => `${date} 오늘 시장 이슈로 배우는 주식 투자 원리`,
+    investmentStudyMode: "fixed",
+  },
+  {
+    scheduleId: "weekday-market-issue-investment-study",
+    contentType: "INVESTMENT_STUDY",
+    label: "코스피·미국장 이슈 조건부 투자 공부",
+    cadence: "월·수·금 중 이슈가 확인된 날 · 주 1회 한도",
+    scheduledTimeKst: "12:10 KST 조건부 확인",
+    scheduledTime: "12:10",
+    weekdays: [1, 3, 5],
+    objective: "코스피·코스닥·나스닥 급변이나 물가·금리·반도체·실적 이슈가 확인될 때만 투자 원리 공부 글을 추가 발행합니다.",
+    primaryAudience: "뉴스를 투자 원리까지 연결해 이해하려는 투자자",
+    recommendedRunnerMode: "hermes",
+    topic: "오늘 코스피·미국장 핵심 이슈로 배우는 투자 원리",
+    title: (date) => `${date} 코스피·미국장 이슈로 배우는 투자 원리`,
+    investmentStudyMode: "conditional",
   },
   {
     scheduleId: "sunday-next-week-market-preview",
@@ -292,6 +314,7 @@ export function getStockBlogSchedulerConfig(): StockBlogSchedulerConfig {
     maxRetries: parsePositiveInt(process.env.STOCK_BLOG_SCHEDULER_MAX_RETRIES, DEFAULT_MAX_RETRIES),
     retryDelayMinutes: parsePositiveInt(process.env.STOCK_BLOG_SCHEDULER_RETRY_DELAY_MINUTES, DEFAULT_RETRY_DELAY_MINUTES),
     largeCapEventsEnabled: parseBoolean(process.env.STOCK_BLOG_LARGE_CAP_EVENTS_ENABLED, false),
+    weekdayInvestmentStudyEnabled: parseBoolean(process.env.STOCK_BLOG_WEEKDAY_INVESTMENT_STUDY_ENABLED, false),
   };
 }
 
@@ -387,17 +410,51 @@ function briefDateLabel(now: Date, timezone: string) {
 
 function buildPipelineInput(definition: StockBlogSchedulerDefinition, runnerMode: StockBlogSchedulerRunnerMode, now: Date, timezone: string) {
   const date = briefDateLabel(now, timezone);
-  const study = definition.contentType === "INVESTMENT_STUDY" ? getInvestmentStudyTopic(now) : null;
   return {
-    topic: study?.topic ?? definition.topic,
+    topic: definition.topic,
     title: buildStockBlogEditorialTitle({
       template: definition.contentType,
       marketDate: date,
-      sourceTitle: study?.title ?? definition.title(date),
+      sourceTitle: definition.title(date),
     }),
     channel: "blog",
     runnerMode,
     contentType: definition.contentType,
+  };
+}
+
+async function buildInvestmentStudyPipelineInput(
+  definition: StockBlogSchedulerDefinition,
+  runnerMode: StockBlogSchedulerRunnerMode,
+  now: Date,
+  timezone: string,
+) {
+  const date = briefDateLabel(now, timezone);
+  const discoveryTitle = `${date} 오늘 코스피·미국장 이슈로 배우는 투자 원리`;
+  const referenceBundle = await collectStockBlogReferences({
+    topic: "오늘 코스피·코스닥·나스닥 급등락과 금리·환율·물가·반도체·실적 이슈의 투자 원리",
+    title: discoveryTitle,
+    channel: "blog",
+    contentType: "INVESTMENT_STUDY",
+    market: "GLOBAL",
+    keywords: ["코스피", "나스닥", "금리", "반도체"],
+    maxResults: 6,
+  });
+  const selection = selectInvestmentStudyTopic({ now, referenceBundle });
+  return {
+    selection,
+    input: {
+      topic: selection.topic,
+      title: buildStockBlogEditorialTitle({
+        template: definition.contentType,
+        marketDate: date,
+        sourceTitle: selection.title,
+      }),
+      channel: "blog" as const,
+      runnerMode,
+      contentType: definition.contentType,
+      referenceBundle,
+    },
   };
 }
 
@@ -548,6 +605,37 @@ function retryState(
   });
 }
 
+function startOfSchedulerWeek(now: Date, timezone: string) {
+  const parts = getZonedParts(now, timezone);
+  const daysFromMonday = parts.weekday === 0 ? -6 : 1 - parts.weekday;
+  const monday = addDays(parts, daysFromMonday, timezone);
+  return zonedDateTimeToUtc(monday.year, monday.month, monday.day, 0, 0, timezone);
+}
+
+async function hasConditionalInvestmentStudyRunThisWeek(
+  now: Date,
+  timezone: string,
+  currentScheduleKey: string,
+) {
+  const events = await prisma.eventLog.findMany({
+    where: {
+      type: EVENT_TYPE,
+      timestamp: { gte: startOfSchedulerWeek(now, timezone) },
+    },
+    orderBy: { timestamp: "desc" },
+    take: 50,
+    select: { payload: true },
+  });
+  return events.some((event) => {
+    const payload = eventPayload(event.payload);
+    const scheduleKeyValue = typeof payload.scheduleKey === "string" ? payload.scheduleKey : "";
+    const status = typeof payload.status === "string" ? payload.status : "";
+    return scheduleKeyValue !== currentScheduleKey
+      && scheduleKeyValue.startsWith("weekday-market-issue-investment-study-")
+      && ["running", "succeeded", "partial_failed"].includes(status);
+  });
+}
+
 export function buildStockBlogSchedulerPlan(now = new Date(), config = getStockBlogSchedulerConfig()): StockBlogSchedulerPlanItem[] {
   return STOCK_BLOG_SCHEDULE_DEFINITIONS.map((definition) => {
     const time = parseTime(definition.scheduledTime);
@@ -589,6 +677,7 @@ export async function getStockBlogSchedulerStatus(now = new Date()): Promise<Sto
     maxRetries: config.maxRetries,
     retryDelayMinutes: config.retryDelayMinutes,
     largeCapEventsEnabled: config.largeCapEventsEnabled,
+    weekdayInvestmentStudyEnabled: config.weekdayInvestmentStudyEnabled,
     now: now.toISOString(),
     plan,
     nextRun: plan[0] ?? null,
@@ -649,6 +738,138 @@ async function runOneSchedule(
   });
 
   try {
+    let investmentStudyBuild: Awaited<ReturnType<typeof buildInvestmentStudyPipelineInput>> | null = null;
+    if (contentType === "INVESTMENT_STUDY" && definition.investmentStudyMode && !resumablePipelineId) {
+      if (!config.weekdayInvestmentStudyEnabled) {
+        const result: StockBlogSchedulerRunResult = {
+          scheduleId: definition.scheduleId,
+          contentType,
+          scheduleKey: key,
+          scheduledFor,
+          status: "skipped",
+          attempt,
+          reason: "평일 시장 연결 투자공부 기능이 비활성화되어 있습니다.",
+        };
+        await writeSchedulerEvent({
+          key,
+          contentType,
+          scheduledFor,
+          status: "skipped",
+          summary: `${contentType} 평일 투자공부 비활성화`,
+          payload: result as unknown as Prisma.InputJsonObject,
+        });
+        return result;
+      }
+      if (config.runnerMode === "hermes") {
+        const requiredRuns = getExpectedHermesRunsForStockBlog(contentType);
+        const usage = usageSnapshot(await getHermesUsageSummary({ recentLimit: 4 }));
+        if (usage.remaining < requiredRuns) {
+          const result: StockBlogSchedulerRunResult = {
+            scheduleId: definition.scheduleId,
+            contentType,
+            scheduleKey: key,
+            scheduledFor,
+            status: "deferred",
+            attempt,
+            reason: `Hermes 남은 횟수 부족: ${requiredRuns}회 필요, ${usage.remaining}회 남음`,
+            hermesUsageBefore: usage,
+          };
+          await writeSchedulerEvent({
+            key,
+            contentType,
+            scheduledFor,
+            status: "deferred",
+            summary: `${contentType} 자동 실행 대기 · Hermes 한도 부족`,
+            payload: result as unknown as Prisma.InputJsonObject,
+          });
+          return result;
+        }
+      }
+      if (
+        definition.investmentStudyMode === "conditional"
+        && await hasConditionalInvestmentStudyRunThisWeek(now, config.timezone, key)
+      ) {
+        const result: StockBlogSchedulerRunResult = {
+          scheduleId: definition.scheduleId,
+          contentType,
+          scheduleKey: key,
+          scheduledFor,
+          status: "skipped",
+          attempt,
+          reason: "이번 주 조건부 투자공부 1회 한도를 이미 사용했습니다.",
+        };
+        await writeSchedulerEvent({
+          key,
+          contentType,
+          scheduledFor,
+          status: "skipped",
+          summary: `${contentType} 조건부 주간 한도 도달`,
+          payload: result as unknown as Prisma.InputJsonObject,
+        });
+        return result;
+      }
+
+      investmentStudyBuild = await buildInvestmentStudyPipelineInput(
+        definition,
+        config.runnerMode,
+        scheduledAt,
+        config.timezone,
+      );
+      if (definition.investmentStudyMode === "conditional") {
+        const bundle = investmentStudyBuild.input.referenceBundle;
+        const dataReady = bundle.status === "ready"
+          && bundle.marketSnapshot?.status === "ready"
+          && bundle.marketSnapshot?.dataQuality === "verified"
+          && bundle.marketSnapshot?.freshness?.status === "fresh";
+        if (!dataReady) {
+          const result: StockBlogSchedulerRunResult = {
+            scheduleId: definition.scheduleId,
+            contentType,
+            scheduleKey: key,
+            scheduledFor,
+            status: "deferred",
+            attempt,
+            reason: "조건부 투자공부 판단용 시장·검색 데이터가 아직 검증되지 않았습니다.",
+            studyTopicMode: investmentStudyBuild.selection.mode,
+            studyIssueScore: investmentStudyBuild.selection.score,
+            studyIssueReasons: investmentStudyBuild.selection.reasons,
+          };
+          await writeSchedulerEvent({
+            key,
+            contentType,
+            scheduledFor,
+            status: "deferred",
+            summary: `${contentType} 조건부 이슈 데이터 재확인 대기`,
+            payload: result as unknown as Prisma.InputJsonObject,
+          });
+          return result;
+        }
+        if (!qualifiesForConditionalInvestmentStudy(investmentStudyBuild.selection)) {
+          const result: StockBlogSchedulerRunResult = {
+            scheduleId: definition.scheduleId,
+            contentType,
+            scheduleKey: key,
+            scheduledFor,
+            status: "skipped",
+            attempt,
+            reason: "검색 유입형 투자공부로 확장할 만큼 강한 코스피·미국장 이슈가 확인되지 않았습니다.",
+            studyTopicMode: investmentStudyBuild.selection.mode,
+            studyIssueScore: investmentStudyBuild.selection.score,
+            studyIssueReasons: investmentStudyBuild.selection.reasons,
+          };
+          await writeSchedulerEvent({
+            key,
+            contentType,
+            scheduledFor,
+            status: "skipped",
+            summary: `${contentType} 조건부 이슈 기준 미달`,
+            payload: result as unknown as Prisma.InputJsonObject,
+          });
+          return result;
+        }
+      }
+    }
+
     let largeCapScan: LargeCapDisclosureScanResult | null = null;
     if (contentType === "LARGE_CAP_DISCLOSURE_EARNINGS" && !resumablePipelineId) {
       if (!config.largeCapEventsEnabled) {
@@ -791,7 +1012,8 @@ async function runOneSchedule(
 
     const pipelineInput = largeCapScan
       ? await buildLargeCapPipelineInput(definition, config.runnerMode, scheduledAt, config.timezone, largeCapScan)
-      : buildPipelineInput(definition, config.runnerMode, scheduledAt, config.timezone);
+      : investmentStudyBuild?.input
+        ?? buildPipelineInput(definition, config.runnerMode, scheduledAt, config.timezone);
     const pipeline = await startContentPipeline(pipelineInput);
     const approvalId = pipeline.approvalId ?? null;
     let naverDraftJobId: string | undefined;
@@ -859,6 +1081,9 @@ async function runOneSchedule(
       qualityGate,
       officialEventCount: largeCapScan?.events.length,
       officialProviders: largeCapScan?.providers,
+      studyTopicMode: investmentStudyBuild?.selection.mode,
+      studyIssueScore: investmentStudyBuild?.selection.score,
+      studyIssueReasons: investmentStudyBuild?.selection.reasons,
     };
     await writeSchedulerEvent({
       key,

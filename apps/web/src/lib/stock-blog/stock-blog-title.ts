@@ -11,6 +11,7 @@ const DEFAULT_HOOKS: Record<StockBriefingTemplate, string> = {
 
 const PROHIBITED_TITLE_EXPRESSIONS = ["급등 확정", "무조건 상승", "매수 추천", "수익 보장", "상한가 확정", "폭등", "몰빵"];
 const MARKET_TITLE_PATTERN = /(?:증시|시장|한국장|미국장|코스피|코스닥|나스닥|S&P\s*500)/i;
+const INVESTMENT_STUDY_TITLE_PATTERN = /(?:PER|PBR|ROE|현금흐름|배당락|금리|FOMC|PPI|CPI|물가|환율|원달러|반도체|실적|가이던스|자사주|유가|외국인|기관|수급|ETF|영업레버리지|재고자산)/i;
 const LEADING_DATE_PATTERN = /^(?:(?:20)?\d{2}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}\/\d{1,2}|20\d{2}년\s*\d{1,2}월\s*\d{1,2}일)\s*/;
 const TRAILING_DATE_PATTERN = /(?:\s*[|｜·\-–—]?\s*(?:(?:20\d{2}년\s*)?\d{1,2}월\s*\d{1,2}일(?:\s*기준)?|\d{1,2}월\s*\d{1,2}주차))+\s*$/;
 const TITLE_GENERIC_TOKENS = new Set([
@@ -36,7 +37,7 @@ const TEMPLATE_INTENT_TERMS: Record<StockBriefingTemplate, string[]> = {
   KOREA_MARKET_CLOSE_US_PREVIEW: ["오늘", "미국장", "나스닥", "S&P500", "금리", "선물", "실적"],
   WEEKLY_MARKET_REVIEW: ["주간", "이번 주", "코스피", "나스닥", "수급", "주도 업종", "변화"],
   NEXT_WEEK_MARKET_PREVIEW: ["다음 주", "주요 이슈", "섹터", "일정", "실적", "경제지표"],
-  INVESTMENT_STUDY: ["투자 공부", "주식 기초", "재무제표", "PER", "현금흐름", "배당"],
+  INVESTMENT_STUDY: ["투자 공부", "주식 기초", "재무제표", "PER", "현금흐름", "배당", "코스피", "나스닥", "금리", "물가", "반도체", "실적"],
   LARGE_CAP_DISCLOSURE_EARNINGS: ["공시", "실적", "대형주", "매출", "영업이익", "가이던스"],
 };
 
@@ -145,7 +146,9 @@ export function buildStockBlogEditorialTitle(input: {
 }) {
   const sourceTitle = stripDecorativeDate(removeProhibitedExpressions(input.sourceTitle?.trim() ?? ""));
   const suffix = dateSuffix(input.template, input.marketDate);
-  if (sourceTitle.length >= 15 && MARKET_TITLE_PATTERN.test(sourceTitle)) return withDateSuffix(sourceTitle, suffix);
+  const preservesSearchIntent = MARKET_TITLE_PATTERN.test(sourceTitle)
+    || (input.template === "INVESTMENT_STUDY" && INVESTMENT_STUDY_TITLE_PATTERN.test(sourceTitle));
+  if (sourceTitle.length >= 15 && preservesSearchIntent) return withDateSuffix(sourceTitle, suffix);
   const prefix = baseTitle(input.template);
   return withDateSuffix(`${prefix}｜${cleanHook(sourceTitle, input.template)}`, suffix);
 }

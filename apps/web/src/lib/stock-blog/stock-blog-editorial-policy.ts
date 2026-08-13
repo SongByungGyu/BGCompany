@@ -182,8 +182,8 @@ export function getStockBlogEditorialGuidelines(contentType: StockReferenceBrief
           ]
           : contentType === "INVESTMENT_STUDY"
             ? [
-              "토요일 투자 공부 글은 한 번에 한 개념만 다룹니다. 정의를 외우게 하지 말고 공식·숫자·실제 기업 또는 시장 사례·틀리기 쉬운 해석 순서로 설명합니다.",
-              "검색 제목에는 PER·현금흐름·배당락처럼 실제로 찾는 구체 용어를 앞에 두고, 최근 지수·금리·업종 사례 하나로 현재 시장과 연결합니다.",
+              "평일 투자 공부 글은 한 번에 한 개념만 다룹니다. 당일 코스피·미국장 이슈가 선택된 경우 검증된 숫자와 뉴스에서 출발해 정의·전달 경로·실제 사례·흔한 오해 순서로 설명합니다.",
+              "검색 제목에는 코스피·나스닥·PPI·금리·반도체·실적 등 당일 검색어와 핵심 숫자 또는 질문을 앞에 두고, '투자 공부' 같은 포괄어만 제목으로 사용하지 않습니다.",
             ]
             : contentType === "LARGE_CAP_DISCLOSURE_EARNINGS"
               ? [

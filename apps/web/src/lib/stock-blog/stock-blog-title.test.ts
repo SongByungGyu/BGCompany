@@ -50,3 +50,11 @@ test("제목 후보는 검색 의도가 구체적이고 최근 제목과 덜 겹
   assert.match(selected.title, /오늘 미국장 전망: 나스닥과 미국 10년물 금리/);
   assert.equal(selected.candidates.length, 3);
 });
+
+test("투자 공부 제목은 시장명이 없어도 당일 이슈 검색어와 질문을 그대로 유지한다", () => {
+  assert.equal(buildStockBlogEditorialTitle({
+    template: "INVESTMENT_STUDY",
+    marketDate: "2026-08-13",
+    sourceTitle: "PPI 발표 뒤 금리와 성장주는 왜 함께 움직일까",
+  }), "PPI 발표 뒤 금리와 성장주는 왜 함께 움직일까｜8월 13일 기준");
+});

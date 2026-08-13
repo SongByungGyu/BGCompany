@@ -31,11 +31,11 @@ const templateQueries: Record<StockReferenceBriefingTemplate, string[]> = {
     "S&P500 나스닥 다음 주 실적 전망",
   ],
   INVESTMENT_STUDY: [
-    "주식 투자 공부 재무제표 기초",
-    "주식 용어 실제 사례 이해",
-    "기업 가치평가 숫자 해석",
-    "초보 투자자 재무제표 보는 법",
-    "금리 업종 주가 관계 투자 공부",
+    "오늘 코스피 나스닥 급등 급락 이유",
+    "오늘 주식시장 핵심 이슈 투자 원리",
+    "금리 환율 물가 실적 주가 영향",
+    "반도체 외국인 수급 투자 공부",
+    "주식 투자 공부 재무제표 실제 사례",
   ],
   LARGE_CAP_DISCLOSURE_EARNINGS: [
     "대형주 실적 발표 공시 분석",

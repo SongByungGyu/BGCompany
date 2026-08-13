@@ -67,6 +67,8 @@ test("투자 공부와 대형주 공시·실적은 각자의 검색 의도로 �
     topic: "삼성전자 공식 실적 발표",
     title: "삼성전자 실적 발표 핵심 숫자",
   });
+  assert.ok(study.some((query) => query.includes("오늘 코스피 나스닥")));
+  assert.ok(study.some((query) => query.includes("금리 환율 물가 실적")));
   assert.ok(study.some((query) => query.includes("재무제표")));
   assert.ok(disclosure.some((query) => query.includes("DART")));
   assert.ok(disclosure.some((query) => query.includes("SEC")));

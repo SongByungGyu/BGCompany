@@ -67,9 +67,16 @@ test("토요일 복기와 일요일 전망은 서로 다른 검색 의도와 본
   assert.match(saturday, /이번 주 증시 정리/);
   assert.match(saturday, /본문의 70% 이상을 이번 주/);
   assert.match(saturday, /다음 주 전망이나 일정은 메인 검색어로 사용하지 않습니다/);
-  assert.match(sunday, /다음 주 증시 전망/);
-  assert.match(sunday, /본문의 70% 이상을.*경제지표·실적 일정/);
-  assert.match(sunday, /토요일 글의 이번 주 수급·주도 업종 복기를 반복하지 않습니다/);
+  assert.match(sunday, /다음 주 증시 주요 이슈/);
+  assert.match(sunday, /본문의 70% 이상을.*경제 및 실적 일정/);
+  assert.match(sunday, /지난주 복기는 짧게/);
+});
+
+test("평일 투자 공부는 당일 이슈·숫자·질문을 검색 의도로 사용한다", () => {
+  const guidelines = getStockBlogSearchIntentGuidelines("INVESTMENT_STUDY").join(" ");
+  assert.match(guidelines, /평일 12시 10분/);
+  assert.match(guidelines, /코스피·나스닥·PPI·금리·반도체·실적/);
+  assert.match(guidelines, /핵심 숫자 또는 질문/);
 });
 
 test("검색 최적화가 댓글 질문형 CTA를 요구하지 않는다", () => {
