@@ -9,7 +9,8 @@ Phase 1-S scheduler prepares stock-market blog drafts on a fixed KST schedule.
 | KOREA_DAILY_PREVIEW | Weekdays | 07:20 KST generation start, publish before 08:20 KST |
 | KOREA_MARKET_CLOSE_US_PREVIEW | Weekdays | 17:00 KST |
 | WEEKLY_MARKET_REVIEW | Saturday | 09:00 KST |
-| INVESTMENT_STUDY | Tuesday and Thursday fixed | 12:10 KST, current market issue preferred |
+| INVESTMENT_STUDY | Tuesday fixed | 12:10 KST, verified upcoming schedule/search question |
+| INVESTMENT_STUDY | Thursday fixed | 12:10 KST, announcement result/practical question |
 | INVESTMENT_STUDY | Monday, Wednesday, or Friday conditional | 12:10 KST, only one extra post per week when the issue score passes |
 | NEXT_WEEK_MARKET_PREVIEW | Sunday | 19:00 KST, main issues/sectors + next-week schedule |
 | LARGE_CAP_DISCLOSURE_EARNINGS | Weekdays | 18:30 KST, only when an official OpenDART/SEC event exists |
@@ -21,7 +22,7 @@ cron tick
 → POST /api/stock-blog/scheduler
 → check due schedule and duplicate EventLog
 → for disclosure/earnings, scan official OpenDART/SEC events and stop without generation when none exist
-→ for investment study, collect current KOSPI/US market references and select an issue-linked lesson; conditional slots stop when the issue score is below the threshold
+→ for investment study, collect current references; Tuesday selects a verified upcoming event question, Thursday selects a result/practical question, and conditional slots stop when the issue score is below the threshold
 → check Hermes remaining count when runnerMode=hermes
 → start content pipeline
 → auto approve Director request

@@ -31,11 +31,11 @@ const templateQueries: Record<StockReferenceBriefingTemplate, string[]> = {
     "S&P500 나스닥 다음 주 실적 전망",
   ],
   INVESTMENT_STUDY: [
+    "이번 주 미국 CPI PPI FOMC 고용지표 발표시간",
     "오늘 코스피 나스닥 급등 급락 이유",
-    "오늘 주식시장 핵심 이슈 투자 원리",
-    "금리 환율 물가 실적 주가 영향",
-    "반도체 외국인 수급 투자 공부",
-    "주식 투자 공부 재무제표 실제 사례",
+    "실적 발표 뒤 주가 하락 이유",
+    "외국인 코스피 순매수 내 종목은 왜 안 오를까",
+    "배당기준일 배당락일 미국장 휴장 ETF 괴리율",
   ],
   LARGE_CAP_DISCLOSURE_EARNINGS: [
     "대형주 실적 발표 공시 분석",

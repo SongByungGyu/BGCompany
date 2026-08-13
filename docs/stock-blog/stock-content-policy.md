@@ -21,6 +21,9 @@ The disclaimer must be present in:
 - Do not imply certainty such as “무조건”, “확정”, or “보장”.
 - If numerical market data is used later, include source and timestamp.
 - In Phase 1-C, live market data is not connected, so the system must not invent exact index values.
+- 공개 글은 자연스러운 한국어 설명체로 쓴다. 검색 질문에 바로 답하고 `이번 글에서는`, `살펴보겠습니다`, `알아보겠습니다` 같은 예고 문장을 쓰지 않는다.
+- `이는 ○○를 시사합니다`, `투자자들은 주목해야 합니다`, `○○로 이어질 것으로 예상됩니다` 같은 번역투·AI 보고서 문장을 쓰지 않는다.
+- 명사를 길게 나열하지 말고 주어와 서술어가 분명한 짧은 문장으로 바꾼다. 같은 문장 시작과 `~합니다` 어미를 연속해서 반복하지 않는다.
 
 ## Forbidden expressions
 

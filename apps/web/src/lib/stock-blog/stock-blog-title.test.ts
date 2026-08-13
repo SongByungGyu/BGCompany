@@ -58,3 +58,11 @@ test("투자 공부 제목은 시장명이 없어도 당일 이슈 검색어와 
     sourceTitle: "PPI 발표 뒤 금리와 성장주는 왜 함께 움직일까",
   }), "PPI 발표 뒤 금리와 성장주는 왜 함께 움직일까｜8월 13일 기준");
 });
+
+test("경제 일정 검색형 제목은 포괄적인 투자 공부 문구를 붙이지 않는다", () => {
+  assert.equal(buildStockBlogEditorialTitle({
+    template: "INVESTMENT_STUDY",
+    marketDate: "2026-08-18",
+    sourceTitle: "미국 CPI 발표시간, 예상보다 높으면 나스닥은 왜 흔들릴까",
+  }), "미국 CPI 발표시간, 예상보다 높으면 나스닥은 왜 흔들릴까｜8월 18일 기준");
+});

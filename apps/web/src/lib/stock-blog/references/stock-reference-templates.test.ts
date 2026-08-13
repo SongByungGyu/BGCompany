@@ -46,7 +46,7 @@ test("토요일은 한국·미국 주간 복기, 일요일은 다음 주 일정�
 test("투자 공부와 대형주 공시·실적은 별도 자료 계약을 사용한다", () => {
   const study = getStockReferenceTemplate("INVESTMENT_STUDY");
   const disclosure = getStockReferenceTemplate("LARGE_CAP_DISCLOSURE_EARNINGS");
-  assert.match(study.label, /평일 시장 연결/);
+  assert.match(study.label, /평일 일정·실전 질문/);
   assert.deepEqual(study.requirements.map((item) => item.id), ["study-definition", "study-example", "study-caution"]);
   assert.deepEqual(disclosure.requirements.map((item) => item.id), ["official-release", "earnings-numbers", "market-impact"]);
   assert.ok(disclosure.requirements[0]?.sourceTypes.includes("disclosure"));

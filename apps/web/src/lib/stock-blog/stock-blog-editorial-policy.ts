@@ -1,6 +1,6 @@
 import type { StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 
-export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 6;
+export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 7;
 
 export const STOCK_BLOG_INVESTMENT_DISCLAIMER = "본 글은 시장 정보를 정리한 투자 참고 자료이며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 최종 투자 판단과 책임은 투자자 본인에게 있습니다.";
 
@@ -16,12 +16,29 @@ export const STOCK_BLOG_HARD_PROHIBITED_PHRASES = [
   "쉽게 말하면",
   "살펴보겠습니다",
   "알아보겠습니다",
+  "이번 글에서는",
+  "이 글에서는",
+  "주목할 필요가 있습니다",
+  "확인할 필요가 있습니다",
+  "시사하는 바가 큽니다",
+  "귀추가 주목됩니다",
+  "종합적으로 판단하면",
+  "결론적으로",
+  "전반적으로 볼 때",
+  "가능성을 배제할 수 없습니다",
   "도움이 되셨다면",
   "공감 부탁",
   "댓글 부탁",
   "이웃 추가",
   "서로이웃",
   "투표해주세요",
+] as const;
+
+const TRANSLATIONESE_PATTERNS = [
+  /이는[^.\n]{0,50}(?:의미|시사)합니다/g,
+  /투자자(?:는|들은)[^.\n]{0,40}(?:주목|확인|유의|주의)해야 합니다/g,
+  /[^.\n]{0,50}(?:이어질|전개될|나타날) 것으로 예상됩니다/g,
+  /(?:먼저|다음으로|마지막으로)[,，]?\s*(?:살펴보면|살펴보겠습니다|알아보면|알아보겠습니다)/g,
 ] as const;
 
 const FORBIDDEN_ENGAGEMENT_PATTERNS = [
@@ -182,8 +199,9 @@ export function getStockBlogEditorialGuidelines(contentType: StockReferenceBrief
           ]
           : contentType === "INVESTMENT_STUDY"
             ? [
-              "평일 투자 공부 글은 한 번에 한 개념만 다룹니다. 당일 코스피·미국장 이슈가 선택된 경우 검증된 숫자와 뉴스에서 출발해 정의·전달 경로·실제 사례·흔한 오해 순서로 설명합니다.",
-              "검색 제목에는 코스피·나스닥·PPI·금리·반도체·실적 등 당일 검색어와 핵심 숫자 또는 질문을 앞에 두고, '투자 공부' 같은 포괄어만 제목으로 사용하지 않습니다.",
+              "화요일 글은 이번 주 공식 경제 일정의 발표시간·예상치·시장 영향 질문을 우선하고, 목요일 글은 발표 결과와 실제 주가 반응을 우선합니다. 연결할 일정이나 결과가 없으면 투자자가 실제로 검색하는 실전 질문 하나를 해결합니다.",
+              "당일 코스피·미국장 이슈가 선택된 경우 검증된 숫자와 뉴스에서 출발해 원인·전달 경로·실제 사례·흔한 오해 순서로 설명합니다.",
+              "검색 제목에는 CPI·PPI·FOMC·코스피·나스닥·외국인 수급·실적처럼 실제 검색어를 앞에 두고, 발표시간·왜·어떻게·받을 수 있을까 같은 구체 질문 하나를 사용합니다. '투자 공부' 같은 포괄어만 제목으로 사용하지 않습니다.",
             ]
             : contentType === "LARGE_CAP_DISCLOSURE_EARNINGS"
               ? [
@@ -205,7 +223,10 @@ export function getStockBlogEditorialGuidelines(contentType: StockReferenceBrief
     "검증된 referenceBundle과 MarketSnapshot에 있는 자료만 사실 근거로 사용합니다. 누락값은 생략하고 전망치와 실제치를 구분하며, 확인되지 않은 원인은 '영향을 줬을 가능성'처럼 범위를 제한합니다.",
     `대표 이미지 1장과 본문 이미지 ${policy.bodyImageMin}~${policy.bodyImageMax}장만 사용합니다. 이미지마다 한 메시지만 담고 캡션·기준일·단위·출처를 표시한 뒤 본문 숫자와 중복 설명하지 않습니다.`,
     "마지막에는 실제 사용 기사와 원문만 표시하고 투자 유의문구를 정확히 한 번 둡니다. 내부 링크는 실제 발행 URL이 있을 때만 1~2개 사용하며 생성·추정하지 않습니다.",
-    "차분한 개인 투자자의 설명체로 쓰고 번역체, 증권사 보고서식 과장, 같은 문장 시작과 어미 반복, '결론부터 말씀드리면·쉽게 말하면·살펴보겠습니다·알아보겠습니다' 같은 AI 상투어를 사용하지 않습니다.",
+    "차분한 개인 투자자가 직접 정리한 것처럼 씁니다. 도입에서 '이번 글에서는' 같은 예고를 하지 말고 검색 질문의 답부터 적습니다. 문단마다 먼저·다음으로·마지막으로를 붙이지 않습니다.",
+    "영문 보고서를 옮긴 듯한 명사 나열과 번역투를 쓰지 않습니다. '금리 상승에 따른 성장주 부담 확대'보다 '금리가 오르면 성장주가 먼저 눌릴 수 있습니다'처럼 주어와 서술어가 분명한 한국어 문장으로 씁니다.",
+    "'이는 ○○를 시사합니다·투자자들은 주목해야 합니다·○○로 이어질 것으로 예상됩니다'처럼 AI가 자주 쓰는 결론형 문장을 금지합니다. 확인된 사실 뒤에는 그 숫자가 왜 중요한지를 짧고 직접적으로 설명합니다.",
+    "증권사 보고서식 과장, 같은 문장 시작과 어미 반복, '결론부터 말씀드리면·쉽게 말하면·살펴보겠습니다·알아보겠습니다' 같은 AI 상투어를 사용하지 않습니다.",
     "문장 중간 강제 줄바꿈, 내용 없는 빈 문단, 연속된 세 줄 이상의 개행, 특수 공백으로 만든 여백을 금지합니다. 문단 사이는 한 번만 구분합니다.",
   ];
 }
@@ -292,7 +313,11 @@ export function inspectStockBlogEditorialContract(
   const coreNumberCount = listItemCount(coreNumbers);
   const beginnerExplanationSentenceCount = sentenceCount(beginner);
   const checklistItemCount = listItemCount(checklist);
-  const forbiddenPhraseMatches = STOCK_BLOG_HARD_PROHIBITED_PHRASES.filter((phrase) => body.includes(phrase));
+  const translationeseMatches = TRANSLATIONESE_PATTERNS.flatMap((pattern) => body.match(pattern) ?? []);
+  const forbiddenPhraseMatches = Array.from(new Set([
+    ...STOCK_BLOG_HARD_PROHIBITED_PHRASES.filter((phrase) => body.includes(phrase)),
+    ...translationeseMatches.map((match) => match.trim()),
+  ]));
   const hasForbiddenEngagementCta = FORBIDDEN_ENGAGEMENT_PATTERNS.some((pattern) => pattern.test(body));
   const excessiveBlankLineRunCount = (body.replace(/\r\n?/g, "\n").match(/\n{3,}|\n[ \t]+\n/g) ?? []).length;
   const hasThirtySecondSummary = Boolean(summary) && summaryLabelCount === 4;

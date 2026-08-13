@@ -1,6 +1,7 @@
 import type { MarketSnapshotMetric, ReferenceBundle, ReferenceItem } from "./references/reference-types";
 
-export type InvestmentStudyTopicMode = "market_issue" | "evergreen";
+export type InvestmentStudyTopicMode = "market_issue" | "search_question";
+export type InvestmentStudyEditorialAngle = "upcoming_question" | "result_or_practical" | "issue_explainer";
 
 export type InvestmentStudyTopicSelection = {
   mode: InvestmentStudyTopicMode;
@@ -13,19 +14,56 @@ export type InvestmentStudyTopicSelection = {
 
 export const INVESTMENT_STUDY_ISSUE_SCORE_THRESHOLD = 3;
 
-const EVERGREEN_TOPICS = [
-  { title: "PER이 낮다고 항상 싼 주식은 아닌 이유", topic: "PER 계산법과 업종별 비교, 이익의 질을 함께 보는 방법" },
-  { title: "영업이익보다 현금흐름을 같이 봐야 하는 이유", topic: "영업이익과 영업현금흐름 차이, 현금이익의 질을 실제 사례로 이해하기" },
-  { title: "배당기준일과 배당락일을 제대로 이해하는 법", topic: "배당기준일·배당락일·배당수익률 계산과 주가 조정 원리" },
-  { title: "금리가 오르면 성장주가 흔들리는 이유", topic: "할인율과 미래 현금흐름으로 이해하는 금리와 성장주 가치 관계" },
-  { title: "재고자산이 늘 때 실적에서 확인할 것", topic: "재고자산 회전율과 매출 성장, 현금흐름으로 재고 증가의 질 판단하기" },
-  { title: "ROE가 높아도 꼭 좋은 기업은 아닌 이유", topic: "ROE를 순이익률·자산회전율·재무레버리지로 나눠 기업의 질 판단하기" },
-  { title: "부채비율보다 먼저 확인할 숫자", topic: "부채비율·순차입금·이자보상배율을 함께 보는 재무 안전성 공부" },
-  { title: "매출이 조금 늘어도 이익이 크게 움직이는 이유", topic: "고정비와 영업레버리지로 이해하는 매출 성장과 영업이익 변화" },
-  { title: "자사주 매입과 소각은 무엇이 다른가", topic: "자사주 취득·처분·소각이 주당 가치와 주주환원에 미치는 영향" },
-  { title: "실적 발표에서 가이던스를 먼저 보는 법", topic: "과거 실적과 다음 분기 가이던스를 구분하고 예상치 변화 판단하기" },
-  { title: "원달러 환율이 기업 실적에 미치는 영향", topic: "수출·수입 기업의 매출과 비용 구조로 환율 수혜와 부담 구분하기" },
-  { title: "ETF 추적오차와 괴리율은 왜 생기나", topic: "ETF 기준가격·시장가격·추적오차·괴리율을 숫자와 사례로 이해하기" },
+const SEARCH_QUESTION_TOPICS = [
+  { title: "PER이 낮은 주식은 정말 싼 걸까", topic: "PER 계산법과 업종별 비교, 일회성 이익을 함께 확인해 낮은 PER을 잘못 해석하지 않는 방법" },
+  { title: "영업이익이 늘었는데 현금흐름은 왜 나빠질까", topic: "영업이익과 영업현금흐름의 차이를 매출채권·재고자산 사례로 이해하는 방법" },
+  { title: "배당기준일 전에 사면 배당을 받을 수 있을까", topic: "배당기준일·배당락일·결제일을 구분하고 실제 매수 시점을 확인하는 방법" },
+  { title: "금리가 내리는데 성장주가 안 오르는 이유는 뭘까", topic: "금리 방향뿐 아니라 실적 전망·위험 프리미엄·밸류에이션이 성장주 주가에 함께 반영되는 과정" },
+  { title: "외국인이 코스피를 사는데 내 종목은 왜 안 오를까", topic: "외국인 순매수의 대형주 집중도와 업종 확산, 현물·선물 수급을 구분해 보는 방법" },
+  { title: "실적이 잘 나왔는데 주가는 왜 떨어질까", topic: "발표 실적·시장 예상치·다음 분기 가이던스가 주가에 반영되는 순서" },
+  { title: "자사주 매입 공시가 나와도 주가가 안 오르는 이유", topic: "자사주 취득·처분·소각의 차이와 실제 매입 규모·기간이 주당 가치와 수급에 미치는 영향" },
+  { title: "원달러 환율이 오르면 수출주는 모두 유리할까", topic: "수출 비중·원재료 수입·환헤지 구조에 따라 기업별 환율 영향이 달라지는 이유" },
+  { title: "미국장 휴장일에는 국내 미국 ETF 가격이 어떻게 될까", topic: "미국 현물시장 휴장 때 국내 상장 미국 ETF의 기준가격·괴리율·환율이 움직이는 방식" },
+  { title: "ETF 괴리율이 커지면 바로 손해일까", topic: "ETF 기준가격·시장가격·추적오차·괴리율의 차이와 매매 전에 확인할 숫자" },
+] as const;
+
+const UPCOMING_EVENT_QUESTIONS = [
+  {
+    pattern: /PPI|Producer Price|생산자물가/i,
+    title: "미국 PPI 발표시간, 예상보다 높으면 나스닥은 왜 흔들릴까",
+    topic: "미국 PPI 공식 발표 일정과 예상·실제 수치를 구분하고, 생산자물가가 국채금리와 나스닥에 전달되는 과정을 설명합니다.",
+    keywords: ["미국 PPI 발표시간", "생산자물가", "나스닥", "미국 금리"],
+  },
+  {
+    pattern: /CPI|Consumer Price|소비자물가/i,
+    title: "미국 CPI 발표시간, 예상보다 높으면 나스닥은 왜 흔들릴까",
+    topic: "미국 CPI 공식 발표 일정과 예상·실제 수치를 구분하고, 소비자물가가 국채금리와 나스닥에 전달되는 과정을 설명합니다.",
+    keywords: ["미국 CPI 발표시간", "소비자물가", "나스닥", "미국 금리"],
+  },
+  {
+    pattern: /FOMC|Federal Reserve|연준|기준금리/i,
+    title: "FOMC 발표시간, 금리 동결에도 나스닥이 움직이는 이유",
+    topic: "FOMC 공식 일정과 기준금리·성명서·기자회견을 구분하고, 금리 동결 뒤에도 나스닥이 움직이는 이유를 설명합니다.",
+    keywords: ["FOMC 발표시간", "연준", "기준금리", "나스닥"],
+  },
+  {
+    pattern: /고용|실업|Nonfarm|Payroll|Employment/i,
+    title: "미국 고용지표 발표시간, 나스닥과 금리는 왜 움직일까",
+    topic: "미국 고용지표 공식 일정과 신규 고용·실업률·임금 지표를 구분하고, 국채금리와 나스닥에 미치는 경로를 설명합니다.",
+    keywords: ["미국 고용지표 발표시간", "비농업 고용", "실업률", "나스닥"],
+  },
+  {
+    pattern: /소매판매|Retail Sales/i,
+    title: "미국 소매판매 발표, 예상보다 강하면 금리는 왜 오를까",
+    topic: "미국 소매판매 공식 일정과 예상·실제 수치를 구분하고, 소비 경기와 국채금리·주식시장에 미치는 경로를 설명합니다.",
+    keywords: ["미국 소매판매 발표", "소비 경기", "미국 금리", "나스닥"],
+  },
+  {
+    pattern: /GDP|국내총생산/i,
+    title: "미국 GDP 발표, 성장률이 높아도 주가가 내릴 수 있는 이유",
+    topic: "미국 GDP 공식 일정과 예상·실제 성장률을 구분하고, 성장 기대와 금리 부담이 주가에 함께 반영되는 과정을 설명합니다.",
+    keywords: ["미국 GDP 발표", "경제성장률", "미국 금리", "주가"],
+  },
 ] as const;
 
 type MarketMove = {
@@ -46,49 +84,49 @@ const ISSUE_CATEGORIES: IssueCategory[] = [
   {
     id: "inflation",
     pattern: /PPI|CPI|생산자물가|소비자물가|물가지수/i,
-    title: "PPI·CPI 발표 뒤 나스닥이 흔들리는 이유",
+    title: "PPI·CPI 발표 뒤 나스닥은 왜 흔들릴까",
     topic: "당일 물가 지표와 미국 국채금리·나스닥 반응을 사례로 인플레이션 지표가 성장주 가치에 전달되는 과정을 공부합니다.",
     keywords: ["PPI", "CPI", "나스닥", "미국 금리"],
   },
   {
     id: "rates",
     pattern: /FOMC|연준|기준금리|국채금리|10년물|2년물|금리 인상|금리 인하/i,
-    title: "미국 금리 변화에 나스닥이 민감한 이유",
+    title: "미국 금리가 움직이면 나스닥은 왜 더 민감할까",
     topic: "당일 미국 금리 이슈와 나스닥 반응을 사례로 할인율·채권수익률·성장주 밸류에이션의 관계를 공부합니다.",
     keywords: ["미국 금리", "10년물", "나스닥", "성장주"],
   },
   {
     id: "semiconductor",
     pattern: /삼성전자|SK하이닉스|반도체|HBM|엔비디아|필라델피아 반도체/i,
-    title: "반도체 급등락 때 외국인 수급을 읽는 법",
+    title: "외국인이 반도체를 사는데 내 종목은 왜 안 오를까",
     topic: "당일 반도체 이슈와 코스피·외국인 수급을 사례로 대형주 집중 매수와 업종 확산 여부를 공부합니다.",
     keywords: ["반도체", "삼성전자", "SK하이닉스", "외국인 수급"],
   },
   {
     id: "earnings",
     pattern: /실적|가이던스|영업이익|매출|어닝|서프라이즈|쇼크/i,
-    title: "실적 발표 뒤 주가가 엇갈리는 이유: 가이던스 읽는 법",
+    title: "실적이 잘 나왔는데 주가는 왜 떨어질까",
     topic: "당일 실적 발표 사례로 발표값·시장 예상·다음 분기 가이던스가 주가에 반영되는 순서를 공부합니다.",
     keywords: ["실적", "가이던스", "영업이익", "주가"],
   },
   {
     id: "shareholder_return",
     pattern: /주주환원|자사주|배당|소각|공개매수/i,
-    title: "자사주·배당 공시가 주가에 미치는 영향",
+    title: "자사주 매입 공시가 나와도 주가가 안 오르는 이유",
     topic: "당일 주주환원 공시 사례로 자사주 매입·소각·배당이 주당 가치와 수급에 미치는 차이를 공부합니다.",
     keywords: ["주주환원", "자사주", "배당", "공시"],
   },
   {
     id: "fx",
     pattern: /원달러|원·달러|환율|달러 강세|달러 약세/i,
-    title: "원달러 환율 변화가 코스피 업종에 미치는 영향",
+    title: "원달러 환율이 오르면 수출주는 모두 유리할까",
     topic: "당일 원달러 환율과 코스피 업종 흐름을 사례로 수출·수입 기업의 환율 수혜와 외국인 수급을 공부합니다.",
     keywords: ["원달러 환율", "코스피", "외국인 수급", "수출주"],
   },
   {
     id: "oil",
     pattern: /국제유가|원유|유가|OPEC|호르무즈/i,
-    title: "국제유가 급등락이 코스피 업종에 미치는 영향",
+    title: "국제유가가 오르면 정유주와 항공주는 어떻게 달라질까",
     topic: "당일 국제유가 이슈를 사례로 정유·화학·항공·운송 업종의 비용과 이익이 달라지는 경로를 공부합니다.",
     keywords: ["국제유가", "정유", "화학", "항공"],
   },
@@ -132,13 +170,14 @@ function categoryMatches(items: ReferenceItem[]) {
   }).sort((left, right) => right.score - left.score || right.matched.length - left.matched.length);
 }
 
-function highImpactEvents(bundle: ReferenceBundle, now: Date) {
+function highImpactEvents(bundle: ReferenceBundle, now: Date, horizonDays = 1) {
   const today = bundle.marketDate ?? now.toISOString().slice(0, 10);
-  const tomorrow = new Date(`${today}T00:00:00.000Z`);
-  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-  const tomorrowDate = tomorrow.toISOString().slice(0, 10);
+  const lastDate = new Date(`${today}T00:00:00.000Z`);
+  lastDate.setUTCDate(lastDate.getUTCDate() + horizonDays);
+  const lastDateText = lastDate.toISOString().slice(0, 10);
   return (bundle.marketSnapshot?.upcoming ?? []).filter((event) => (
-    (event.date === today || event.date === tomorrowDate)
+    event.date >= today
+    && event.date <= lastDateText
     && HIGH_IMPACT_EVENT_PATTERN.test(event.event)
   ));
 }
@@ -154,22 +193,61 @@ function marketMoves(bundle: ReferenceBundle): MarketMove[] {
   ];
 }
 
-function selectEvergreen(now: Date): InvestmentStudyTopicSelection {
+function selectSearchQuestion(now: Date): InvestmentStudyTopicSelection {
   const dayIndex = Math.floor(now.getTime() / (24 * 60 * 60 * 1000));
-  const selected = EVERGREEN_TOPICS[dayIndex % EVERGREEN_TOPICS.length];
+  const selected = SEARCH_QUESTION_TOPICS[dayIndex % SEARCH_QUESTION_TOPICS.length];
   return {
-    mode: "evergreen",
+    mode: "search_question",
     title: selected.title,
     topic: selected.topic,
     score: 0,
-    reasons: ["당일 시장 이슈 점수가 기준에 미달해 순환형 투자공부 주제를 선택했습니다."],
-    keywords: [],
+    reasons: ["당일 강한 시장 이슈가 없어 투자자가 실제로 검색하는 질문형 주제를 선택했습니다."],
+    keywords: selected.title.split(/[\s,·/]+/).filter((keyword) => keyword.length >= 2).slice(0, 4),
+  };
+}
+
+function selectUpcomingEventQuestion(
+  events: Array<{ date: string; event: string }>,
+): InvestmentStudyTopicSelection | null {
+  for (const event of events) {
+    const question = UPCOMING_EVENT_QUESTIONS.find((candidate) => candidate.pattern.test(event.event));
+    if (!question) continue;
+    return {
+      mode: "search_question",
+      title: question.title,
+      topic: question.topic,
+      score: 2,
+      reasons: [`검증된 오늘·내일 일정에서 ${event.date} ${event.event} 발표를 확인했습니다.`],
+      keywords: [...question.keywords],
+    };
+  }
+  return null;
+}
+
+function selectMarketMoveLesson(strongestMove?: MarketMove & { score: number }): InvestmentStudyTopicSelection | null {
+  if (!strongestMove || typeof strongestMove.metric?.changePct !== "number") return null;
+  const change = strongestMove.metric.changePct;
+  const usMarket = strongestMove.market === "US";
+  return {
+    mode: "market_issue",
+    title: usMarket
+      ? `${strongestMove.label} ${formatPct(change)}, 금리와 성장주는 왜 함께 움직였을까`
+      : `${strongestMove.label} ${formatPct(change)}, 외국인 수급은 어떻게 읽어야 할까`,
+    topic: usMarket
+      ? `${strongestMove.label} ${formatPct(change)} 변동을 실제 사례로 미국 국채금리·할인율·성장주 밸류에이션의 연결 과정을 공부합니다.`
+      : `${strongestMove.label} ${formatPct(change)} 변동을 실제 사례로 외국인 현물·선물 수급과 대형주·업종 확산을 읽는 방법을 공부합니다.`,
+    score: strongestMove.score,
+    reasons: [`${strongestMove.label} 변동률 ${formatPct(change)}로 시장 급변 기준을 충족했습니다.`],
+    keywords: usMarket
+      ? [strongestMove.label, "미국 금리", "성장주", "밸류에이션"]
+      : [strongestMove.label, "외국인 수급", "선물", "주도 업종"],
   };
 }
 
 export function selectInvestmentStudyTopic(input: {
   now: Date;
   referenceBundle: ReferenceBundle;
+  angle?: InvestmentStudyEditorialAngle;
 }): InvestmentStudyTopicSelection {
   const moves = marketMoves(input.referenceBundle)
     .map((move) => ({ ...move, score: metricMoveScore(move.metric) }))
@@ -177,26 +255,17 @@ export function selectInvestmentStudyTopic(input: {
   const strongestMove = moves[0];
   const news = recentNewsItems(input.referenceBundle, input.now);
   const category = categoryMatches(news)[0];
-  const events = highImpactEvents(input.referenceBundle, input.now);
+  const angle = input.angle ?? "issue_explainer";
+  const events = highImpactEvents(input.referenceBundle, input.now, angle === "upcoming_question" ? 4 : 1);
   const eventScore = events.length > 0 ? 2 : 0;
 
-  if (strongestMove?.score >= INVESTMENT_STUDY_ISSUE_SCORE_THRESHOLD && typeof strongestMove.metric?.changePct === "number") {
-    const change = strongestMove.metric.changePct;
-    const usMarket = strongestMove.market === "US";
-    return {
-      mode: "market_issue",
-      title: usMarket
-        ? `${strongestMove.label} ${formatPct(change)}, 금리와 성장주는 왜 함께 움직였을까`
-        : `${strongestMove.label} ${formatPct(change)}, 외국인 수급은 어떻게 읽어야 할까`,
-      topic: usMarket
-        ? `${strongestMove.label} ${formatPct(change)} 변동을 실제 사례로 미국 국채금리·할인율·성장주 밸류에이션의 연결 과정을 공부합니다.`
-        : `${strongestMove.label} ${formatPct(change)} 변동을 실제 사례로 외국인 현물·선물 수급과 대형주·업종 확산을 읽는 방법을 공부합니다.`,
-      score: strongestMove.score,
-      reasons: [`${strongestMove.label} 변동률 ${formatPct(change)}로 시장 급변 기준을 충족했습니다.`],
-      keywords: usMarket
-        ? [strongestMove.label, "미국 금리", "성장주", "밸류에이션"]
-        : [strongestMove.label, "외국인 수급", "선물", "주도 업종"],
-    };
+  if (strongestMove?.score >= 4) return selectMarketMoveLesson(strongestMove) ?? selectSearchQuestion(input.now);
+  if (angle === "upcoming_question") {
+    const scheduledQuestion = selectUpcomingEventQuestion(events);
+    if (scheduledQuestion) return scheduledQuestion;
+  }
+  if (strongestMove?.score >= INVESTMENT_STUDY_ISSUE_SCORE_THRESHOLD) {
+    return selectMarketMoveLesson(strongestMove) ?? selectSearchQuestion(input.now);
   }
 
   const categoryScore = category?.score ?? 0;
@@ -217,7 +286,7 @@ export function selectInvestmentStudyTopic(input: {
     };
   }
 
-  return selectEvergreen(input.now);
+  return selectSearchQuestion(input.now);
 }
 
 export function qualifiesForConditionalInvestmentStudy(selection: InvestmentStudyTopicSelection) {

@@ -73,7 +73,7 @@ test("일일·주간 템플릿에 서로 다른 분량과 고정 구조를 제�
   assert.match(getStockBlogEditorialGuidelines("WEEKLY_MARKET_REVIEW").join("\n"), /본문의 70% 이상을 이번 주 한국·미국/);
   assert.match(getStockBlogEditorialGuidelines("NEXT_WEEK_MARKET_PREVIEW").join("\n"), /본문의 70% 이상을 다음 주/);
   assert.match(getStockBlogEditorialGuidelines("INVESTMENT_STUDY").join("\n"), /당일 코스피·미국장 이슈/);
-  assert.match(getStockBlogEditorialGuidelines("INVESTMENT_STUDY").join("\n"), /핵심 숫자 또는 질문/);
+  assert.match(getStockBlogEditorialGuidelines("INVESTMENT_STUDY").join("\n"), /발표시간·왜·어떻게·받을 수 있을까/);
   assert.match(getStockBlogEditorialGuidelines("LARGE_CAP_DISCLOSURE_EARNINGS").join("\n"), /DART 또는 SEC 원문/);
   assert.ok(getStockBlogEditorialPolicy("INVESTMENT_STUDY").bodyStructure.includes("5. 실제 시장·기업 사례"));
   assert.ok(getStockBlogEditorialPolicy("LARGE_CAP_DISCLOSURE_EARNINGS").bodyStructure.includes("5. 공식 발표와 시장 반응"));
@@ -141,4 +141,16 @@ test("AI 상투어·참여 CTA·과도한 빈 문단을 차단한다", () => {
   assert.equal(result.hasForbiddenEngagementCta, true);
   assert.equal(result.excessiveBlankLineRunCount, 1);
   assert.ok(result.violations.length >= 3);
+});
+
+test("번역투와 AI 보고서식 결론 문장을 차단한다", () => {
+  const result = inspectStockBlogEditorialContract(
+    `${validBody}\n\n이번 글에서는 환율을 알아봅니다. 이는 외국인 수급이 약해질 수 있음을 시사합니다. 투자자들은 환율을 주목해야 합니다.`,
+    "KOREA_DAILY_PREVIEW",
+  );
+
+  assert.ok(result.forbiddenPhraseMatches.includes("이번 글에서는"));
+  assert.ok(result.forbiddenPhraseMatches.some((phrase) => phrase.includes("시사합니다")));
+  assert.ok(result.forbiddenPhraseMatches.some((phrase) => phrase.includes("주목해야 합니다")));
+  assert.ok(result.violations.some((violation) => violation.includes("금지 표현")));
 });

@@ -78,15 +78,15 @@ export const STOCK_REFERENCE_TEMPLATES: Record<StockReferenceBriefingTemplate, S
   },
   INVESTMENT_STUDY: {
     contentType: "INVESTMENT_STUDY",
-    label: "평일 시장 연결 투자 공부",
+    label: "평일 일정·실전 질문 투자 공부",
     market: "GLOBAL",
     minimumRealReferences: 3,
     minimumDistinctUrls: 3,
     minimumPublishers: 2,
     requiresMarketData: true,
     requirements: [
-      { id: "study-definition", label: "당일 이슈와 개념 정의", sourceTypes: ["company", "macro", "news"], markets: ["GLOBAL", "KR", "US"], keywords: ["코스피", "나스닥", "금리", "물가", "투자 지표"] },
-      { id: "study-example", label: "실제 시장·기업 사례", sourceTypes: ["market_data", "company", "news"], markets: ["GLOBAL", "KR", "US"], keywords: ["외국인 수급", "반도체", "실적", "주가"] },
+      { id: "study-definition", label: "공식 일정·발표값과 개념 정의", sourceTypes: ["calendar", "company", "macro", "news"], markets: ["GLOBAL", "KR", "US"], keywords: ["발표시간", "예상치", "실제치", "투자 지표"] },
+      { id: "study-example", label: "실제 시장·기업 반응", sourceTypes: ["market_data", "company", "news"], markets: ["GLOBAL", "KR", "US"], keywords: ["외국인 수급", "나스닥", "실적", "주가 반응"] },
       { id: "study-caution", label: "해석 시 주의점", sourceTypes: ["news", "macro", "sector"], markets: ["GLOBAL", "KR", "US"], keywords: ["전달 경로", "주의", "리스크", "해석"] },
     ],
   },

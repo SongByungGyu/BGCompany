@@ -100,13 +100,14 @@ test("combines fresh PPI coverage and a verified schedule into an issue lesson",
   assert.equal(qualifiesForConditionalInvestmentStudy(selection), true);
 });
 
-test("falls back to an evergreen lesson when the market is quiet", () => {
+test("falls back to a concrete search question when the market is quiet", () => {
   const selection = selectInvestmentStudyTopic({
     now: new Date("2026-08-13T03:10:00.000Z"),
     referenceBundle: bundle(),
   });
 
-  assert.equal(selection.mode, "evergreen");
+  assert.equal(selection.mode, "search_question");
+  assert.match(selection.title, /까|이유/);
   assert.equal(selection.score, 0);
   assert.equal(qualifiesForConditionalInvestmentStudy(selection), false);
 });
@@ -122,6 +123,55 @@ test("does not treat undated or stale news as a current market issue", () => {
     }),
   });
 
-  assert.equal(selection.mode, "evergreen");
+  assert.equal(selection.mode, "search_question");
   assert.equal(qualifiesForConditionalInvestmentStudy(selection), false);
+});
+
+test("Tuesday prioritizes a verified upcoming CPI search question", () => {
+  const selection = selectInvestmentStudyTopic({
+    now: new Date("2026-08-18T03:10:00.000Z"),
+    angle: "upcoming_question",
+    referenceBundle: bundle({
+      marketDate: "2026-08-18",
+      marketSnapshot: {
+        provider: "kis-fred",
+        status: "ready",
+        marketDate: "2026-08-18",
+        collectedAt: "2026-08-18T03:00:00.000Z",
+        dataQuality: "verified",
+        freshness: { status: "fresh", checkedAt: "2026-08-18T03:00:00.000Z", staleItems: [] },
+        upcoming: [{ date: "2026-08-21", event: "Consumer Price Index", market: "US" }],
+        missingItems: [],
+      },
+    }),
+  });
+
+  assert.equal(selection.mode, "search_question");
+  assert.match(selection.title, /미국 CPI 발표시간/);
+  assert.equal(selection.score, 2);
+  assert.equal(qualifiesForConditionalInvestmentStudy(selection), false);
+});
+
+test("an extreme market move takes priority over an upcoming schedule question", () => {
+  const selection = selectInvestmentStudyTopic({
+    now: new Date("2026-08-18T03:10:00.000Z"),
+    angle: "upcoming_question",
+    referenceBundle: bundle({
+      marketDate: "2026-08-18",
+      marketSnapshot: {
+        provider: "kis-fred",
+        status: "ready",
+        marketDate: "2026-08-18",
+        collectedAt: "2026-08-18T03:00:00.000Z",
+        dataQuality: "verified",
+        freshness: { status: "fresh", checkedAt: "2026-08-18T03:00:00.000Z", staleItems: [] },
+        korea: { kospi: { label: "KOSPI", value: 6800, changePct: -2.4, direction: "down" } },
+        upcoming: [{ date: "2026-08-19", event: "Consumer Price Index", market: "US" }],
+        missingItems: [],
+      },
+    }),
+  });
+
+  assert.equal(selection.mode, "market_issue");
+  assert.match(selection.title, /코스피 -2\.4%/);
 });

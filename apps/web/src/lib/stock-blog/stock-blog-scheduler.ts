@@ -25,6 +25,7 @@ import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title"
 import {
   qualifiesForConditionalInvestmentStudy,
   selectInvestmentStudyTopic,
+  type InvestmentStudyEditorialAngle,
   type InvestmentStudyTopicSelection,
 } from "@/lib/stock-blog/investment-study-topic";
 import { resolveApproval } from "@/lib/repositories/approval-actions";
@@ -142,6 +143,7 @@ type StockBlogSchedulerDefinition = StockBlogScheduleItem & {
   title: (date: string) => string;
   topic: string;
   investmentStudyMode?: "fixed" | "conditional";
+  investmentStudyAngle?: InvestmentStudyEditorialAngle;
 };
 
 const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
@@ -190,32 +192,34 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
   {
     scheduleId: "weekday-fixed-investment-study-tuesday",
     contentType: "INVESTMENT_STUDY",
-    label: "화요일 시장 연결 투자 공부",
+    label: "화요일 이번 주 일정·검색 질문",
     cadence: "매주 화요일",
     scheduledTimeKst: "12:10 KST",
     scheduledTime: "12:10",
     weekdays: [2],
-    objective: "당일 코스피·미국장 이슈가 있으면 그 이슈의 투자 원리를 설명하고, 조용한 날에는 검색형 기초 개념을 발행합니다.",
-    primaryAudience: "당일 시장 움직임의 원리를 이해하려는 투자자",
+    objective: "이번 주 공식 경제 일정이 있으면 발표시간·예상치·시장 영향 질문에 답하고, 일정이 없으면 검색형 실전 질문을 발행합니다.",
+    primaryAudience: "경제 일정과 투자 개념을 검색해 바로 확인하려는 투자자",
     recommendedRunnerMode: "hermes",
     topic: "오늘 코스피·미국장 핵심 이슈와 연결한 주식 투자 공부",
     title: (date) => `${date} 오늘 시장 이슈로 배우는 주식 투자 원리`,
     investmentStudyMode: "fixed",
+    investmentStudyAngle: "upcoming_question",
   },
   {
     scheduleId: "weekday-fixed-investment-study-thursday",
     contentType: "INVESTMENT_STUDY",
-    label: "목요일 시장 연결 투자 공부",
+    label: "목요일 발표 결과·실전 질문",
     cadence: "매주 목요일",
     scheduledTimeKst: "12:10 KST",
     scheduledTime: "12:10",
     weekdays: [4],
-    objective: "당일 코스피·미국장 이슈가 있으면 그 이슈의 투자 원리를 설명하고, 조용한 날에는 검색형 기초 개념을 발행합니다.",
-    primaryAudience: "당일 시장 움직임의 원리를 이해하려는 투자자",
+    objective: "이번 주 경제지표·실적 발표 뒤 실제 시장 반응을 설명하고, 뚜렷한 결과가 없으면 검색형 실전 질문을 발행합니다.",
+    primaryAudience: "발표 결과와 주가 반응의 이유를 검색하는 투자자",
     recommendedRunnerMode: "hermes",
     topic: "오늘 코스피·미국장 핵심 이슈와 연결한 주식 투자 공부",
     title: (date) => `${date} 오늘 시장 이슈로 배우는 주식 투자 원리`,
     investmentStudyMode: "fixed",
+    investmentStudyAngle: "result_or_practical",
   },
   {
     scheduleId: "weekday-market-issue-investment-study",
@@ -231,6 +235,7 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     topic: "오늘 코스피·미국장 핵심 이슈로 배우는 투자 원리",
     title: (date) => `${date} 코스피·미국장 이슈로 배우는 투자 원리`,
     investmentStudyMode: "conditional",
+    investmentStudyAngle: "issue_explainer",
   },
   {
     scheduleId: "sunday-next-week-market-preview",
@@ -430,17 +435,43 @@ async function buildInvestmentStudyPipelineInput(
   timezone: string,
 ) {
   const date = briefDateLabel(now, timezone);
-  const discoveryTitle = `${date} 오늘 코스피·미국장 이슈로 배우는 투자 원리`;
+  const discoveryTitle = definition.investmentStudyAngle === "upcoming_question"
+    ? `${date} 이번 주 미국 경제지표 발표시간과 나스닥 영향`
+    : definition.investmentStudyAngle === "result_or_practical"
+      ? `${date} 이번 주 경제지표·실적 발표 뒤 주가가 움직인 이유`
+      : `${date} 오늘 코스피·미국장 이슈로 배우는 투자 원리`;
+  const discoveryTopic = definition.investmentStudyAngle === "upcoming_question"
+    ? "이번 주 CPI·PPI·FOMC·고용지표 공식 일정과 발표시간, 예상보다 높거나 낮을 때 나스닥·금리 영향"
+    : definition.investmentStudyAngle === "result_or_practical"
+      ? "이번 주 경제지표·실적 발표 실제값과 예상치 차이, 발표 뒤 코스피·나스닥·금리·수급 반응"
+      : "오늘 코스피·코스닥·나스닥 급등락과 금리·환율·물가·반도체·실적 이슈의 투자 원리";
   const referenceBundle = await collectStockBlogReferences({
-    topic: "오늘 코스피·코스닥·나스닥 급등락과 금리·환율·물가·반도체·실적 이슈의 투자 원리",
+    topic: discoveryTopic,
     title: discoveryTitle,
     channel: "blog",
     contentType: "INVESTMENT_STUDY",
     market: "GLOBAL",
-    keywords: ["코스피", "나스닥", "금리", "반도체"],
+    keywords: definition.investmentStudyAngle === "upcoming_question"
+      ? ["CPI", "PPI", "FOMC", "발표시간"]
+      : ["코스피", "나스닥", "금리", "실적"],
     maxResults: 6,
   });
-  const selection = selectInvestmentStudyTopic({ now, referenceBundle });
+  const selection = selectInvestmentStudyTopic({
+    now,
+    referenceBundle,
+    angle: definition.investmentStudyAngle,
+  });
+  const selectedReferenceBundle = definition.investmentStudyMode === "fixed" && selection.mode === "search_question"
+    ? await collectStockBlogReferences({
+      topic: selection.topic,
+      title: selection.title,
+      channel: "blog",
+      contentType: "INVESTMENT_STUDY",
+      market: "GLOBAL",
+      keywords: selection.keywords,
+      maxResults: 6,
+    })
+    : referenceBundle;
   return {
     selection,
     input: {
@@ -453,7 +484,7 @@ async function buildInvestmentStudyPipelineInput(
       channel: "blog" as const,
       runnerMode,
       contentType: definition.contentType,
-      referenceBundle,
+      referenceBundle: selectedReferenceBundle,
     },
   };
 }
