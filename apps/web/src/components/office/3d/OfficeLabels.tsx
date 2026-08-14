@@ -24,7 +24,7 @@ const ROOM_LABEL_ALIASES: Record<string, string> = {
   "meeting-room": "협업 · 인수인계",
   "content-zone": "미나 · 카이 · 지아",
   "review-zone": "Local Agent",
-  "dev-ops-zone": "준범",
+  "dev-ops-zone": "하늘",
   "finance-room": "도윤",
   "finance-stock-zone": "서준 · 도윤",
   "break-lounge": "휴식 · 재충전",

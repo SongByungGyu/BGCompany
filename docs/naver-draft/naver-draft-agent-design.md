@@ -8,7 +8,7 @@ BG Company creates a `NaverDraftJob` from an approved content pipeline. A local 
 
 ## Non-goals
 
-- No automatic Naver publishing.
+- No unconditional or policy-bypassing Naver publishing.
 - No Naver credential storage.
 - No cookie upload to BG Company.
 - No captcha, 2FA, or security bypass.
@@ -24,7 +24,8 @@ BG Company web/API
   -> User PC Local Draft Agent
   -> Local browser profile
   -> Naver Blog write page
-  -> User manual verification/publish
+  -> guarded publish when every server/local gate passes
+     or user verification/manual publish fallback
 ```
 
 ## Local agent safety defaults
@@ -32,6 +33,8 @@ BG Company web/API
 ```env
 NAVER_AGENT_DRY_RUN=true
 NAVER_ALLOW_DRAFT_SAVE=false
+NAVER_ALLOW_IMAGE_UPLOAD=false
+NAVER_ALLOW_PUBLISH=false
 ```
 
 Dry-run stores the job payload in `tools/naver-draft-agent/drafts/` and reports a non-publishing status. Real browser automation must be explicitly enabled locally.
@@ -41,11 +44,15 @@ Dry-run stores the job payload in `tools/naver-draft-agent/drafts/` and reports 
 ```text
 queued -> claimed -> in_progress -> draft_saved
 queued -> claimed -> in_progress -> user_publish_required
+queued -> claimed -> in_progress -> publish_ready -> publishing -> published
+queued -> claimed -> in_progress -> publish_blocked
 queued -> claimed -> in_progress -> failed
 queued -> cancelled
 ```
 
 `user_publish_required` means the local browser needs manual login/security verification or final user confirmation.
+
+Automatic publishing is allowed only when the server created the job with `allowPublish=true`, all local opt-in switches are enabled, image/readability/draft checks pass, and the server confirms the final duplicate and canary gate. A publish click is never retried automatically.
 
 ## Security boundaries
 

@@ -1,29 +1,41 @@
 # Stock Blog Team Operations
 
-BG Company의 주식 블로그 운영은 네이버 블로그 수동 발행을 전제로, 콘텐츠 생성부터 임시저장 준비까지를 팀 단위로 분리한다.
+BG Company의 주식 블로그 운영은 콘텐츠 생성부터 품질 검수, 정책 승인, 네이버 게시까지를 팀 단위로 분리한다. 기본값은 자동 게시 비활성이며, 명시적으로 허용된 작업만 다중 안전 게이트를 통과해 자동 게시된다.
 
 ## 팀 구성
 
 ### 주식 분석팀
 
-- 담당: 시장 브리핑 주제 확정, 지수/섹터/리스크 체크리스트 구성
-- 현재 단계: mock/reference 기반 분석 보고서 생성
-- 향후 단계: 실제 주식/뉴스 API 연결 후 출처 기반 분석
+- 담당: 공식 시장 데이터, 실제 뉴스·경쟁 글 레퍼런스 수집과 정규화, 지수/섹터/리스크 체크리스트 구성
+- 실행: 규칙·Provider 기반 수집과 Hermes 실행 전 ReferenceBundle 품질 검사
+- 금지: provider 실패를 mock 수치나 추정 기사로 대체
 
 ### 블로그 운영팀
 
-- 담당: content-planner, marketing-manager, content-writer 결과를 네이버 블로그용 원고로 정리
+- 담당: content-planner, marketing-manager, content-writer가 동일한 검증 ReferenceBundle을 사용해 기획·차별화·본문을 작성
 - 산출물: 제목, 본문, Markdown, HTML, 태그, 썸네일 문구, 이미지 프롬프트
 
 ### QA/감사팀
 
-- 담당: 과장 표현, 투자 권유성 문구, 누락 섹션, 면책 문구 점검
+- 담당: 과장 표현, 투자 권유성 문구, 수치·출처, 누락 섹션, 면책 문구 점검
 - 산출물: QA 결과, 수정 권고, 승인 전 체크리스트
 
 ### 게시 운영팀
 
-- 담당: 승인 완료 콘텐츠를 Naver Draft Job Queue에 등록하고 Local Draft Agent로 임시저장 준비
-- 원칙: 자동 발행 금지, 사용자가 최종 발행
+- 담당: 품질 게이트를 통과한 콘텐츠를 Naver Draft Job Queue에 등록하고 Local Draft Agent로 전달
+- 기본: 자동 게시 플래그가 꺼져 있으면 임시저장 또는 사용자 확인으로 종료
+- 자동 게시: 서버 스케줄러와 작업별 `allowPublish`, 로컬 Agent의 게시 허용이 모두 켜지고 최종 서버 게이트를 통과한 경우에만 허용
+
+## 승인과 게시 정책
+
+- CEO는 비용·보안·정책 변경, 새 외부 채널, 민감 콘텐츠 등 예외의 최종 승인자다.
+- 루나는 사전 승인된 반복 게시 정책 안에서 품질 결과를 취합하고 자동 승인 근거를 남기며, 예외는 CEO에게 올린다.
+- QA는 통과·수정·차단을 판정하지만 게시 정책이나 CEO 승인 범위를 변경하지 않는다.
+- 자동 승인은 `STOCK_BLOG_SCHEDULER_AUTO_APPROVE=true`이고 QA와 결정론적 품질 게이트가 모두 통과한 경우에만 수행된다.
+- 자동 게시 작업 생성은 `STOCK_BLOG_SCHEDULER_AUTO_CREATE_DRAFT=true`와 `STOCK_BLOG_SCHEDULER_AUTO_PUBLISH=true`를 모두 요구한다.
+- 로컬 Agent는 `NAVER_AGENT_DRY_RUN=false`, draft 저장·이미지 업로드·게시 허용 스위치, 작업의 `allowPublish=true`를 모두 요구한다.
+- 중복 키, 첫 게시 허용 시각, 카나리 한도, 재시도 한도, 이미지·가독성, 로그인·CAPTCHA·보안 확인 중 하나라도 실패하면 게시하지 않는다.
+- 보안 확인이나 정책 예외가 발생하면 자동 우회하지 않고 임시저장·사용자 확인 또는 CEO 승인으로 전환한다.
 
 ## 기본 스케줄
 
@@ -42,3 +54,4 @@ BG Company의 주식 블로그 운영은 네이버 블로그 수동 발행을 �
 - 4-Agent 기준 최대 4회 호출: planner, marketing, writer, qa
 - 기본 일일 한도 제안: 20회
 - 실제 실행은 사용량 가드레일과 비용 경고를 통과해야 한다.
+- 역할별 기본 실행 방식과 Mock 보조 경로는 [Agent 운영 지도](../wiki/agent-map.md)에서 확인한다.

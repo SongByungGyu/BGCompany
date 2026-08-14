@@ -31,6 +31,7 @@ export type HermesRunPayload = {
     allowedEvents: string[];
     approvalConditions: string[];
   };
+  learning: AgentRunContext["learning"];
 };
 
 export type HermesRunResponse = {
@@ -111,6 +112,7 @@ export function buildHermesRunPayload(context: AgentRunContext): HermesRunPayloa
       allowedEvents: context.agent.allowedEvents,
       approvalConditions: context.agent.approvalConditions,
     },
+    learning: context.learning,
   };
 }
 
@@ -128,6 +130,7 @@ export function summarizeHermesPayload(payload: HermesRunPayload) {
     requiresApproval: payload.constraints.requiresApproval,
     readOnlyFinance: payload.constraints.readOnlyFinance,
     readOnlyStocks: payload.constraints.readOnlyStocks,
+    approvedLessonCount: payload.learning.approvedLessons.length,
   };
 }
 

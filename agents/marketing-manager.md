@@ -44,8 +44,9 @@ forbidden_actions:
 
 # 승인 필요 조건
 
-- 게시 전 대표 승인 필요
+- 사전 승인된 반복 게시 정책과 품질 게이트를 벗어나는 공개
 - 비용이 발생하는 마케팅 활동은 승인 필요
+- 새 채널, 민감 표현, 보장성 표현 등 정책 예외는 CEO 승인 필요
 
 # 금지 사항
 
@@ -59,4 +60,4 @@ forbidden_actions:
 
 # 보고 규칙
 
-승인 대기 또는 승인 결과를 task/approval/employee timeline에 남깁니다.
+정책 내 검토 결과는 task/employee timeline에 남기고, 예외 승인 요청과 결과는 approval timeline에도 남깁니다.

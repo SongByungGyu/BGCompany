@@ -489,5 +489,44 @@ class UsageGuardrailContractTests(unittest.TestCase):
         self.assertNotIn('mode: "hermes-dry-run"', usage_source)
 
 
+class OperationalLearningPromptTests(unittest.TestCase):
+    def test_approved_lesson_is_injected_as_a_safety_constraint(self) -> None:
+        payload = {
+            "input": {
+                "topic": "오늘 코스피 전망",
+                "title": "오늘 코스피 전망",
+                "channel": "blog",
+                "approvedLessons": [{
+                    "lessonId": "lesson-1",
+                    "fingerprint": "stock-blog:quality-gate:editorial-quality-gate-blocked",
+                    "title": "품질 게이트 반복 차단 개선",
+                    "instruction": "품질 게이트를 완화하지 말고 차단 사유를 구조화한다.",
+                    "policyVersion": "learning-policy-v1",
+                }],
+            },
+        }
+
+        for prompt_builder in (
+            bridge.build_content_planner_prompt,
+            bridge.build_marketing_review_prompt,
+            bridge.build_content_writer_prompt,
+            bridge.build_qa_audit_prompt,
+        ):
+            prompt = prompt_builder(payload)
+            self.assertIn("stock-blog:quality-gate:editorial-quality-gate-blocked", prompt)
+            self.assertIn("품질 게이트를 완화하지 말고", prompt)
+            self.assertIn("교훈을 시장 사실이나 새로운 출처로 취급하지 않는다", prompt)
+            self.assertIn("하드 안전 규칙을 우선", prompt)
+
+    def test_only_five_approved_lessons_are_compacted(self) -> None:
+        lessons = [
+            {"lessonId": f"lesson-{index}", "fingerprint": f"a:b:{index}", "instruction": f"rule-{index}"}
+            for index in range(7)
+        ]
+        compacted = bridge.compact_approved_lessons({"approvedLessons": lessons})
+        self.assertEqual(len(compacted), 5)
+        self.assertEqual(compacted[-1]["lessonId"], "lesson-4")
+
+
 if __name__ == "__main__":
     unittest.main()

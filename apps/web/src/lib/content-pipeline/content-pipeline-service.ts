@@ -38,6 +38,8 @@ import {
   STOCK_BLOG_MAX_HERMES_RUNS,
   STOCK_BLOG_MAX_QA_ATTEMPTS,
 } from "@/lib/stock-blog/qa-revision-policy";
+import { loadApprovedLessonInstructionsForAgents } from "@/lib/operational-learning/operational-learning-service";
+import type { OperationalLessonInstruction } from "@/lib/operational-learning/operational-learning-policy";
 
 type ContentPipelineInput = {
   topic: string;
@@ -48,6 +50,9 @@ type ContentPipelineInput = {
   referenceBundle?: ReferenceBundle;
   blogImagePrompts?: BlogImagePrompt[];
   editorialBenchmarkGuidelines?: string[];
+  approvedLessonsByAgent?: Record<string, OperationalLessonInstruction[]>;
+  operationalRunKey?: string;
+  operationalAttempt?: number;
 };
 
 type PlannerExecution = {
@@ -181,11 +186,17 @@ function assertValidInput(input: unknown): ContentPipelineInput {
   const contentType = typeof body.contentType === "string" && stockContentTypes.has(body.contentType as StockReferenceBriefingTemplate)
     ? body.contentType as StockReferenceBriefingTemplate
     : undefined;
+  const operationalRunKey = typeof body.operationalRunKey === "string" && body.operationalRunKey.trim()
+    ? body.operationalRunKey.trim().slice(0, 240)
+    : undefined;
+  const operationalAttempt = typeof body.operationalAttempt === "number" && Number.isInteger(body.operationalAttempt) && body.operationalAttempt > 0
+    ? body.operationalAttempt
+    : undefined;
   if (!topic) throw new Error("topic is required");
   if (!title) throw new Error("title is required");
   if (!channels.has(channel)) throw new Error("channel must be blog/instagram/youtube/newsletter");
   if (!["mock", "hermes-dry-run", "hermes"].includes(runnerMode)) throw new Error("runnerMode must be mock/hermes-dry-run/hermes");
-  return { topic, title, channel: channel as ContentChannel, runnerMode: runnerMode as ContentPipelineInput["runnerMode"], contentType };
+  return { topic, title, channel: channel as ContentChannel, runnerMode: runnerMode as ContentPipelineInput["runnerMode"], contentType, operationalRunKey, operationalAttempt };
 }
 
 function channelLabel(channel: ContentChannel) {
@@ -201,6 +212,10 @@ function toJsonObject(value: Record<string, unknown>): Prisma.InputJsonObject {
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+function executionErrorCode(execution: { result: Record<string, unknown> }) {
+  return typeof execution.result.errorCode === "string" ? execution.result.errorCode : "HERMES_AGENT_RUN_FAILED";
 }
 
 function asReferenceBundle(value: unknown): ReferenceBundle | undefined {
@@ -283,7 +298,7 @@ const STOCK_PROHIBITED_PHRASES = [
   "이미지 프롬프트를 독자용 본문에 출력",
 ];
 
-function hermesStockContext(data: ContentPipelineInput) {
+function hermesStockContext(data: ContentPipelineInput, agentId: string) {
   return {
     contentType: data.referenceBundle?.contentType,
     marketDate: data.referenceBundle?.marketDate,
@@ -292,6 +307,7 @@ function hermesStockContext(data: ContentPipelineInput) {
     competitorBlogReferences: data.referenceBundle?.competitorBlogReferences,
     editorialBenchmarkGuidelines: data.editorialBenchmarkGuidelines,
     prohibitedPhrases: STOCK_PROHIBITED_PHRASES,
+    approvedLessons: data.approvedLessonsByAgent?.[agentId] ?? [],
   };
 }
 
@@ -347,7 +363,11 @@ async function enrichContentPipelineInput(input: ContentPipelineInput): Promise<
     ...currentGuidelines,
     ...historicalGuidelines,
   ])).slice(0, 30);
-  return { ...input, referenceBundle, blogImagePrompts, editorialBenchmarkGuidelines };
+  const approvedLessonsByAgent = await loadApprovedLessonInstructionsForAgents({
+    agentIds: ["content-planner", "marketing-manager", "content-writer", "qa-auditor"],
+    area: "stock-blog",
+  });
+  return { ...input, referenceBundle, blogImagePrompts, editorialBenchmarkGuidelines, approvedLessonsByAgent };
 }
 
 function asStringArray(value: unknown) {
@@ -599,7 +619,7 @@ function dryRunPlannerExecution(data: ContentPipelineInput): PlannerExecution {
     title: data.title,
     channel: data.channel,
     language: "ko",
-    ...hermesStockContext(data),
+    ...hermesStockContext(data, "content-planner"),
   });
   const outputTitle = `${data.title} · Hermes dry-run payload`;
   const outputSummary = "Hermes를 실제 호출하지 않고 content-planner 요청 payload를 생성했습니다.";
@@ -637,7 +657,7 @@ async function hermesPlannerExecution(data: ContentPipelineInput): Promise<Plann
     title: data.title,
     channel: data.channel,
     language: "ko",
-    ...hermesStockContext(data),
+    ...hermesStockContext(data, "content-planner"),
   });
   const hermesPayload = toJsonObject(payload);
   const normalizedResult = normalizeResultForMetadata(result);
@@ -730,7 +750,7 @@ function dryRunMarketingExecution(data: ContentPipelineInput, planner: PlannerEx
     title: data.title,
     channel: data.channel,
     language: "ko",
-    ...hermesStockContext(data),
+    ...hermesStockContext(data, "marketing-manager"),
     plannerResult: planner.result,
   });
   const outputSummary = "Hermes를 실제 호출하지 않고 marketing-manager 요청 payload를 생성했습니다.";
@@ -798,7 +818,7 @@ async function hermesMarketingExecution(data: ContentPipelineInput, planner: Pla
     title: data.title,
     channel: data.channel,
     language: "ko",
-    ...hermesStockContext(data),
+    ...hermesStockContext(data, "marketing-manager"),
     plannerResult: planner.result,
   });
   const hermesPayload = toJsonObject(payload);
@@ -915,7 +935,7 @@ function dryRunWriterExecution(data: ContentPipelineInput, planner: PlannerExecu
     title: data.title,
     channel: data.channel,
     language: "ko",
-    ...hermesStockContext(data),
+    ...hermesStockContext(data, "content-writer"),
     plannerResult: planner.result,
     marketingResult: marketing.result,
     referenceBundle: data.referenceBundle,
@@ -1012,7 +1032,7 @@ async function hermesWriterExecution(
     title: data.title,
     channel: data.channel,
     language: "ko",
-    ...hermesStockContext(data),
+    ...hermesStockContext(data, "content-writer"),
     plannerResult: planner.result,
     marketingResult: marketing.result,
     referenceBundle: data.referenceBundle,
@@ -1121,7 +1141,7 @@ function dryRunQaExecution(data: ContentPipelineInput, planner: PlannerExecution
     title: data.title,
     channel: data.channel,
     language: "ko",
-    ...hermesStockContext(data),
+    ...hermesStockContext(data, "qa-auditor"),
     plannerResult: planner.result,
     marketingResult: marketing.result,
     writerResult: writer.result,
@@ -1239,7 +1259,7 @@ async function hermesQaExecution(data: ContentPipelineInput, planner: PlannerExe
     title: data.title,
     channel: data.channel,
     language: "ko",
-    ...hermesStockContext(data),
+    ...hermesStockContext(data, "qa-auditor"),
     plannerResult: planner.result,
     marketingResult: marketing.result,
     writerResult: writer.result,
@@ -1669,6 +1689,23 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
   if (runnerMode === "hermes" && !preflightQualityGate.ok) {
     const error = new Error(`STOCK_REFERENCE_PREFLIGHT_BLOCKED: ${preflightQualityGate.status} · ${preflightQualityGate.reasons.join(" / ")}`);
     Object.assign(error, { code: "STOCK_REFERENCE_PREFLIGHT_BLOCKED", qualityGate: preflightQualityGate });
+    await createEvent({
+      type: "ErrorOccurred",
+      employeeId: "stock-monitor",
+      payload: {
+        errorCode: "STOCK_REFERENCE_PREFLIGHT_BLOCKED",
+        message: error.message,
+        area: "stock-blog",
+        stage: "reference-preflight",
+        contentType: data.referenceBundle?.contentType,
+        marketDate: data.referenceBundle?.marketDate,
+        ...(data.operationalRunKey ? { scheduleKey: data.operationalRunKey } : {}),
+        ...(data.operationalAttempt ? { attempt: data.operationalAttempt } : {}),
+        qualityGate: preflightQualityGate,
+        status: "blocked",
+      },
+      summary: `${data.title} Reference preflight 안전 정지`,
+    });
     throw error;
   }
   if (runnerMode === "hermes") await assertHermesDailyRunAvailable(HERMES_PIPELINE_REQUIRED_RUNS);
@@ -1984,27 +2021,43 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
   }
   await createEvent({ type: "TaskStarted", employeeId: "content-planner", taskId: contentTaskId, payload: { ...metadata, title: data.title }, summary: "콘텐츠 기획 시작" });
   if (planner.agentRunStatus === "failed") {
-    await createEvent({ type: "ErrorOccurred", employeeId: "content-planner", taskId: contentTaskId, payload: { ...metadata, error: planner.agentRunError, message: planner.agentRunError, status: "오류 대응 중" }, summary: `content-planner Hermes 실행 실패 · ${planner.agentRunError ?? "원인 미상"}` });
+    await createEvent({ type: "ErrorOccurred", employeeId: "content-planner", taskId: contentTaskId, payload: { ...metadata, error: planner.agentRunError, message: planner.agentRunError, errorCode: executionErrorCode(planner), area: "stock-blog", stage: "content-planning", status: "오류 대응 중" }, summary: `content-planner Hermes 실행 실패 · ${planner.agentRunError ?? "원인 미상"}` });
   } else {
     await createEvent({ type: "OutputGenerated", employeeId: "content-planner", taskId: contentTaskId, payload: { ...metadata, outputTitle: planner.outputTitle, output: planner.outputTitle, status: "업무 완료" }, summary: "콘텐츠 기획 초안 생성" });
   }
   await createEvent({ type: "TaskStarted", employeeId: "marketing-manager", taskId: marketingTaskId, payload: { ...metadata, title: data.title }, summary: "마케팅 검토 시작" });
   if (marketing.agentRunStatus === "failed") {
-    await createEvent({ type: "ErrorOccurred", employeeId: "marketing-manager", taskId: marketingTaskId, payload: { ...metadata, error: marketing.agentRunError, message: marketing.agentRunError, status: "오류 대응 중" }, summary: `marketing-manager Hermes 실행 실패 · ${marketing.agentRunError ?? "원인 미상"}` });
+    await createEvent({ type: "ErrorOccurred", employeeId: "marketing-manager", taskId: marketingTaskId, payload: { ...metadata, error: marketing.agentRunError, message: marketing.agentRunError, errorCode: executionErrorCode(marketing), area: "stock-blog", stage: "marketing-review", status: "오류 대응 중" }, summary: `marketing-manager Hermes 실행 실패 · ${marketing.agentRunError ?? "원인 미상"}` });
   } else {
     await createEvent({ type: "OutputGenerated", employeeId: "marketing-manager", taskId: marketingTaskId, payload: { ...metadata, outputTitle: marketing.outputTitle, output: marketing.outputSummary, status: "업무 완료" }, summary: "마케팅 검토 완료" });
   }
   await createEvent({ type: "TaskStarted", employeeId: "content-writer", taskId: writerTaskId, payload: { ...metadata, title: data.title }, summary: "본문 초안 작성 시작" });
   if (writer.agentRunStatus === "failed") {
-    await createEvent({ type: "ErrorOccurred", employeeId: "content-writer", taskId: writerTaskId, payload: { ...metadata, error: writer.agentRunError, message: writer.agentRunError, status: "오류 대응 중" }, summary: `content-writer Hermes 실행 실패 · ${writer.agentRunError ?? "원인 미상"}` });
+    await createEvent({ type: "ErrorOccurred", employeeId: "content-writer", taskId: writerTaskId, payload: { ...metadata, error: writer.agentRunError, message: writer.agentRunError, errorCode: executionErrorCode(writer), area: "stock-blog", stage: "content-writing", status: "오류 대응 중" }, summary: `content-writer Hermes 실행 실패 · ${writer.agentRunError ?? "원인 미상"}` });
   } else {
     await createEvent({ type: "OutputGenerated", employeeId: "content-writer", taskId: writerTaskId, payload: { ...metadata, outputTitle: writer.outputTitle, output: writer.outputSummary, status: "업무 완료" }, summary: "본문 초안 작성 완료" });
   }
   await createEvent({ type: "TaskStarted", employeeId: "qa-auditor", taskId: qaTaskId, payload: { ...metadata, title: data.title }, summary: "QA 검토 시작" });
   if (qa.agentRunStatus === "failed") {
-    await createEvent({ type: "ErrorOccurred", employeeId: "qa-auditor", taskId: qaTaskId, payload: { ...metadata, error: qa.agentRunError, message: qa.agentRunError, status: "오류 대응 중" }, summary: `qa-auditor Hermes 실행 실패 · ${qa.agentRunError ?? "원인 미상"}` });
+    await createEvent({ type: "ErrorOccurred", employeeId: "qa-auditor", taskId: qaTaskId, payload: { ...metadata, error: qa.agentRunError, message: qa.agentRunError, errorCode: executionErrorCode(qa), area: "stock-blog", stage: "qa-review", status: "오류 대응 중" }, summary: `qa-auditor Hermes 실행 실패 · ${qa.agentRunError ?? "원인 미상"}` });
   } else {
     await createEvent({ type: "OutputGenerated", employeeId: "qa-auditor", taskId: qaTaskId, payload: { ...metadata, outputTitle: qa.outputTitle, output: qa.outputSummary, status: "검토 중" }, summary: "QA 검토 결과 생성" });
+  }
+  if (qualityBlocked) {
+    await createEvent({
+      type: "ErrorOccurred",
+      employeeId: "qa-auditor",
+      taskId: qaTaskId,
+      payload: {
+        ...metadata,
+        errorCode: "STOCK_CONTENT_QUALITY_FAILED",
+        message: `품질 게이트 차단: ${qualityGate.reasons.join(" / ")}`,
+        area: "stock-blog",
+        stage: "quality-gate",
+        status: "blocked",
+      },
+      summary: `${data.title} 게시 품질 게이트 차단`,
+    });
   }
   await createEvent({ type: "ApprovalRequested", employeeId: "director", taskId: qaTaskId, approvalId, payload: { ...metadata, title: `[콘텐츠 최종 승인] ${data.title}`, status: "승인 대기" }, summary: "Director 콘텐츠 최종 승인 요청" });
 

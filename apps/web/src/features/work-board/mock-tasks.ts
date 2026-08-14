@@ -45,7 +45,7 @@ export const mockWorkTasks: WorkTask[] = [
     ],
     approvalRequired: true,
     output: "썸네일 3종",
-    nextAction: "대표 승인 필요",
+    nextAction: "CEO 승인 필요",
   },
   {
     id: "task-dev-pipeline",

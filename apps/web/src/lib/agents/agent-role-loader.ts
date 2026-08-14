@@ -77,6 +77,7 @@ export function loadAgentRoleDocument(agentId: string): AgentRoleDocument {
   const outputFormat = section(body, "결과물 형식");
   const reportingRules = section(body, "보고 규칙");
   return {
+    ...registry,
     agentId: stringValue(frontmatter.agent_id, registry.agentId),
     displayName: stringValue(frontmatter.display_name, registry.displayName),
     department: stringValue(frontmatter.department, registry.department),

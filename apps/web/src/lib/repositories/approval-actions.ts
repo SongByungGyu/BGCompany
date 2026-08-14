@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ApprovalRequest, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { applyOperationalLessonApproval } from "@/lib/operational-learning/operational-learning-service";
 import { serializeApproval, serializeEvent, serializeTimeline } from "./serializers";
 
 type ApprovalActionStatus = "승인 완료" | "반려" | "수정 요청" | "보류";
@@ -52,6 +53,11 @@ export async function resolveApproval(input: {
         decidedAt,
       },
     });
+    const operationalLesson = await applyOperationalLessonApproval(tx, {
+      approvalId: approval.id,
+      status: input.status,
+      decisionReason: input.decisionReason,
+    });
     if (approval.taskId) {
       await tx.task.update({
         where: { id: approval.taskId },
@@ -71,7 +77,10 @@ export async function resolveApproval(input: {
         employeeId: approval.requestedByEmployeeId,
         taskId: approval.taskId,
         approvalId: approval.id,
-        payload: eventPayload(approval, input.status, input.decisionReason),
+        payload: {
+          ...eventPayload(approval, input.status, input.decisionReason),
+          ...(operationalLesson ? { operationalLessonId: operationalLesson.id, fingerprint: operationalLesson.fingerprint } : {}),
+        },
         summary: `${approval.title} · ${input.status}`,
       },
     });
@@ -79,6 +88,7 @@ export async function resolveApproval(input: {
       { targetType: "approval", targetId: approval.id },
       approval.taskId ? { targetType: "task", targetId: approval.taskId } : null,
       { targetType: "employee", targetId: approval.requestedByEmployeeId },
+      operationalLesson ? { targetType: "operational-lesson", targetId: operationalLesson.id } : null,
     ].filter((target): target is { targetType: string; targetId: string } => Boolean(target));
     const timelines = await Promise.all(timelineTargets.map((target) => tx.timeline.create({
       data: {
@@ -95,6 +105,7 @@ export async function resolveApproval(input: {
       approval: serializeApproval(approval),
       event: serializeEvent(event),
       timeline: serializeTimeline(timelines[0]),
+      operationalLessonId: operationalLesson?.id,
     };
   });
 }

@@ -1,5 +1,6 @@
 import type { BlogImagePrompt, CompetitorBlogAnalysisSummary, CompetitorBlogReference, MarketSnapshot, ReferenceBundle, ReferenceItem, StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 import type { VerifiedSchedule, VerifiedScheduleValidation } from "@/lib/stock-blog/verified-schedule";
+import type { OperationalLessonInstruction } from "@/lib/operational-learning/operational-learning-policy";
 
 export type ContentPlannerHermesInput = {
   topic: string;
@@ -14,6 +15,7 @@ export type ContentPlannerHermesInput = {
   editorialBenchmarkGuidelines?: string[];
   referencePolicy?: string[];
   prohibitedPhrases?: string[];
+  approvedLessons?: OperationalLessonInstruction[];
 };
 
 export type MarketingReviewHermesInput = ContentPlannerHermesInput & {
@@ -55,6 +57,7 @@ export type HermesContentPlannerPayload = {
     editorialBenchmarkGuidelines?: string[];
     referencePolicy?: string[];
     prohibitedPhrases?: string[];
+    approvedLessons?: OperationalLessonInstruction[];
   };
   context: {
     company: "BG Company";
@@ -79,6 +82,7 @@ export type HermesMarketingReviewPayload = {
     differentiationPoints?: string[];
     editorialBenchmarkGuidelines?: string[];
     prohibitedPhrases?: string[];
+    approvedLessons?: OperationalLessonInstruction[];
   };
   context: {
     company: "BG Company";
@@ -111,6 +115,7 @@ export type HermesContentWriterPayload = {
     revisionAttempt?: number;
     previousWriterResult?: Record<string, unknown>;
     qaRevisionFeedback?: Record<string, unknown>;
+    approvedLessons?: OperationalLessonInstruction[];
   };
   context: {
     company: "BG Company";
@@ -141,6 +146,7 @@ export type HermesQaAuditPayload = {
     prohibitedPhrases?: string[];
     blogImagePrompts?: BlogImagePrompt[];
     referencePolicy?: string[];
+    approvedLessons?: OperationalLessonInstruction[];
   };
   context: {
     company: "BG Company";

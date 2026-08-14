@@ -33,7 +33,7 @@ const roomMeta: Record<string, RoomMeta> = {
   "knowledge-audit-zone": { number: "5", title: "QA·감사실", subtitle: "윤아" },
   "meeting-room": { number: "9", title: "중앙 회의실", subtitle: "협업 · 의사결정" },
   "finance-room": { number: "6", title: "재정실", subtitle: "도윤" },
-  "dev-ops-zone": { number: "7", title: "개발·서버실", subtitle: "준범", accent: "red" },
+  "dev-ops-zone": { number: "7", title: "개발·서버실", subtitle: "하늘", accent: "red" },
   "review-zone": { number: "8", title: "발행 스테이션", subtitle: "로컬 발행 Agent" },
   "approval-zone": { number: "10", title: "승인 게이트", subtitle: "승인 대기 · 최종 판단", accent: "gold" },
   "break-lounge": { number: "11", title: "라운지", subtitle: "휴식 · 재충전" },

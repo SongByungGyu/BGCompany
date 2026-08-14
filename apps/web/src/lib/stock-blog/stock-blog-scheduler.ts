@@ -29,6 +29,7 @@ import {
   type InvestmentStudyTopicSelection,
 } from "@/lib/stock-blog/investment-study-topic";
 import { resolveApproval } from "@/lib/repositories/approval-actions";
+import { recordFailureFromPersistedEvent } from "@/lib/operational-learning/operational-learning-service";
 import {
   getExpectedHermesRunsForStockBlog,
   type StockBlogContentType,
@@ -535,7 +536,7 @@ async function writeSchedulerEvent(input: {
   payload: Prisma.InputJsonObject;
 }) {
   const id = schedulerEventId(input.key);
-  return prisma.eventLog.upsert({
+  const event = await prisma.eventLog.upsert({
     where: { id },
     create: {
       id,
@@ -562,6 +563,12 @@ async function writeSchedulerEvent(input: {
       summary: input.summary,
     },
   });
+  if (input.status === "failed" || input.status === "partial_failed") {
+    await recordFailureFromPersistedEvent(event).catch((error: unknown) => {
+      console.error("Operational learning failed after scheduler event persistence", error);
+    });
+  }
+  return event;
 }
 
 function eventPayload(value: Prisma.JsonValue): Record<string, Prisma.JsonValue> {
@@ -1045,7 +1052,11 @@ async function runOneSchedule(
       ? await buildLargeCapPipelineInput(definition, config.runnerMode, scheduledAt, config.timezone, largeCapScan)
       : investmentStudyBuild?.input
         ?? buildPipelineInput(definition, config.runnerMode, scheduledAt, config.timezone);
-    const pipeline = await startContentPipeline(pipelineInput);
+    const pipeline = await startContentPipeline({
+      ...pipelineInput,
+      operationalRunKey: key,
+      operationalAttempt: attempt,
+    });
     const approvalId = pipeline.approvalId ?? null;
     let naverDraftJobId: string | undefined;
     let status: StockBlogSchedulerRunStatus = "succeeded";

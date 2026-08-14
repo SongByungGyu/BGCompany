@@ -11,6 +11,7 @@ AI 직원들의 상태, 업무, 비용, 결과를 한곳에서 관리하는 개�
 - `packages/shared`: 공통 타입과 유틸리티
 - `agents`: 향후 AI 직원 정의
 - `config`: 공통 설정
+- `docs/wiki`: 역할, 결정, 실패 교훈을 연결하는 BG Company 운영 위키
 - `docs/design/phase-1a`: Phase 1-A 디자인 기준 자료
 - `docs/product`: 장기 구축계획 참고자료
 - `infrastructure`: 인프라 관련 설정
@@ -44,3 +45,7 @@ npm run lint
 npm run build
 ```
 
+## 운영 위키
+
+운영 중 확인된 실패, 예방 규칙, 담당 Agent, 주요 결정을 [BG Company 운영 위키](docs/wiki/README.md)에 기록합니다.
+같은 원인의 재발은 새 문서를 만들지 않고 기존 교훈의 재발 횟수와 마지막 발생일을 갱신합니다.

@@ -1,4 +1,14 @@
 import type { MockAgentRunPlan } from "./agent-runner-types";
+import type { OperationalLessonInstruction } from "@/lib/operational-learning/operational-learning-policy";
+
+export type AgentExecutionMode = "human" | "policy" | "hermes" | "rules" | "local" | "mock";
+
+export type AgentExecutionProfile = {
+  defaultMode: AgentExecutionMode;
+  availableModes: AgentExecutionMode[];
+  label: string;
+  scope: string;
+};
 
 export type AgentMetadata = {
   agentId: string;
@@ -6,6 +16,7 @@ export type AgentMetadata = {
   department: string;
   defaultSeat: string;
   allowedEvents: string[];
+  execution: AgentExecutionProfile;
 };
 
 export type AgentRoleDocument = AgentMetadata & {
@@ -54,6 +65,9 @@ export type AgentRunContext = {
     agentEventsEndpoint: string;
   };
   metadata: Record<string, unknown>;
+  learning: {
+    approvedLessons: OperationalLessonInstruction[];
+  };
 };
 
 export type AgentRunContextSummary = {
@@ -73,6 +87,7 @@ export type AgentRunContextSummary = {
   outputFormat: string;
   reportingRules: string;
   eventEndpoint: string;
+  approvedLessonCount: number;
 };
 
 export interface AgentRunner {

@@ -239,6 +239,7 @@ export function buildContentPlannerHermesPayload(input: ContentPlannerHermesInpu
       editorialBenchmarkGuidelines: input.editorialBenchmarkGuidelines,
       referencePolicy: input.referencePolicy ?? STOCK_REFERENCE_POLICY,
       prohibitedPhrases: input.prohibitedPhrases,
+      approvedLessons: input.approvedLessons,
     },
     context: {
       company: "BG Company",
@@ -265,6 +266,7 @@ export function buildMarketingReviewHermesPayload(input: MarketingReviewHermesIn
       differentiationPoints: input.referenceBundle?.differentiationPoints,
       editorialBenchmarkGuidelines: input.editorialBenchmarkGuidelines,
       prohibitedPhrases: input.prohibitedPhrases,
+      approvedLessons: input.approvedLessons,
     },
     context: {
       company: "BG Company",
@@ -301,6 +303,7 @@ export function buildContentWriterHermesPayload(input: ContentWriterHermesInput)
       revisionAttempt: input.revisionAttempt,
       previousWriterResult: input.previousWriterResult,
       qaRevisionFeedback: input.qaRevisionFeedback,
+      approvedLessons: input.approvedLessons,
     },
     context: {
       company: "BG Company",
@@ -345,6 +348,7 @@ export function buildQaAuditHermesPayload(input: QaAuditHermesInput): HermesQaAu
       prohibitedPhrases: input.prohibitedPhrases,
       blogImagePrompts: input.blogImagePrompts,
       referencePolicy: STOCK_REFERENCE_POLICY,
+      approvedLessons: input.approvedLessons,
     },
     context: {
       company: "BG Company",

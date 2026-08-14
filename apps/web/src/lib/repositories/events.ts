@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { recordFailureFromPersistedEvent } from "@/lib/operational-learning/operational-learning-service";
 import { serializeEvent } from "./serializers";
 
 export async function listEvents() {
@@ -170,5 +171,8 @@ export async function createEvent(input: {
   });
   await applyEventSideEffects(event);
   await createTimelineForEvent(event);
+  await recordFailureFromPersistedEvent(event).catch((error: unknown) => {
+    console.error("Operational learning failed after event persistence", error);
+  });
   return serializeEvent(event);
 }

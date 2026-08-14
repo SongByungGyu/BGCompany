@@ -149,6 +149,58 @@ model AgentRun {
   @@index([hermesJobId])
 }
 
+model OperationalLesson {
+  id                     String    @id @default(cuid())
+  fingerprint            String    @unique
+  title                  String
+  area                   String
+  stage                  String
+  agentId                String?
+  severity               String    @default("medium")
+  status                 String    @default("observed")
+  approvalStatus         String    @default("not_requested")
+  occurrenceCount        Int       @default(1)
+  firstSeenAt            DateTime
+  lastSeenAt             DateTime
+  proposedPreventionRule String?
+  preventionRule         String?
+  rootCause              String?
+  regressionTest         String?
+  verificationEvidence   String?
+  policyVersion          String?
+  approvalId             String?   @unique
+  improvementProposalAt  DateTime?
+  approvedAt             DateTime?
+  rejectedAt             DateTime?
+  verifiedAt             DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  occurrences OperationalFailureOccurrence[]
+
+  @@index([area, status])
+  @@index([agentId, approvalStatus])
+  @@index([lastSeenAt])
+}
+
+model OperationalFailureOccurrence {
+  id            String   @id @default(cuid())
+  lessonId      String
+  occurrenceKey String   @unique
+  sourceEventId String?
+  correlationId String?
+  occurredAt    DateTime
+  errorCode     String?
+  message       String
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  lesson OperationalLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([lessonId, occurredAt])
+  @@index([sourceEventId])
+}
+
 model NaverDraftJob {
   id                  String    @id @default(cuid())
   contentPipelineId   String?

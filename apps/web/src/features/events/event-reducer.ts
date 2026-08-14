@@ -74,7 +74,7 @@ function taskTitleFromEvent(event: BGCompanyEvent) {
 
 function nextTextFromStatus(status: BGEmployeeStatus, currentNext: string) {
   if (status === "회의 중") return "회의 후 업무 결과 정리";
-  if (status === "승인 대기") return "대표 승인 필요";
+  if (status === "승인 대기") return "승인함 확인 필요";
   if (status === "오류 대응 중") return "오류 원인 분석 및 핫픽스 준비";
   if (status === "업무 완료") return "다음 업무 대기";
   if (status === "휴식 중") return "휴식 후 업무 복귀";

@@ -14,7 +14,7 @@ export type OperationsWorkspaceScope = "report" | "development" | "finance";
 
 const scopeConfig: Record<OperationsWorkspaceScope, { eyebrow: string; title: string; description: string; owner: string }> = {
   report: { eyebrow: "경영 보고", title: "운영 보고서", description: "오늘 완료한 업무와 대기·오류를 실제 운영 기록으로 정리합니다.", owner: "루나 · AI Director" },
-  development: { eyebrow: "서비스 운영", title: "개발 관제", description: "Web·DB·Hermes·스케줄러·네이버 작업 상태를 한 화면에서 확인합니다.", owner: "준범 · 개발팀" },
+  development: { eyebrow: "서비스 운영", title: "개발 관제", description: "Web·DB·Hermes·스케줄러·네이버 작업 상태를 한 화면에서 확인합니다.", owner: "하늘 · 개발팀" },
   finance: { eyebrow: "실제 청구 비용", title: "재정 현황", description: "OpenAI 공식 비용·사용량 API와 Hermes 실행 기록을 분리해 확인합니다.", owner: "도윤 · 재정팀" },
 };
 

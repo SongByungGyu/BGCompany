@@ -8,6 +8,7 @@ import { buildAgentRunContext, summarizeAgentRunContext } from "./agent-run-cont
 import { getAgentRunner, resolveAgentRunnerMode } from "./agent-runner-provider";
 import { HermesClientError } from "./hermes-client";
 import type { AgentRunRequest, AgentRunResult } from "./agent-runner-types";
+import { loadApprovedLessonInstructions } from "@/lib/operational-learning/operational-learning-service";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -84,7 +85,8 @@ export async function runAgentTask(input: unknown): Promise<AgentRunResult> {
   }
 
   const runId = `run-${randomUUID()}`;
-  const context = buildAgentRunContext({ runId, task, employee });
+  const approvedLessons = await loadApprovedLessonInstructions({ agentId: employeeId });
+  const context = buildAgentRunContext({ runId, task, employee, approvedLessons });
   const contextSummary = summarizeAgentRunContext(context);
   const runnerMode = resolveAgentRunnerMode(request.mode === "mock-error" ? "mock" : request.mode);
   const effectiveMode = request.mode ?? runnerMode;
@@ -250,6 +252,7 @@ export async function runAgentTask(input: unknown): Promise<AgentRunResult> {
   };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown agent run error";
+    const errorCode = error instanceof HermesClientError ? error.code : "AGENT_RUN_FAILED";
     await emit({
       source: "mock",
       eventType: "ErrorOccurred",
@@ -259,6 +262,9 @@ export async function runAgentTask(input: unknown): Promise<AgentRunResult> {
         runId,
         summary: `${context.agent.displayName} Agent 실행 실패`,
         error: message,
+        errorCode,
+        area: "agent-runtime",
+        stage: employeeId,
       },
     }).catch(() => null);
     await updateAgentRunStatus({
@@ -272,7 +278,6 @@ export async function runAgentTask(input: unknown): Promise<AgentRunResult> {
         eventCount: events.length,
       } as Prisma.InputJsonValue,
     });
-    const errorCode = error instanceof HermesClientError ? error.code : "AGENT_RUN_FAILED";
     throw new AgentEventError(errorCode, message, error instanceof HermesClientError ? error.status ?? 500 : 500);
   }
 }

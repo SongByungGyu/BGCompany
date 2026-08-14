@@ -18,6 +18,7 @@ import { PortfolioView } from "@/features/portfolio/PortfolioView";
 import { fetchOperationsOverview } from "@/features/operations/api";
 import type { DashboardEmployeeActivity, DashboardSummary, DashboardSummaryCard } from "@/lib/dashboard-summary/summary-types";
 import type { OperationsOverview } from "@/lib/operations/operations-overview-types";
+import { getAgentExecutionLabel, getAgentMetadata } from "@/lib/agents/agent-registry";
 
 type View = "selected" | "unselected" | "approval" | "error" | "empty" | "loading";
 type Tab = "summary" | "outputs" | "timeline";
@@ -44,17 +45,17 @@ const initialEmployees: Employee[] = [
   { id:"ceo",name:"병규",initial:"병",department:"대표실",role:"대표",status:"대기 중",group:"idle",task:"회사 전체 운영 현황 확인",progress:0,started:"09:00",model:"Human Director",cost:"미집계",output:"대표 의사결정 보드",outputMeta:"실시간 동기화",next:"승인 및 운영 판단" },
   { id:"director",name:"루나",initial:"루",department:"대표실",role:"AI Director",status:"대기 중",group:"idle",task:"전체 회사 업무 현황 대기",progress:0,started:"09:00",model:"Claude Opus 4.6",cost:"미집계",output:"오전 경영 브리핑",outputMeta:"09:30 저장됨",next:"다음 경영 판단 대기" },
   { id:"content-planner",name:"미나",initial:"미",department:"콘텐츠팀",role:"콘텐츠 기획",status:"업무 중",group:"working",task:"주식시장 브리핑 기획",progress:68,started:"13:50",model:"Claude Opus 4.6",cost:"미집계",output:"기획안 v2",outputMeta:"14:21 저장됨",next:"제목 A/B안 생성" },
-  { id:"marketing-manager",name:"카이",initial:"카",department:"콘텐츠팀",role:"마케팅 검토",status:"승인 대기",group:"waiting",task:"콘텐츠 제목·썸네일 검토",progress:100,started:"13:35",model:"Claude Opus 4.6",cost:"미집계",output:"마케팅 검토안",outputMeta:"승인 대기",next:"대표 승인 필요" },
+  { id:"marketing-manager",name:"카이",initial:"카",department:"콘텐츠팀",role:"마케팅 검토",status:"승인 대기",group:"waiting",task:"콘텐츠 제목·썸네일 검토",progress:100,started:"13:35",model:"Claude Opus 4.6",cost:"미집계",output:"마케팅 검토안",outputMeta:"승인 대기",next:"정책 승인 또는 예외 확인" },
   { id:"content-writer",name:"지아",initial:"지",department:"콘텐츠팀",role:"콘텐츠 작가",status:"업무 중",group:"working",task:"네이버 블로그 본문 작성",progress:47,started:"13:55",model:"GPT-5.4 mini",cost:"미집계",output:"게시용 본문 초안",outputMeta:"작성 중",next:"QA 검토 요청" },
   { id:"qa-auditor",name:"윤아",initial:"윤",department:"지식·감사",role:"QA 감사",status:"회의 중",group:"meeting",task:"콘텐츠 품질 기준 검토",progress:76,started:"13:20",model:"Claude Opus 4.6",cost:"미집계",output:"QA 체크리스트 v3",outputMeta:"14:05 저장됨",next:"품질 오차 보고" },
   { id:"finance-manager",name:"도윤",initial:"도",department:"재정팀",role:"재정 관리",status:"업무 중",group:"working",task:"운영비 정산 및 현금흐름 검토",progress:54,started:"13:42",model:"GPT-5.1",cost:"미집계",output:"주간 비용 요약",outputMeta:"14:18 저장됨",next:"비용 이상치 검토" },
   { id:"stock-monitor",name:"서준",initial:"서",department:"주식팀",role:"시장 분석",status:"조사 중",group:"waiting",task:"한국·미국 시장 데이터 모니터링",progress:42,started:"13:28",model:"Claude Sonnet 4.6",cost:"미집계",output:"시장 변동 리포트",outputMeta:"14:12 저장됨",next:"대표 보고 준비" },
-  { id:"developer",name:"준범",initial:"준",department:"개발팀",role:"개발·서버",status:"오류 대응 중",group:"error",task:"배포 파이프라인 및 서버 점검",progress:30,started:"14:18",model:"GPT-5.1 Codex",cost:"미집계",output:"에러 로그 분석",outputMeta:"14:24 진행 중",next:"핫픽스 PR 생성",error:"빌드 단계 exit code 1 · 14:21 감지, 자동 재시도 1회 실패." },
+  { id:"developer",name:"하늘",initial:"하",department:"개발팀",role:"개발·서버",status:"오류 대응 중",group:"error",task:"배포 파이프라인 및 서버 점검",progress:30,started:"14:18",model:"GPT-5.1 Codex",cost:"미집계",output:"에러 로그 분석",outputMeta:"14:24 진행 중",next:"핫픽스 PR 생성",error:"빌드 단계 exit code 1 · 14:21 감지, 자동 재시도 1회 실패." },
   { id:"local-publisher",name:"Local Agent",initial:"N",department:"게시 운영",role:"네이버 게시 에이전트",status:"대기 중",group:"idle",task:"네이버 임시저장 작업 대기",progress:0,started:"상시",model:"Local Playwright",cost:"미집계",output:"Draft Job Queue",outputMeta:"연결 대기",next:"승인된 글 임시저장" },
 ];
 
 const employeeProfileOverrides: Partial<Record<string, Pick<Employee, "name" | "initial" | "role">>> = {
-  developer: { name: "준범", initial: "준", role: "개발·서버" },
+  developer: { name: "하늘", initial: "하", role: "개발·서버" },
 };
 
 const nav = [["⌂","대표실"],["◇","가상 오피스"],["▣","업무 보드"],["♙","승인함"],["✎","콘텐츠"],["▤","재정"],["⌁","주식"],["‹›","개발"],["□","지식관리"],["◉","감사·품질"],["▧","보고서"]];
@@ -83,7 +84,7 @@ const placeholderWorkspaces: Record<string, PlaceholderWorkspaceConfig> = {
     status: "업무 보드 연동 중",
     current: "개발 직원 상태와 오류 업무는 가상 오피스·업무 보드에 반영됩니다.",
     next: "서비스별 헬스와 최근 배포 결과를 연결합니다.",
-    owner: "준범 · 개발팀",
+    owner: "하늘 · 개발팀",
     checkpoints: [["서비스 헬스", "Web·Hermes·DB 상태"], ["배포 기록", "빌드·테스트·릴리스"], ["오류 대응", "원인·조치·복구 시간"]],
   },
   "지식관리": {
@@ -138,14 +139,15 @@ function mergeEmployeeRecords(currentEmployees: Employee[], records: EmployeeRec
     const record = recordsById.get(employee.id);
     if (!record) return employee;
     const profileOverride = employeeProfileOverrides[employee.id];
+    const registeredAgent = getAgentMetadata(employee.id);
     const status = isEmployeeStatus(record.status) ? record.status : employee.status;
     const currentTask = record.currentTask;
     const nextEmployee = {
       ...employee,
-      name: profileOverride?.name ?? (record.displayName || employee.name),
-      initial: profileOverride?.initial ?? (record.initial || employee.initial),
+      name: registeredAgent?.displayName ?? profileOverride?.name ?? (record.displayName || employee.name),
+      initial: registeredAgent?.displayName.slice(0, 1) ?? profileOverride?.initial ?? (record.initial || employee.initial),
       role: profileOverride?.role ?? employee.role,
-      department: record.department || employee.department,
+      department: registeredAgent?.department ?? record.department ?? employee.department,
       status,
       group: statusGroupMap[status],
       task: currentTask?.title ?? employee.task,
@@ -409,7 +411,7 @@ export default function Home() {
   }, [publishBGEvent]);
   const updateEmployeeStatus = useCallback((employeeId: string, status: EmployeeStatus, focus = true) => {
     const group = statusGroupMap[status];
-    setEmployees(list=>list.map(employee=>employee.id===employeeId?{...employee,status,group,next:status==="업무 완료"?"다음 업무 대기":status==="오류 대응 중"?"오류 원인 분석 및 핫픽스 준비":status==="승인 대기"?"대표 승인 필요":employee.next}:employee));
+    setEmployees(list=>list.map(employee=>employee.id===employeeId?{...employee,status,group,next:status==="업무 완료"?"다음 업무 대기":status==="오류 대응 중"?"오류 원인 분석 및 핫픽스 준비":status==="승인 대기"?"정책 승인 또는 예외 확인":employee.next}:employee));
     if (focus) {
       const index = employees.findIndex((employee) => employee.id === employeeId);
       if (index >= 0) {
@@ -436,7 +438,7 @@ export default function Home() {
               <OfficeViewportStatusBar/>
               <div className="office-canvas-wrap">
                 <div className="controls"><button>⌕</button><button>⛶</button><button>◇</button></div>
-                {view==="error"&&<div className="toast"><span>⚠</span><strong>개발·서버실 · 준범 — 배포 파이프라인 오류 대응 중</strong><button onClick={()=>setDemoView("error")}>상세 보기</button></div>}
+                {view==="error"&&<div className="toast"><span>⚠</span><strong>개발·서버실 · 하늘 — 배포 파이프라인 오류 대응 중</strong><button onClick={()=>setDemoView("error")}>상세 보기</button></div>}
                 <ViewportState
                   employees={employees}
                   onSelectEmployee={chooseEmployeeById}
@@ -572,7 +574,8 @@ function ViewportState({
 }){ if(view==="empty") return <div className="view-center empty"><b>▱</b><strong>아직 활동 중인 직원이 없습니다</strong><p>직원을 채용하면 이곳에서 함께 일하는 모습을 볼 수 있습니다</p></div>; if(view==="loading") return <div className="view-center loading"><i/><span>가상 오피스를 불러오는 중...</span></div>; return <OfficeCanvas employees={employees} onSelectEmployee={onSelectEmployee} selectedEmployeeId={selectedEmployeeId}/> }
 function EmployeeDock({view,employees,selected,choose}:{view:View;employees:Employee[];selected:number;choose:(i:number)=>void}){ return <div className="employee-dock-bar"><header><div><strong>사무실 직원</strong><span>클릭하면 우측에 상세가 열립니다</span></div><span>총 {employees.length}명 · 업무 중 {employees.filter(e=>["working","meeting"].includes(e.group)).length}</span></header>{view==="loading"?<div className="dock-skeleton">{[1,2,3,4,5].map(i=><i key={i}/>)}</div>:employees.length===0?<div className="dock-empty">표시할 직원이 없습니다</div>:<div className="dock-list">{employees.map((e,i)=><button key={e.id} className={selected===i&&view!=="unselected"?"selected":""} onClick={()=>choose(i)}><Avatar e={e} small/><span><strong>{e.name}</strong><small className={e.group}>{e.status}</small></span></button>)}</div>}</div> }
 function Panel({view,employee,tab,setTab,close,resolve,timelineEntries,timelineRefreshKey}:{view:View;employee?:Employee;tab:Tab;setTab:(t:Tab)=>void;close:()=>void;resolve:(a:boolean)=>void;timelineEntries:BGTimelineEntry[];timelineRefreshKey:number}){ const employeeTimeline=useTimeline(employee&&view!=="empty"&&view!=="unselected"&&view!=="loading"?"employee":undefined,employee?.id,{ polling: tab==="timeline" }); const refreshEmployeeTimeline=employeeTimeline.refresh; useEffect(()=>{ if(!employee?.id||view==="empty"||view==="unselected"||view==="loading") return; Promise.resolve().then(()=>refreshEmployeeTimeline()); },[employee?.id,timelineRefreshKey,view,refreshEmployeeTimeline]); if(view==="loading") return <aside className="panel skeleton"><i/><div><b/><span><i/><i/></span></div><i/><i className="tall"/><section><i/><i/></section><i/></aside>; if(view==="empty"||view==="unselected"||!employee) return <aside className="panel no-selection"><div><b>♙</b><strong>{view==="empty"?"선택할 직원이 없습니다":"직원을 선택하세요"}</strong><p>{view==="empty"?"직원이 채용되면 이곳에서 상세 정보를 확인할 수 있습니다.":"하단 직원 도크에서 직원을 클릭하면 현재 업무와 상세 정보가 여기에 표시됩니다."}</p></div></aside>; return <aside className="panel"><div className="tabs">{(["summary","outputs","timeline"] as Tab[]).map(t=><button key={t} className={tab===t?"active":""} onClick={()=>setTab(t)}>{t==="summary"?"요약":t==="outputs"?"결과물":"타임라인"}</button>)}<button className="close" onClick={close}>×</button></div><div className="panel-body"><div className="profile"><Avatar e={employee}/><div><h2>{employee.name}</h2><p>{employee.department} · {employee.role}</p></div></div><span className={`badge ${employee.group}`}><i className={`dot ${employee.group}`}/>{employee.status}</span>{tab==="summary"?<Summary e={employee} view={view} resolve={resolve}/>:tab==="outputs"?<Outputs e={employee}/>:<Timeline e={employee} entries={timelineEntries} dbTimeline={employeeTimeline.timeline} isLoading={employeeTimeline.isLoading} error={employeeTimeline.error}/>}</div></aside> }
-function Summary({e,view,resolve}:{e:Employee;view:View;resolve:(a:boolean)=>void}){ return <div className="panel-stack">{view==="error"&&e.error&&<div className="error-banner"><span>⚠</span><div><strong>오류가 발생했습니다</strong><p>{e.error}</p></div></div>}<section className="task"><label>현재 업무</label><strong>{e.task}</strong><div><span><i className={e.group} style={{width:`${e.progress}%`}}/></span><b>{e.progress}%</b></div></section><div className="metrics"><Metric label="시작 시각" value={e.started}/><Metric label="현재 비용" value={e.cost}/><Metric label="사용 중인 모델" value={`• ${e.model}`} wide/></div><section className="output"><b>▯</b><div><label>최근 결과물</label><strong>{e.output}</strong><small>{e.outputMeta}</small></div></section>{view==="approval"&&e.status==="승인 대기"&&<section className="approval"><label>대표 승인 요청</label><div><button onClick={()=>resolve(true)}>승인</button><button onClick={()=>resolve(false)}>반려</button></div></section>}<section className="next"><div><label>다음 행동</label><strong>{e.next}</strong></div><span>→</span></section></div> }
+function Summary({e,view,resolve}:{e:Employee;view:View;resolve:(a:boolean)=>void}){ return <div className="panel-stack">{view==="error"&&e.error&&<div className="error-banner"><span>⚠</span><div><strong>오류가 발생했습니다</strong><p>{e.error}</p></div></div>}<section className="task"><label>현재 업무</label><strong>{e.task}</strong><div><span><i className={e.group} style={{width:`${e.progress}%`}}/></span><b>{e.progress}%</b></div></section><div className="metrics"><Metric label="시작 시각" value={e.started}/><Metric label="현재 비용" value={e.cost}/><Metric label="사용 중인 모델" value={`• ${e.model}`} wide/><Metric label="실제 실행 방식" value={employeeExecutionLabel(e.id)} wide/></div><section className="output"><b>▯</b><div><label>최근 결과물</label><strong>{e.output}</strong><small>{e.outputMeta}</small></div></section>{view==="approval"&&e.status==="승인 대기"&&<section className="approval"><label>CEO 예외 승인 요청</label><div><button onClick={()=>resolve(true)}>승인</button><button onClick={()=>resolve(false)}>반려</button></div></section>}<section className="next"><div><label>다음 행동</label><strong>{e.next}</strong></div><span>→</span></section></div> }
+function employeeExecutionLabel(employeeId:string){ if(employeeId==="ceo") return "Human · 최종 의사결정"; if(employeeId==="local-publisher"||employeeId==="local-naver-draft-agent") return "Local Playwright · 정책 게이트"; return getAgentExecutionLabel(employeeId); }
 function Metric({label,value,wide}:{label:string;value:string;wide?:boolean}){return <div className={`metric ${wide?"wide":""}`}><label>{label}</label><strong>{value}</strong></div>}
 function Outputs({e}:{e:Employee}){return <div className="output-list">{[[e.output,e.outputMeta],["업무 진행 메모",`${e.started} 작성`],["참고 자료 묶음","파일 4개"]].map(([a,b])=><article key={a}><b>▯</b><div><strong>{a}</strong><small>{b}</small></div></article>)}</div>}
 function timelineGroup(title:string, fallback:Group){ if(title.includes("Error")||title.includes("오류")) return "error"; if(title.includes("Approval")||title.includes("승인")) return "waiting"; if(title.includes("Meeting")||title.includes("회의")) return "meeting"; if(title.includes("완료")||title.includes("Resolved")) return "done"; return fallback; }

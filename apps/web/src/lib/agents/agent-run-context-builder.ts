@@ -1,6 +1,7 @@
 import type { Employee, Task } from "@prisma/client";
 import { loadAgentRoleDocument } from "./agent-role-loader";
 import type { AgentRunContext, AgentRunContextSummary } from "./agent-context-types";
+import type { OperationalLessonInstruction } from "@/lib/operational-learning/operational-learning-policy";
 
 const supportedEvents = [
   "TaskCreated",
@@ -53,6 +54,7 @@ export function buildAgentRunContext(input: {
   runId: string;
   task: Task;
   employee: Employee;
+  approvedLessons?: OperationalLessonInstruction[];
 }): AgentRunContext {
   const agent = loadAgentRoleDocument(input.employee.id);
   const taskApprovalText = textForApproval(input.task, agent.approvalConditions);
@@ -100,6 +102,9 @@ export function buildAgentRunContext(input: {
       approvalConditions: agent.approvalConditions,
       reportingRules: agent.reportingRules,
     },
+    learning: {
+      approvedLessons: input.approvedLessons ?? [],
+    },
   };
 }
 
@@ -121,5 +126,6 @@ export function summarizeAgentRunContext(context: AgentRunContext): AgentRunCont
     outputFormat: context.outputFormat,
     reportingRules: context.agent.reportingRules,
     eventEndpoint: context.eventContract.endpoint,
+    approvedLessonCount: context.learning.approvedLessons.length,
   };
 }

@@ -5,7 +5,7 @@ Local-only agent for preparing Naver Blog drafts from BG Company `NaverDraftJob`
 ## Safety policy
 
 - Default is dry-run: `NAVER_AGENT_DRY_RUN=true`.
-- The agent never clicks the Naver publish button.
+- Publishing is off by default; a click is possible only through the guarded automatic publishing policy below.
 - Naver ID/password are not stored by BG Company.
 - Naver cookies are kept only in the local browser profile directory.
 - Captcha, 2FA, login, and security screens require manual user action.
@@ -32,12 +32,12 @@ NAVER_ALLOW_DRAFT_SAVE=false
 
 ## 0-stage operation
 
-1. BG Company creates a Naver draft job after Director approval.
+1. BG Company creates a Naver draft job after policy approval or an approved CEO exception.
 2. This local agent polls `/api/local-agents/naver-drafts/next`.
 3. It claims the job and writes a local JSON file under `drafts/`.
 4. In dry-run mode it reports `draft_saved` with a `dry-run://` URL.
 5. In non-dry-run mode it opens a local Chromium profile and fills Naver Blog fields where possible.
-6. The user verifies and publishes manually.
+6. The job either stops for user verification/manual publishing or enters guarded automatic publishing when every opt-in and server gate passes.
 
 ## Browser troubleshooting
 

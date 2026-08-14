@@ -37,7 +37,7 @@ test("retries QA-approved output when deterministic editorial contract fails", (
   assert.equal(shouldRetryStockBlogQa(qa, 1, writer), true);
   assert.match(
     buildStockBlogQaRevisionFeedback(qa, writer).requiredRevisions.join("\n"),
-    /편집 정책 v4 필수 수정: 30초 요약/,
+    /편집 정책 v\d+ 필수 수정: 30초 요약/,
   );
 });
 

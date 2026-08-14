@@ -72,7 +72,7 @@ export function getStockBlogWorkflow(contentType: StockBlogContentType): StockBl
       { id: "marketing-review", label: "제목·SEO·썸네일 검토", ownerTeam: "블로그 운영팀", ownerAgentId: "marketing-manager", expectedOutput: "제목 후보, 태그, 썸네일 문구", requiresHermes: true },
       { id: "writing", label: "게시용 본문 작성", ownerTeam: "블로그 운영팀", ownerAgentId: "content-writer", expectedOutput: "네이버 블로그 붙여넣기용 본문 초안", requiresHermes: true },
       { id: "qa-audit", label: "투자 유의·품질 검수", ownerTeam: "QA/감사팀", ownerAgentId: "qa-auditor", expectedOutput: "사실성, 과장 표현, 투자 유의문구 검토", requiresHermes: true },
-      { id: "director-approval", label: "대표 승인", ownerTeam: "게시 운영팀", ownerAgentId: "director", expectedOutput: "게시 가능 여부 결정", requiresHermes: false },
+      { id: "director-approval", label: "정책 승인·CEO 예외 분류", ownerTeam: "게시 운영팀", ownerAgentId: "director", expectedOutput: "정책 내 자동 승인 또는 CEO 예외 승인 요청", requiresHermes: false },
       { id: "naver-draft", label: "네이버 임시저장 큐", ownerTeam: "게시 운영팀", ownerAgentId: "local-naver-draft-agent", expectedOutput: "로컬 브라우저 기반 네이버 임시저장", requiresHermes: false },
     ],
   };
