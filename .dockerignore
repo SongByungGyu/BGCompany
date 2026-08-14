@@ -16,6 +16,10 @@ out
 build
 coverage
 
+# Runtime data that must never enter Docker build contexts
+backups/
+logs/
+
 # Logs and editor files
 *.log
 .DS_Store
