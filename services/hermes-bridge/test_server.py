@@ -375,6 +375,24 @@ class VerifiedSchedulePromptTests(unittest.TestCase):
         self.assertIn("1,900~2,100자를 목표", prompt)
         self.assertIn("한 개념, 한 문단, 문장부호로 끝나는 정확히 4문장", prompt)
 
+    def test_investment_study_uses_weekly_length_policy_in_writer_and_qa(self) -> None:
+        input_data = {
+            "topic": "코스피 대형주 쏠림장",
+            "title": "코스피는 오르는데 내 종목은 왜 안 오를까?",
+            "channel": "blog",
+            "referenceBundle": {"contentType": "INVESTMENT_STUDY"},
+            "qualityGateDiagnostics": {
+                "editorialPolicyVersion": 7,
+                "requiredEditorialQualityScore": 95,
+            },
+        }
+
+        writer_prompt = bridge.build_content_writer_prompt({"input": input_data})
+        qa_prompt = bridge.build_qa_audit_prompt({"input": input_data})
+
+        self.assertIn("공백 포함 2,000~3,200자", writer_prompt)
+        self.assertIn("공백 포함 2,000~3,200자", qa_prompt)
+
     def test_qa_prompt_receives_server_schedule_validation(self) -> None:
         prompt = bridge.build_qa_audit_prompt({
             "input": {

@@ -529,7 +529,12 @@ def build_content_writer_prompt(payload: dict[str, Any]) -> str:
     reference_bundle = input_data.get("referenceBundle") if isinstance(input_data.get("referenceBundle"), dict) else {}
     content_type = str(reference_bundle.get("contentType") or "KOREA_DAILY_PREVIEW")
     editorial_policy_v2 = "1. 30초 요약" in body_structure
-    weekly_editorial = content_type in {"WEEKLY_MARKET_REVIEW", "NEXT_WEEK_MARKET_PREVIEW"}
+    weekly_editorial = content_type in {
+        "WEEKLY_MARKET_REVIEW",
+        "NEXT_WEEK_MARKET_PREVIEW",
+        "INVESTMENT_STUDY",
+        "LARGE_CAP_DISCLOSURE_EARNINGS",
+    }
     body_min, body_target_min, body_target_max, body_max = (
         (2000, 2300, 2900, 3200) if weekly_editorial else (1800, 2100, 2600, 2800)
     )
@@ -700,7 +705,12 @@ def build_qa_audit_prompt(payload: dict[str, Any]) -> str:
     quality_target = int(quality_diagnostics.get("requiredEditorialQualityScore") or 90)
     reference_bundle = input_data.get("referenceBundle") if isinstance(input_data.get("referenceBundle"), dict) else {}
     content_type = str(reference_bundle.get("contentType") or "KOREA_DAILY_PREVIEW")
-    weekly_editorial = content_type in {"WEEKLY_MARKET_REVIEW", "NEXT_WEEK_MARKET_PREVIEW"}
+    weekly_editorial = content_type in {
+        "WEEKLY_MARKET_REVIEW",
+        "NEXT_WEEK_MARKET_PREVIEW",
+        "INVESTMENT_STUDY",
+        "LARGE_CAP_DISCLOSURE_EARNINGS",
+    }
     body_min, body_max = (2000, 3200) if weekly_editorial else (1800, 2800)
     editorial_policy_v2 = int(quality_diagnostics.get("editorialPolicyVersion") or 0) >= 2
     checklist_item_count = int(quality_diagnostics.get("requiredChecklistItemCount") or 3)
