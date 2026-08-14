@@ -451,7 +451,8 @@ def build_content_writer_prompt(payload: dict[str, Any]) -> str:
     }
     planner_json = compact_json(planner_result)
     marketing_json = compact_json(marketing_result)
-    market_json = compact_json(compact_market_snapshot(input_data))
+    market_snapshot = compact_market_snapshot(input_data)
+    market_json = compact_json(market_snapshot)
     references_json = compact_json(compact_reference_context(input_data))
     competitors_json = compact_json(compact_competitor_context(input_data))
     revision_attempt_raw = input_data.get("revisionAttempt")
@@ -532,6 +533,17 @@ def build_content_writer_prompt(payload: dict[str, Any]) -> str:
     body_min, body_target_min, body_target_max, body_max = (
         (2000, 2300, 2900, 3200) if weekly_editorial else (1800, 2100, 2600, 2800)
     )
+    upcoming_events = market_snapshot.get("upcoming") if isinstance(market_snapshot, dict) else None
+    daily_schedule_will_be_injected = (
+        content_type in {"KOREA_DAILY_PREVIEW", "KOREA_MARKET_CLOSE_US_PREVIEW"}
+        and isinstance(upcoming_events, list)
+        and len(upcoming_events) > 0
+    )
+    if daily_schedule_will_be_injected:
+        # The web service appends up to two verified schedule events after the
+        # writer returns. Reserve room so the assembled public body still fits
+        # the daily 2,800-character ceiling.
+        body_target_min, body_target_max, body_max = 1900, 2100, 2300
     editorial_structure_policy = ""
     if editorial_policy_v2:
         editorial_structure_policy = """
@@ -539,7 +551,7 @@ def build_content_writer_prompt(payload: dict[str, Any]) -> str:
 - "핵심 숫자"는 검증된 숫자 4~6개를 각각 새 줄의 "- 항목: 값 — 시장에서 갖는 의미" 형식으로 작성한다. 숫자 항목에 1., 2. 같은 번호를 붙이지 않는다.
 - "핵심 변수 2가지"는 정확히 두 줄만 두고 각각 "- 변수 1:"과 "- 변수 2:"로 시작한다.
 - 상승·하락 조건 섹션에는 "- 상승 조건:"과 "- 하락 조건:"을 모두 두고 관찰 가능한 조건으로 작성한다.
-- 초보자 설명은 오늘 시장에 직접 연결된 개념 하나만 3~5문장으로 설명한다.
+- 초보자 설명은 오늘 시장에 직접 연결된 개념 하나만 한 문단, 정확히 4문장으로 설명한다. 환율처럼 두 번째 개념을 덧붙여 5문장을 넘기지 않는다.
 - "볼 것 3가지"는 정확히 세 줄의 "- " 불릿만 작성한다. 네 번째 확인 항목을 추가하지 않는다.
 - "BG Market Note 판단"에는 기본 판단과 그 판단을 바꿀 조건을 함께 적는다.
 - 댓글·공감·이웃·투표를 요청하거나 질문으로 참여를 유도하지 않는다. cta에는 지정 투자 유의문구만 자연스럽게 둔다.
@@ -588,6 +600,7 @@ def build_content_writer_prompt(payload: dict[str, Any]) -> str:
     strict_writer_rules = f"""
 - sections 배열 길이는 정확히 {len(body_structure)}개이며 required body structure와 heading·순서가 완전히 같아야 한다.
 - 모델 초안은 공백 포함 {body_min:,}~{body_max:,}자이며 {body_target_min:,}~{body_target_max:,}자를 목표로 한다. 내용 있는 문단 블록 10개 이상, 줄바꿈 15개 이상, "- " 불릿 5개 이상이어야 한다.
+- 초보자 설명은 한 개념, 한 문단, 문장부호로 끝나는 정확히 4문장이어야 한다.
 - "함께 확인한 기사" 외부의 URL은 0개이고, 해당 섹션에는 서로 다른 실제 기사 URL이 정확히 3개다.
 - 지정 투자 유의문구는 cta에 정확히 한 번만 있으며 sections나 conclusion에 반복하지 않는다.
 """.strip()

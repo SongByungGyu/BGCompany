@@ -350,6 +350,31 @@ class VerifiedSchedulePromptTests(unittest.TestCase):
         self.assertIn("한국투자증권·FRED 최근 거래일 자료 기준", prompt)
         self.assertIn('"6,516.27으로"가 아니라 "6,516.27로"', prompt)
 
+    def test_daily_writer_reserves_room_for_server_injected_schedule(self) -> None:
+        prompt = bridge.build_content_writer_prompt({
+            "input": {
+                "topic": "오늘 코스피 전망",
+                "title": "오늘 코스피 전망",
+                "channel": "blog",
+                "referenceBundle": {
+                    "contentType": "KOREA_DAILY_PREVIEW",
+                    "marketSnapshot": {
+                        "upcoming": [{
+                            "date": "2026-08-14",
+                            "event": "Advance Monthly Sales for Retail and Food Services",
+                            "market": "US",
+                            "url": "https://example.com/schedule",
+                        }],
+                    },
+                },
+                "bodyStructure": ["1. 30초 요약", "5. 오늘의 초보자 설명", "함께 확인한 기사"],
+            },
+        })
+
+        self.assertIn("공백 포함 1,800~2,300자", prompt)
+        self.assertIn("1,900~2,100자를 목표", prompt)
+        self.assertIn("한 개념, 한 문단, 문장부호로 끝나는 정확히 4문장", prompt)
+
     def test_qa_prompt_receives_server_schedule_validation(self) -> None:
         prompt = bridge.build_qa_audit_prompt({
             "input": {
