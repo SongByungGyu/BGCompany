@@ -18,7 +18,7 @@ function marketDate(value: string | undefined) {
   return /^\d{4}-\d{2}-\d{2}$/.test(normalized) && !Number.isNaN(Date.parse(`${normalized}T00:00:00.000Z`)) ? normalized : null;
 }
 
-export function getPaperTradingSchedulerConfig(env: NodeJS.ProcessEnv = process.env): PaperTradingSchedulerConfig {
+export function getPaperTradingSchedulerConfig(env: Partial<NodeJS.ProcessEnv> = process.env): PaperTradingSchedulerConfig {
   const timezone = env.PAPER_AUTO_SCHEDULER_TZ?.trim() || "Asia/Seoul";
   const retry = Number.parseInt(env.PAPER_AUTO_SCHEDULER_RETRY_LIMIT ?? "1", 10);
   const cron = parseDailyCron(env.PAPER_AUTO_SCHEDULER_CRON ?? "20 7 * * *").cron;

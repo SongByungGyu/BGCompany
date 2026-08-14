@@ -18,7 +18,7 @@ function boundedNumber(value: string | undefined, fallback: number, minimum: num
   return Number.isFinite(parsed) ? Math.max(minimum, Math.min(parsed, maximum)) : fallback;
 }
 
-export function getPortfolioDailyAssistantConfig(env: NodeJS.ProcessEnv = process.env): PortfolioDailyAssistantConfig {
+export function getPortfolioDailyAssistantConfig(env: Partial<NodeJS.ProcessEnv> = process.env): PortfolioDailyAssistantConfig {
   return {
     assistantEnabled: enabled(env.PORTFOLIO_DAILY_ASSISTANT_ENABLED),
     snapshotEnabled: enabled(env.PORTFOLIO_DAILY_SNAPSHOT_ENABLED),

@@ -9,7 +9,7 @@ const config = getPaperTradingSchedulerConfig({
   PAPER_AUTO_SCHEDULER_RETRY_LIMIT: "1",
   PAPER_TRIAL_START_DATE: "2026-08-10",
   PAPER_TRIAL_END_DATE: "2026-08-28",
-} as NodeJS.ProcessEnv);
+});
 
 test("paper scheduler runs after 07:20 KST and retries only once", () => {
   const now = new Date("2026-08-10T00:00:00.000Z");

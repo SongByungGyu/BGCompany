@@ -38,7 +38,7 @@ export function parseDailyCron(value: string | undefined) {
   return valid ? { cron, minute, hour } : { cron: DEFAULT_CRON, minute: 30, hour: 8 };
 }
 
-export function getPortfolioAutoSyncConfig(env: NodeJS.ProcessEnv = process.env): PortfolioAutoSyncConfig {
+export function getPortfolioAutoSyncConfig(env: Partial<NodeJS.ProcessEnv> = process.env): PortfolioAutoSyncConfig {
   const timezone = env.PORTFOLIO_ACCOUNT_AUTO_SYNC_TZ?.trim() || DEFAULT_TIMEZONE;
   const retry = Number.parseInt(env.PORTFOLIO_ACCOUNT_AUTO_SYNC_RETRY_LIMIT ?? "", 10);
   return {
