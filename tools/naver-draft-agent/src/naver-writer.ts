@@ -467,8 +467,15 @@ async function focusAfterNaverHeading(page: import("playwright").Page, heading: 
         const text = (await target.innerText({ timeout: 3000 }).catch(() => "")).replace(/\s+/g, " ").trim();
         if (text !== expected) continue;
         const box = await target.boundingBox().catch(() => null);
+        // Formatting the previous paragraph can leave SmartEditor's floating
+        // toolbar expanded over the next heading. Escape closes it when
+        // possible; force keeps the caret-placement click deterministic if the
+        // toolbar animation is still intercepting pointer events.
+        await page.keyboard.press("Escape").catch(() => undefined);
+        await target.scrollIntoViewIfNeeded().catch(() => undefined);
         await target.click({
           timeout: 5000,
+          force: true,
           ...(box ? { position: { x: Math.max(2, box.width - 4), y: Math.max(2, box.height / 2) } } : {}),
         });
         const caretReady = await target.evaluate((element) => {

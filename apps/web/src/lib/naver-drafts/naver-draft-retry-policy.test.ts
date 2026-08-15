@@ -76,10 +76,10 @@ test("발행 버튼 이후 실패는 중복 게시 방지를 위해 자동 재�
   assert.match(decision.reason ?? "", /안전 재시도 대상|중복 게시/);
 });
 
-test("안전 재시도 한도는 기본 2회, 최대 5회다", () => {
-  assert.equal(getNaverDraftSafeRetryLimit(), 2);
-  assert.equal(getNaverDraftSafeRetryLimit("9"), 5);
-  assert.equal(getNaverDraftSafeRetryLimit("invalid"), 2);
+test("안전 재시도 한도는 기본 8회, 최대 12회다", () => {
+  assert.equal(getNaverDraftSafeRetryLimit(), 8);
+  assert.equal(getNaverDraftSafeRetryLimit("20"), 12);
+  assert.equal(getNaverDraftSafeRetryLimit("invalid"), 8);
 });
 
 test("발행 버튼 전 오류는 다음 예약 글을 막는 전역 차단기를 켜지 않는다", () => {

@@ -19,8 +19,8 @@ export type NaverDraftSafeRetryDecision = {
 };
 
 export function getNaverDraftSafeRetryLimit(value?: string) {
-  const parsed = Number.parseInt(value ?? "2", 10);
-  return Number.isFinite(parsed) ? Math.max(0, Math.min(parsed, 5)) : 2;
+  const parsed = Number.parseInt(value ?? "8", 10);
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(parsed, 12)) : 8;
 }
 
 export function shouldActivateNaverPublishCircuitBreaker(input: {
