@@ -620,7 +620,7 @@ async function insertImageCaption(
   return false;
 }
 
-async function removeNaverSourceParagraphAfterImage(
+export async function removeNaverSourceParagraphAfterImage(
   page: import("playwright").Page,
   caption: string,
   sourceLabel: string,
@@ -652,17 +652,25 @@ async function removeNaverSourceParagraphAfterImage(
       if (!browserSelection) return { selected: false, beforeCount: exactSourceParagraphs.length };
       browserSelection.removeAllRanges();
       browserSelection.addRange(range);
+      // Use an editor input command instead of mutating the DOM directly so
+      // SmartEditor's internal document model records the paragraph removal.
+      document.execCommand("delete");
       return { selected: true, beforeCount: exactSourceParagraphs.length };
-    }, { expectedCaption: captionValue, expectedSource: sourceLabel }).catch(() => ({ selected: false, beforeCount: 0 }));
+    }, { expectedCaption: captionValue, expectedSource: sourceLabel }).catch((error: unknown) => {
+      console.warn(`[naver-agent] image source paragraph selection failed: ${error instanceof Error ? error.message : String(error)}`);
+      return { selected: false, beforeCount: 0 };
+    });
     if (!selection.selected) continue;
 
-    await page.keyboard.press("Backspace");
     await page.waitForTimeout(200);
     const afterCount = await scope.evaluate((expectedSource) => {
       const normalize = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
       return Array.from(document.querySelectorAll<HTMLElement>(".se-section-text p, .se-text-paragraph"))
         .filter((paragraph) => normalize(paragraph.innerText) === normalize(expectedSource)).length;
-    }, sourceLabel).catch(() => selection.beforeCount);
+    }, sourceLabel).catch((error: unknown) => {
+      console.warn(`[naver-agent] image source paragraph verification failed: ${error instanceof Error ? error.message : String(error)}`);
+      return selection.beforeCount;
+    });
     return afterCount === selection.beforeCount - 1;
   }
   return false;
