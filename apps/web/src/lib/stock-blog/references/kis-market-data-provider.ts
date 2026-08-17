@@ -10,6 +10,7 @@ import {
 import type { MarketSnapshot, MarketSnapshotSource, ReferenceSearchInput } from "./reference-types";
 
 const KIS_ALLOWED_REQUESTS = new Map<string, string>([
+  ["/uapi/domestic-stock/v1/quotations/chk-holiday", "CTCA0903R"],
   ["/uapi/domestic-stock/v1/quotations/inquire-index-daily-price", "FHPUP02120000"],
   ["/uapi/domestic-stock/v1/quotations/inquire-investor-daily-by-market", "FHPTJ04040000"],
   ["/uapi/domestic-stock/v1/quotations/inquire-index-category-price", "FHPUP02140000"],
@@ -35,11 +36,26 @@ export type KisResult = {
   diagnostics?: KisDiagnostic[];
 };
 
+export type KisKoreaMarketSession = {
+  marketDate: string;
+  isOpen: boolean;
+  isBusinessDay: boolean;
+  isTradingDay: boolean;
+  isSettlementDay: boolean;
+};
+
+export type KisKoreaMarketCalendarResult = {
+  status: "ready" | "needs_credentials" | "error";
+  sessions: KisKoreaMarketSession[];
+  reason?: string;
+};
+
 type KisToken = { value: string; expiresAt: number };
 let tokenCache: KisToken | undefined;
 let tokenRequest: Promise<KisToken> | undefined;
 let requestQueue: Promise<void> = Promise.resolve();
 let lastRequestStartedAt = 0;
+const koreaMarketSessionCache = new Map<string, boolean>();
 
 function requiredCredentials() {
   const appKey = process.env.KIS_APP_KEY?.trim();
@@ -94,16 +110,54 @@ async function runPacedRequest<T>(request: () => Promise<T>) {
 
 export function getKisMarketFreshnessMinutes(
   now = new Date(),
-  env?: { KIS_MARKET_MAX_AGE_MINUTES?: string; KIS_WEEKEND_MAX_AGE_MINUTES?: string },
+  env?: {
+    KIS_MARKET_MAX_AGE_MINUTES?: string;
+    KIS_WEEKEND_MAX_AGE_MINUTES?: string;
+    KIS_HOLIDAY_MAX_AGE_MINUTES?: string;
+  },
 ) {
   const parsed = Number.parseInt(env?.KIS_MARKET_MAX_AGE_MINUTES ?? process.env.KIS_MARKET_MAX_AGE_MINUTES ?? "4320", 10);
   const baseMinutes = Number.isFinite(parsed) ? Math.max(60, parsed) : 4320;
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  const yesterday = new Date(`${today}T00:00:00Z`);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  const recentMarketHoliday = koreaMarketSessionCache.get(today.replace(/-/g, "")) === false
+    || koreaMarketSessionCache.get(yesterday.toISOString().slice(0, 10).replace(/-/g, "")) === false;
+  if (recentMarketHoliday) {
+    const holidayParsed = Number.parseInt(env?.KIS_HOLIDAY_MAX_AGE_MINUTES ?? process.env.KIS_HOLIDAY_MAX_AGE_MINUTES ?? "10080", 10);
+    return Number.isFinite(holidayParsed) ? Math.max(baseMinutes, holidayParsed) : 10080;
+  }
   const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", weekday: "short" }).format(now);
   // 월요일 미국장 개장 전에는 금요일 종가가 여전히 최신 확정값이다.
   if (weekday !== "Sat" && weekday !== "Sun" && weekday !== "Mon") return baseMinutes;
   const weekendParsed = Number.parseInt(env?.KIS_WEEKEND_MAX_AGE_MINUTES ?? process.env.KIS_WEEKEND_MAX_AGE_MINUTES ?? "5760", 10);
   const weekendMinutes = Number.isFinite(weekendParsed) ? Math.max(baseMinutes, weekendParsed) : 5760;
   return weekendMinutes;
+}
+
+export function rememberKisKoreaMarketSession(marketDate: string, isOpen: boolean) {
+  if (/^\d{8}$/.test(marketDate)) koreaMarketSessionCache.set(marketDate, isOpen);
+}
+
+export function resetKisKoreaMarketSessionCacheForTests() {
+  koreaMarketSessionCache.clear();
+}
+
+export function parseKisKoreaMarketCalendar(output: unknown) {
+  return asRecords(output)
+    .map((row): KisKoreaMarketSession | null => {
+      const marketDate = typeof row.bass_dt === "string" ? row.bass_dt : "";
+      const isOpen = row.opnd_yn === "Y" ? true : row.opnd_yn === "N" ? false : null;
+      if (!/^\d{8}$/.test(marketDate) || isOpen === null) return null;
+      return {
+        marketDate,
+        isOpen,
+        isBusinessDay: row.bzdy_yn === "Y",
+        isTradingDay: row.tr_day_yn === "Y",
+        isSettlementDay: row.sttl_day_yn === "Y",
+      };
+    })
+    .filter((session): session is KisKoreaMarketSession => session !== null);
 }
 
 async function getAccessToken(credentials: { appKey: string; appSecret: string }) {
@@ -170,6 +224,38 @@ async function kisGet(path: string, trId: string, params: Record<string, string>
     return body;
   }
   throw new Error("KIS_RATE_LIMITED");
+}
+
+export async function getKisKoreaMarketCalendar(marketDate: string): Promise<KisKoreaMarketCalendarResult> {
+  if (!/^\d{8}$/.test(marketDate)) {
+    return { status: "error", sessions: [], reason: "KIS_MARKET_CALENDAR_DATE_INVALID" };
+  }
+  const credentials = requiredCredentials();
+  if (!credentials) {
+    return { status: "needs_credentials", sessions: [], reason: "KIS_MARKET_CALENDAR_CREDENTIALS_MISSING" };
+  }
+  try {
+    const token = await getAccessToken(credentials);
+    const path = "/uapi/domestic-stock/v1/quotations/chk-holiday";
+    const body = await kisGet(path, "CTCA0903R", {
+      BASS_DT: marketDate,
+      CTX_AREA_FK: "",
+      CTX_AREA_NK: "",
+    }, credentials, token);
+    const sessions = parseKisKoreaMarketCalendar(body.output);
+    for (const session of sessions) rememberKisKoreaMarketSession(session.marketDate, session.isOpen);
+    if (!sessions.some((session) => session.marketDate === marketDate)) {
+      return { status: "error", sessions, reason: "KIS_MARKET_CALENDAR_DATE_MISSING" };
+    }
+    return { status: "ready", sessions };
+  } catch (error) {
+    const diagnostic = safeDiagnostic("KIS market calendar", error);
+    return {
+      status: diagnostic.code === "KIS_AUTH_FAILED" ? "needs_credentials" : "error",
+      sessions: [],
+      reason: diagnostic.code,
+    };
+  }
 }
 
 function safeDiagnostic(item: string, error: unknown): KisDiagnostic {

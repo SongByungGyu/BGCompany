@@ -9,6 +9,10 @@ import { evaluateStockBlogPublishQuality } from "@/lib/stock-blog/quality-gate";
 import { collectStockBlogReferences } from "@/lib/stock-blog/references/reference-adapter";
 import type { ReferenceBundle } from "@/lib/stock-blog/references/reference-types";
 import {
+  getKisKoreaMarketCalendar,
+  rememberKisKoreaMarketSession,
+} from "@/lib/stock-blog/references/kis-market-data-provider";
+import {
   largeCapEventsToReferenceItems,
   scanLargeCapDisclosureEvents,
   type LargeCapDisclosureScanResult,
@@ -22,6 +26,16 @@ import {
   shouldClearRecoverablePipelineCircuitBreaker,
 } from "@/lib/stock-blog/stock-blog-scheduler-policy";
 import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
+import {
+  addIsoDays,
+  evaluateStockBlogMarketSession,
+  getConfiguredMarketDateOverride,
+  getNyseMarketSession,
+  getStockBlogMarketDependency,
+  type StockBlogMarketSessionDecision,
+  type StockMarketCode,
+  type StockMarketSession,
+} from "@/lib/stock-blog/market-session-policy";
 import {
   qualifiesForConditionalInvestmentStudy,
   selectInvestmentStudyTopic,
@@ -100,6 +114,7 @@ export type StockBlogSchedulerRunResult = {
   studyTopicMode?: InvestmentStudyTopicSelection["mode"];
   studyIssueScore?: number;
   studyIssueReasons?: string[];
+  marketSession?: StockMarketSession;
 };
 
 export type StockBlogSchedulerStatus = {
@@ -135,6 +150,7 @@ const DEFAULT_LOOKBACK_MINUTES = 180;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MINUTES = 10;
 const EVENT_TYPE = "StockBlogScheduledRun";
+const MARKET_CALENDAR_EVENT_TYPE = "StockMarketCalendarCheck";
 const PUBLISH_CIRCUIT_BREAKER_EVENT_ID = "event-stock-auto-publish-circuit-breaker";
 
 type StockBlogSchedulerDefinition = StockBlogScheduleItem & {
@@ -416,12 +432,27 @@ function briefDateLabel(now: Date, timezone: string) {
 
 function buildPipelineInput(definition: StockBlogSchedulerDefinition, runnerMode: StockBlogSchedulerRunnerMode, now: Date, timezone: string) {
   const date = briefDateLabel(now, timezone);
+  const parts = getZonedParts(now, timezone);
+  const marketDate = `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
+  const previousUsSession = definition.contentType === "KOREA_DAILY_PREVIEW"
+    ? getNyseMarketSession(addIsoDays(marketDate, -1), {
+      closedDates: process.env.STOCK_BLOG_US_CLOSED_DATES,
+      openDates: process.env.STOCK_BLOG_US_OPEN_DATES,
+    })
+    : null;
+  const followsUsHoliday = previousUsSession?.state === "closed" && !previousUsSession.reason.includes("주말");
+  const sourceTitle = followsUsHoliday
+    ? `${date} 오늘 코스피 전망: 미국장 휴장·금리·환율 영향`
+    : definition.title(date);
+  const topic = followsUsHoliday
+    ? "직전 미국장은 휴장입니다. 존재하지 않는 미국장 등락을 만들지 말고, 직전 한국장 확정값과 미국 선물·국채금리·원달러 환율로 오늘 코스피 조건을 설명합니다."
+    : definition.topic;
   return {
-    topic: definition.topic,
+    topic,
     title: buildStockBlogEditorialTitle({
       template: definition.contentType,
       marketDate: date,
-      sourceTitle: definition.title(date),
+      sourceTitle,
     }),
     channel: "blog",
     runnerMode,
@@ -575,6 +606,124 @@ function eventPayload(value: Prisma.JsonValue): Record<string, Prisma.JsonValue>
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, Prisma.JsonValue>
     : {};
+}
+
+function marketCalendarEventId(market: StockMarketCode, marketDate: string) {
+  return `event-stock-market-calendar-${market.toLowerCase()}-${marketDate.replace(/-/g, "")}`;
+}
+
+function compactMarketDate(marketDate: string) {
+  return marketDate.replace(/-/g, "");
+}
+
+function isoMarketDate(compactDate: string) {
+  return `${compactDate.slice(0, 4)}-${compactDate.slice(4, 6)}-${compactDate.slice(6, 8)}`;
+}
+
+function configuredMarketSession(market: StockMarketCode, marketDate: string) {
+  const prefix = market === "KRX" ? "STOCK_BLOG_KRX" : "STOCK_BLOG_US";
+  return getConfiguredMarketDateOverride({
+    market,
+    marketDate,
+    closedDates: process.env[`${prefix}_CLOSED_DATES`],
+    openDates: process.env[`${prefix}_OPEN_DATES`],
+  });
+}
+
+function marketSessionFromEvent(
+  event: Awaited<ReturnType<typeof prisma.eventLog.findUnique>>,
+  market: StockMarketCode,
+  marketDate: string,
+) {
+  if (!event) return null;
+  const payload = eventPayload(event.payload);
+  const state = payload.state;
+  if (
+    payload.market !== market
+    || payload.marketDate !== marketDate
+    || (state !== "open" && state !== "closed")
+  ) return null;
+  const session: StockMarketSession = {
+    market,
+    marketDate,
+    state,
+    source: typeof payload.source === "string" ? payload.source : "calendar-cache",
+    reason: typeof payload.reason === "string" ? payload.reason : `${market} 거래소 일정 캐시`,
+  };
+  if (market === "KRX") rememberKisKoreaMarketSession(compactMarketDate(marketDate), state === "open");
+  return session;
+}
+
+async function persistKoreaMarketSessions(sessions: Awaited<ReturnType<typeof getKisKoreaMarketCalendar>>["sessions"]) {
+  await prisma.$transaction(sessions.map((item) => {
+    const marketDate = isoMarketDate(item.marketDate);
+    const state = item.isOpen ? "open" : "closed";
+    const reason = item.isOpen ? "KIS가 국내 증시 개장일로 확인했습니다." : "KIS가 국내 증시 휴장일로 확인했습니다.";
+    return prisma.eventLog.upsert({
+      where: { id: marketCalendarEventId("KRX", marketDate) },
+      create: {
+        id: marketCalendarEventId("KRX", marketDate),
+        type: MARKET_CALENDAR_EVENT_TYPE,
+        timestamp: new Date(),
+        summary: `KRX ${marketDate} ${item.isOpen ? "개장" : "휴장"} 확인`,
+        payload: { market: "KRX", marketDate, state, source: "kis-ctca0903r", reason },
+      },
+      update: {
+        timestamp: new Date(),
+        summary: `KRX ${marketDate} ${item.isOpen ? "개장" : "휴장"} 확인`,
+        payload: { market: "KRX", marketDate, state, source: "kis-ctca0903r", reason },
+      },
+    });
+  }));
+}
+
+async function resolveKoreaMarketSession(marketDate: string): Promise<StockMarketSession> {
+  const configured = configuredMarketSession("KRX", marketDate);
+  if (configured) return configured;
+  const id = marketCalendarEventId("KRX", marketDate);
+  const cached = marketSessionFromEvent(
+    await prisma.eventLog.findUnique({ where: { id } }),
+    "KRX",
+    marketDate,
+  );
+  if (cached) return cached;
+
+  const result = await getKisKoreaMarketCalendar(compactMarketDate(marketDate));
+  if (result.sessions.length) await persistKoreaMarketSessions(result.sessions);
+  const session = result.sessions.find((item) => item.marketDate === compactMarketDate(marketDate));
+  if (result.status === "ready" && session) {
+    return {
+      market: "KRX",
+      marketDate,
+      state: session.isOpen ? "open" : "closed",
+      source: "kis-ctca0903r",
+      reason: session.isOpen ? "KIS가 국내 증시 개장일로 확인했습니다." : "KIS가 국내 증시 휴장일로 확인했습니다.",
+    };
+  }
+  return {
+    market: "KRX",
+    marketDate,
+    state: "unknown",
+    source: "kis-ctca0903r",
+    reason: result.reason ?? "KIS 국내 개장일 응답을 확인하지 못했습니다.",
+  };
+}
+
+async function resolveScheduleMarketDecision(
+  contentType: StockBlogContentType,
+  marketDate: string,
+): Promise<StockBlogMarketSessionDecision> {
+  const dependency = getStockBlogMarketDependency(contentType);
+  if (!dependency) return evaluateStockBlogMarketSession({ contentType });
+  const configured = configuredMarketSession(dependency, marketDate);
+  const session = configured
+    ?? (dependency === "KRX"
+      ? await resolveKoreaMarketSession(marketDate)
+      : getNyseMarketSession(marketDate, {
+        closedDates: process.env.STOCK_BLOG_US_CLOSED_DATES,
+        openDates: process.env.STOCK_BLOG_US_OPEN_DATES,
+      }));
+  return evaluateStockBlogMarketSession({ contentType, session });
 }
 
 async function clearRecoverablePipelineCircuitBreaker(scheduleKey: string) {
@@ -754,6 +903,32 @@ async function runOneSchedule(
   const retry = retryState(existing, now, config, options.manualRecovery);
   if (!retry.allowed) return { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "already_ran", attempt: retry.attempt, reason: retry.reason };
   const attempt = retry.attempt;
+  const marketDecision = await resolveScheduleMarketDecision(contentType, marketDate);
+  const marketSession = marketDecision.session;
+  if (marketDecision.action !== "run") {
+    const status: StockBlogSchedulerRunStatus = marketDecision.action === "skip" ? "skipped" : "deferred";
+    const result: StockBlogSchedulerRunResult = {
+      scheduleId: definition.scheduleId,
+      contentType,
+      scheduleKey: key,
+      scheduledFor,
+      status,
+      attempt,
+      reason: marketDecision.reason,
+      marketSession,
+    };
+    await writeSchedulerEvent({
+      key,
+      contentType,
+      scheduledFor,
+      status,
+      summary: marketDecision.action === "skip"
+        ? `${contentType} 거래소 휴장으로 건너뜀`
+        : `${contentType} 거래소 일정 확인 대기`,
+      payload: result as unknown as Prisma.InputJsonObject,
+    });
+    return result;
+  }
   const previousPayload = existing ? eventPayload(existing.payload) : {};
   const previousReason = typeof previousPayload.reason === "string" ? previousPayload.reason : "";
   const resumablePipelineId = options.manualRecovery
@@ -1126,6 +1301,7 @@ async function runOneSchedule(
       studyTopicMode: investmentStudyBuild?.selection.mode,
       studyIssueScore: investmentStudyBuild?.selection.score,
       studyIssueReasons: investmentStudyBuild?.selection.reasons,
+      marketSession,
     };
     await writeSchedulerEvent({
       key,
@@ -1152,6 +1328,7 @@ async function runOneSchedule(
       attempt,
       reason,
       qualityGate,
+      marketSession,
     };
     await writeSchedulerEvent({
       key,

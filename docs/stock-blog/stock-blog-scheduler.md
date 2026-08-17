@@ -21,6 +21,7 @@ Phase 1-S scheduler prepares stock-market blog drafts on a fixed KST schedule.
 cron tick
 → POST /api/stock-blog/scheduler
 → check due schedule and duplicate EventLog
+→ check KRX and NYSE sessions; persist `skipped` for a closed dependent market or `deferred` when KRX status is unavailable
 → for disclosure/earnings, scan official OpenDART/SEC events and stop without generation when none exist
 → for investment study, collect current references; Tuesday selects a verified upcoming event question, Thursday selects a result/practical question, and conditional slots stop when the issue score is below the threshold
 → check Hermes remaining count when runnerMode=hermes
@@ -43,6 +44,11 @@ STOCK_BLOG_SCHEDULER_AUTO_CREATE_DRAFT=true
 STOCK_BLOG_SCHEDULER_LOOKBACK_MINUTES=180
 STOCK_BLOG_LARGE_CAP_EVENTS_ENABLED=false
 STOCK_BLOG_WEEKDAY_INVESTMENT_STUDY_ENABLED=false
+KIS_HOLIDAY_MAX_AGE_MINUTES=10080
+STOCK_BLOG_KRX_CLOSED_DATES=
+STOCK_BLOG_KRX_OPEN_DATES=
+STOCK_BLOG_US_CLOSED_DATES=
+STOCK_BLOG_US_OPEN_DATES=
 DART_API_KEY=
 SEC_EDGAR_USER_AGENT=BGCompany/1.0 bgcompanyoffice.cloud
 ```
@@ -78,6 +84,8 @@ Run every 10 minutes. The service itself decides whether a schedule is due and p
 - Do not run Hermes smoke tests from cron.
 - Do not generate a disclosure/earnings article unless an official OpenDART or SEC filing is present.
 - Do not generate the conditional investment-study article unless verified market data is fresh and the issue score passes; allow at most one conditional study post per week.
+- Do not treat an exchange holiday as a failed run. Skip only the preview that depends on the closed market and never catch it up on the next day.
+- Do not substitute zero-valued investor flow for a closed KRX session. Use the last confirmed session and its exact as-of date.
 - Do not store Naver login cookies on the server.
 - Do not commit `.env` or print secrets.
 
