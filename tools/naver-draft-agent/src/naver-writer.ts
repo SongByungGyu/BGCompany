@@ -522,13 +522,21 @@ async function findNaverExactParagraph(page: import("playwright").Page, expected
   return null;
 }
 
+export function buildNaverImageCaption(caption: string, sourceLabel: string, includeSource = true) {
+  const normalizedCaption = caption.replace(/\s+/g, " ").trim();
+  const normalizedSource = sourceLabel.replace(/\s+/g, " ").trim();
+  return includeSource && normalizedSource
+    ? `${normalizedCaption} · ${normalizedSource}`
+    : normalizedCaption;
+}
+
 async function insertImageCaption(
   page: import("playwright").Page,
   caption: string,
   sourceLabel: string,
   includeSource = true,
 ) {
-  const value = includeSource ? `${caption} · ${sourceLabel}` : caption;
+  const value = buildNaverImageCaption(caption, sourceLabel, includeSource);
   for (const scope of [page, ...page.frames()]) {
     const images = scope.locator(".se-component.se-image");
     if (!(await images.count().catch(() => 0))) continue;
@@ -544,6 +552,54 @@ async function insertImageCaption(
     await page.waitForTimeout(200);
     const actual = (await nativeCaption.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
     return actual === value.replace(/\s+/g, " ").trim();
+  }
+  return false;
+}
+
+async function removeNaverSourceParagraphAfterImage(
+  page: import("playwright").Page,
+  caption: string,
+  sourceLabel: string,
+) {
+  const captionValue = buildNaverImageCaption(caption, sourceLabel);
+  for (const scope of [page, ...page.frames()]) {
+    const selection = await scope.evaluate(({ expectedCaption, expectedSource }) => {
+      const normalize = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
+      const images = Array.from(document.querySelectorAll<HTMLElement>(".se-component.se-image"));
+      const image = images.reverse().find((candidate) => {
+        const nativeCaption = candidate.querySelector<HTMLElement>(".se-caption p");
+        return normalize(nativeCaption?.innerText) === normalize(expectedCaption);
+      });
+      if (!image) return { selected: false, beforeCount: 0 };
+
+      const paragraphs = Array.from(document.querySelectorAll<HTMLElement>(".se-section-text p, .se-text-paragraph"));
+      const exactSourceParagraphs = paragraphs.filter((paragraph) => normalize(paragraph.innerText) === normalize(expectedSource));
+      const paragraph = exactSourceParagraphs.find((candidate) => (
+        Boolean(image.compareDocumentPosition(candidate) & Node.DOCUMENT_POSITION_FOLLOWING)
+      ));
+      if (!paragraph) return { selected: false, beforeCount: exactSourceParagraphs.length };
+
+      const editable = paragraph.closest<HTMLElement>('[contenteditable="true"]')
+        ?? paragraph.parentElement?.closest<HTMLElement>('[contenteditable="true"]');
+      editable?.focus();
+      const range = document.createRange();
+      range.selectNode(paragraph);
+      const browserSelection = window.getSelection();
+      if (!browserSelection) return { selected: false, beforeCount: exactSourceParagraphs.length };
+      browserSelection.removeAllRanges();
+      browserSelection.addRange(range);
+      return { selected: true, beforeCount: exactSourceParagraphs.length };
+    }, { expectedCaption: captionValue, expectedSource: sourceLabel }).catch(() => ({ selected: false, beforeCount: 0 }));
+    if (!selection.selected) continue;
+
+    await page.keyboard.press("Backspace");
+    await page.waitForTimeout(200);
+    const afterCount = await scope.evaluate((expectedSource) => {
+      const normalize = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
+      return Array.from(document.querySelectorAll<HTMLElement>(".se-section-text p, .se-text-paragraph"))
+        .filter((paragraph) => normalize(paragraph.innerText) === normalize(expectedSource)).length;
+    }, sourceLabel).catch(() => selection.beforeCount);
+    return afterCount === selection.beforeCount - 1;
   }
   return false;
 }
@@ -1329,8 +1385,11 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
             fileStem: `inline-${index + 1}`,
           });
           await attachNaverImage(page, inlineFile, `inline-${index + 1}`);
-          if (!(await insertImageCaption(page, image.caption, image.sourceLabel, false))) {
+          if (!(await insertImageCaption(page, image.caption, image.sourceLabel))) {
             throw new Error(`NAVER_IMAGE_CAPTION_INSERT_FAILED_${image.id}`);
+          }
+          if (!(await removeNaverSourceParagraphAfterImage(page, image.caption, image.sourceLabel))) {
+            throw new Error(`NAVER_IMAGE_CAPTION_LAYOUT_FAILED_${image.id}`);
           }
         }
         const afterImages = await countNaverImages(page);

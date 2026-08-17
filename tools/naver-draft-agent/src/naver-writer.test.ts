@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildNaverImageCaption,
   buildMultilineEditorInputSteps,
   hasSavedDraftTitle,
   normalizeNaverCategoryLabel,
@@ -13,6 +14,14 @@ import {
   selectNaverEmphasisParagraphs,
   selectNaverSectionHeadings,
 } from "./naver-writer.js";
+
+test("본문 이미지 설명과 출처를 네이버 기본 캡션 한 문단으로 합친다", () => {
+  assert.equal(
+    buildNaverImageCaption("원·달러 환율과 미국 국채금리 비교", "기준일 2026. 08. 14. | 출처 KIS · FRED"),
+    "원·달러 환율과 미국 국채금리 비교 · 기준일 2026. 08. 14. | 출처 KIS · FRED",
+  );
+  assert.equal(buildNaverImageCaption("이미지 설명", "출처", false), "이미지 설명");
+});
 
 test("네이버 하위 카테고리 표시 문구를 실제 카테고리명으로 정규화한다", () => {
   assert.equal(normalizeNaverCategoryLabel("하위 카테고리 투자 공부"), "투자공부");
