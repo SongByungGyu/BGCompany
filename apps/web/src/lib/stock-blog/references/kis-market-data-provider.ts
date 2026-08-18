@@ -114,6 +114,7 @@ export function getKisMarketFreshnessMinutes(
     KIS_MARKET_MAX_AGE_MINUTES?: string;
     KIS_WEEKEND_MAX_AGE_MINUTES?: string;
     KIS_HOLIDAY_MAX_AGE_MINUTES?: string;
+    STOCK_BLOG_KRX_CLOSED_DATES?: string;
   },
 ) {
   const parsed = Number.parseInt(env?.KIS_MARKET_MAX_AGE_MINUTES ?? process.env.KIS_MARKET_MAX_AGE_MINUTES ?? "4320", 10);
@@ -121,8 +122,18 @@ export function getKisMarketFreshnessMinutes(
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
   const yesterday = new Date(`${today}T00:00:00Z`);
   yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-  const recentMarketHoliday = koreaMarketSessionCache.get(today.replace(/-/g, "")) === false
-    || koreaMarketSessionCache.get(yesterday.toISOString().slice(0, 10).replace(/-/g, "")) === false;
+  const todayCompact = today.replace(/-/g, "");
+  const yesterdayCompact = yesterday.toISOString().slice(0, 10).replace(/-/g, "");
+  const configuredClosedDates = new Set(
+    (env?.STOCK_BLOG_KRX_CLOSED_DATES ?? process.env.STOCK_BLOG_KRX_CLOSED_DATES ?? "")
+      .split(",")
+      .map((value) => value.trim().replace(/-/g, ""))
+      .filter((value) => /^\d{8}$/.test(value)),
+  );
+  const recentMarketHoliday = koreaMarketSessionCache.get(todayCompact) === false
+    || koreaMarketSessionCache.get(yesterdayCompact) === false
+    || configuredClosedDates.has(todayCompact)
+    || configuredClosedDates.has(yesterdayCompact);
   if (recentMarketHoliday) {
     const holidayParsed = Number.parseInt(env?.KIS_HOLIDAY_MAX_AGE_MINUTES ?? process.env.KIS_HOLIDAY_MAX_AGE_MINUTES ?? "10080", 10);
     return Number.isFinite(holidayParsed) ? Math.max(baseMinutes, holidayParsed) : 10080;

@@ -51,3 +51,14 @@ test("휴장 다음 개장일에는 마지막 실제 거래일 데이터의 수�
   }), 10080);
   resetKisKoreaMarketSessionCacheForTests();
 });
+
+test("운영자 휴장일 지정도 다음 개장일 데이터 수명에 반영한다", () => {
+  resetKisKoreaMarketSessionCacheForTests();
+  const tuesdayMorningKst = new Date("2026-08-17T23:00:00.000Z");
+  assert.equal(getKisMarketFreshnessMinutes(tuesdayMorningKst, {
+    ...ENV,
+    KIS_HOLIDAY_MAX_AGE_MINUTES: "10080",
+    STOCK_BLOG_KRX_CLOSED_DATES: "2026-08-17",
+  }), 10080);
+  resetKisKoreaMarketSessionCacheForTests();
+});
