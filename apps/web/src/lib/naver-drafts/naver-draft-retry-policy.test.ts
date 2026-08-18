@@ -49,6 +49,21 @@ test("발행 전 네이버 이미지 위치 검증 실패도 안전 재시도한
   );
 });
 
+test("발행 전 네이버 이미지 캡션 레이아웃 실패도 안전 재시도한다", () => {
+  assert.deepEqual(
+    evaluateNaverDraftSafeRetry({
+      status: "image_quality_failed",
+      allowPublish: true,
+      publishAttemptCount: 0,
+      retryCount: 0,
+      retryLimit: 2,
+      errorCode: "NAVER_IMAGE_QUALITY_FAILED",
+      errorMessage: "NAVER_IMAGE_CAPTION_LAYOUT_FAILED_major-index-change",
+    }),
+    { allowed: true, nextRetryCount: 1 },
+  );
+});
+
 test("콘텐츠 자체의 이미지 품질 실패는 같은 원고로 자동 재시도하지 않는다", () => {
   const decision = evaluateNaverDraftSafeRetry({
     status: "image_quality_failed",
