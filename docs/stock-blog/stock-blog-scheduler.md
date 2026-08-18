@@ -21,7 +21,7 @@ Phase 1-S scheduler prepares stock-market blog drafts on a fixed KST schedule.
 cron tick
 → POST /api/stock-blog/scheduler
 → check due schedule and duplicate EventLog
-→ check KRX and NYSE sessions; persist `skipped` for a closed dependent market or `deferred` when KRX status is unavailable
+→ check KRX and NYSE sessions; replace a closed market preview with one date-level search-intent investment-study post, or persist `deferred` when KRX status is unavailable
 → for disclosure/earnings, scan official OpenDART/SEC events and stop without generation when none exist
 → for investment study, collect current references; Tuesday selects a verified upcoming event question, Thursday selects a result/practical question, and conditional slots stop when the issue score is below the threshold
 → check Hermes remaining count when runnerMode=hermes
@@ -84,7 +84,8 @@ Run every 10 minutes. The service itself decides whether a schedule is due and p
 - Do not run Hermes smoke tests from cron.
 - Do not generate a disclosure/earnings article unless an official OpenDART or SEC filing is present.
 - Do not generate the conditional investment-study article unless verified market data is fresh and the issue score passes; allow at most one conditional study post per week.
-- Do not treat an exchange holiday as a failed run. Skip only the preview that depends on the closed market and never catch it up on the next day.
+- Do not treat an exchange holiday as a failed run. Replace the closed market preview with a verified search-intent investment-study post about the holiday, next open date, and trading/order hours; never catch up the skipped preview on the next day.
+- Use `INVESTMENT_STUDY_HOLIDAY:<marketDate>` as the date-level publish key so KRX and NYSE closures on the same day cannot create two holiday replacement posts.
 - Do not substitute zero-valued investor flow for a closed KRX session. Use the last confirmed session and its exact as-of date.
 - Do not store Naver login cookies on the server.
 - Do not commit `.env` or print secrets.

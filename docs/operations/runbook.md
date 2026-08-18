@@ -640,6 +640,7 @@ Do not run Hermes, OpenAI, Naver Search, stock APIs, Playwright/Selenium, or Nav
 - `runnerMode=hermes`는 4-Agent 기준 콘텐츠 1건당 최대 4회 Hermes/OpenAI 호출을 사용할 수 있다.
 - 스케줄러는 같은 스케줄 슬롯을 `EventLog` ID로 중복 방지한다.
 - 투자공부는 화요일 12:10 공식 일정·발표시간 질문, 목요일 12:10 발표 결과·실전 질문을 고정 발행하고 월·수·금 중 시장 이슈 점수를 통과한 첫 1회만 추가 발행한다. 운영 활성화 키는 `STOCK_BLOG_WEEKDAY_INVESTMENT_STUDY_ENABLED=true`다.
+- 같은 활성화 키가 켜져 있으면 국장·미장 휴장으로 건너뛴 전망 슬롯을 휴장 이유·다음 개장일·거래시간 검색형 투자공부로 대체한다. 양 시장이 같은 날 쉬면 날짜별 발행키로 한 건만 허용한다.
 - 조건부 투자공부는 최신 MarketSnapshot과 최근 72시간 기사에서 코스피·나스닥 급변, 물가·금리·반도체·실적·주주환원·환율·유가 신호를 확인한다.
 - 자동 승인 후 `NaverDraftJob`만 생성하며, 네이버 자동 발행은 하지 않는다.
 - Local Naver Draft Agent는 운영 PC에서 별도로 실행되어야 한다.

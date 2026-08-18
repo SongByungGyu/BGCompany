@@ -27,6 +27,10 @@ import {
 } from "@/lib/stock-blog/stock-blog-scheduler-policy";
 import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
 import {
+  buildHolidaySearchStudyPlan,
+  getHolidaySearchStudyPublishKey,
+} from "@/lib/stock-blog/holiday-search-study";
+import {
   addIsoDays,
   evaluateStockBlogMarketSession,
   getConfiguredMarketDateOverride,
@@ -115,6 +119,9 @@ export type StockBlogSchedulerRunResult = {
   studyIssueScore?: number;
   studyIssueReasons?: string[];
   marketSession?: StockMarketSession;
+  holidaySearchReplacement?: boolean;
+  replacementContentType?: "INVESTMENT_STUDY";
+  nextMarketOpenDate?: string;
 };
 
 export type StockBlogSchedulerStatus = {
@@ -521,6 +528,56 @@ async function buildInvestmentStudyPipelineInput(
   };
 }
 
+async function findNextOpenMarketDate(session: StockMarketSession) {
+  for (let offset = 1; offset <= 10; offset += 1) {
+    const candidate = addIsoDays(session.marketDate, offset);
+    const candidateSession = session.market === "KRX"
+      ? await resolveKoreaMarketSession(candidate)
+      : getNyseMarketSession(candidate, {
+        closedDates: process.env.STOCK_BLOG_US_CLOSED_DATES,
+        openDates: process.env.STOCK_BLOG_US_OPEN_DATES,
+      });
+    if (candidateSession.state === "open") return candidate;
+  }
+  return null;
+}
+
+async function buildHolidaySearchStudyPipelineInput(
+  session: StockMarketSession,
+  runnerMode: StockBlogSchedulerRunnerMode,
+  now: Date,
+  timezone: string,
+) {
+  const nextOpenDate = await findNextOpenMarketDate(session);
+  const plan = buildHolidaySearchStudyPlan({ session, nextOpenDate });
+  if (!plan) throw new Error("휴장 검색 유입형 투자공부 주제를 만들 수 없습니다.");
+
+  const referenceBundle = await collectStockBlogReferences({
+    topic: plan.topic,
+    title: plan.sourceTitle,
+    channel: "blog",
+    contentType: "INVESTMENT_STUDY",
+    market: plan.market,
+    keywords: plan.keywords,
+    maxResults: 6,
+  });
+  return {
+    nextOpenDate,
+    input: {
+      topic: plan.topic,
+      title: buildStockBlogEditorialTitle({
+        template: "INVESTMENT_STUDY",
+        marketDate: briefDateLabel(now, timezone),
+        sourceTitle: plan.sourceTitle,
+      }),
+      channel: "blog" as const,
+      runnerMode,
+      contentType: "INVESTMENT_STUDY" as const,
+      referenceBundle,
+    },
+  };
+}
+
 async function buildLargeCapPipelineInput(
   definition: StockBlogSchedulerDefinition,
   runnerMode: StockBlogSchedulerRunnerMode,
@@ -886,7 +943,7 @@ async function runOneSchedule(
   const scheduledFor = scheduledAt.toISOString();
   const scheduledParts = getZonedParts(scheduledAt, config.timezone);
   const marketDate = `${scheduledParts.year}-${pad(scheduledParts.month)}-${pad(scheduledParts.day)}`;
-  const publishKey = `${contentType}:${marketDate}:${definition.scheduledTime}`;
+  let publishKey = `${contentType}:${marketDate}:${definition.scheduledTime}`;
 
   if (config.autoPublish) {
     await clearRecoverablePipelineCircuitBreaker(key);
@@ -905,7 +962,13 @@ async function runOneSchedule(
   const attempt = retry.attempt;
   const marketDecision = await resolveScheduleMarketDecision(contentType, marketDate);
   const marketSession = marketDecision.session;
-  if (marketDecision.action !== "run") {
+  const holidaySearchReplacement = marketDecision.action === "skip"
+    && marketSession?.state === "closed"
+    && config.weekdayInvestmentStudyEnabled;
+  const effectiveContentType: StockBlogContentType = holidaySearchReplacement
+    ? "INVESTMENT_STUDY"
+    : contentType;
+  if (marketDecision.action !== "run" && !holidaySearchReplacement) {
     const status: StockBlogSchedulerRunStatus = marketDecision.action === "skip" ? "skipped" : "deferred";
     const result: StockBlogSchedulerRunResult = {
       scheduleId: definition.scheduleId,
@@ -929,6 +992,33 @@ async function runOneSchedule(
     });
     return result;
   }
+  if (holidaySearchReplacement) {
+    publishKey = getHolidaySearchStudyPublishKey(marketDate);
+    const existingHolidayStudy = await prisma.naverDraftJob.findUnique({ where: { publishKey } });
+    if (existingHolidayStudy) {
+      const result: StockBlogSchedulerRunResult = {
+        scheduleId: definition.scheduleId,
+        contentType,
+        scheduleKey: key,
+        scheduledFor,
+        status: "already_ran",
+        attempt,
+        reason: "같은 날짜의 휴장 검색 유입형 투자공부가 이미 생성됐습니다.",
+        marketSession,
+        holidaySearchReplacement: true,
+        replacementContentType: "INVESTMENT_STUDY",
+      };
+      await writeSchedulerEvent({
+        key,
+        contentType,
+        scheduledFor,
+        status: "already_ran",
+        summary: `${marketSession?.market ?? "거래소"} 휴장 대체 투자공부 날짜 중복 방지`,
+        payload: result as unknown as Prisma.InputJsonObject,
+      });
+      return result;
+    }
+  }
   const previousPayload = existing ? eventPayload(existing.payload) : {};
   const previousReason = typeof previousPayload.reason === "string" ? previousPayload.reason : "";
   const resumablePipelineId = options.manualRecovery
@@ -946,11 +1036,28 @@ async function runOneSchedule(
     contentType,
     scheduledFor,
     status: "running",
-    summary: `${contentType} 자동 실행 시작`,
-    payload: { phase: "started", runnerMode: config.runnerMode, attempt },
+    summary: holidaySearchReplacement
+      ? `${marketSession?.market} 휴장 대체 검색 유입형 투자공부 시작`
+      : `${contentType} 자동 실행 시작`,
+    payload: {
+      phase: "started",
+      runnerMode: config.runnerMode,
+      attempt,
+      holidaySearchReplacement,
+      effectiveContentType,
+    },
   });
 
+  let holidaySearchStudyBuild: Awaited<ReturnType<typeof buildHolidaySearchStudyPipelineInput>> | null = null;
   try {
+    if (holidaySearchReplacement && marketSession && !resumablePipelineId) {
+      holidaySearchStudyBuild = await buildHolidaySearchStudyPipelineInput(
+        marketSession,
+        config.runnerMode,
+        scheduledAt,
+        config.timezone,
+      );
+    }
     let investmentStudyBuild: Awaited<ReturnType<typeof buildInvestmentStudyPipelineInput>> | null = null;
     if (contentType === "INVESTMENT_STUDY" && definition.investmentStudyMode && !resumablePipelineId) {
       if (!config.weekdayInvestmentStudyEnabled) {
@@ -1199,7 +1306,7 @@ async function runOneSchedule(
       }
     }
     if (config.runnerMode === "hermes") {
-      const requiredRuns = getExpectedHermesRunsForStockBlog(contentType);
+      const requiredRuns = getExpectedHermesRunsForStockBlog(effectiveContentType);
       if (hermesUsageBefore.remaining < requiredRuns) {
         const result: StockBlogSchedulerRunResult = {
           scheduleId: definition.scheduleId,
@@ -1225,7 +1332,8 @@ async function runOneSchedule(
 
     const pipelineInput = largeCapScan
       ? await buildLargeCapPipelineInput(definition, config.runnerMode, scheduledAt, config.timezone, largeCapScan)
-      : investmentStudyBuild?.input
+      : holidaySearchStudyBuild?.input
+        ?? investmentStudyBuild?.input
         ?? buildPipelineInput(definition, config.runnerMode, scheduledAt, config.timezone);
     const pipeline = await startContentPipeline({
       ...pipelineInput,
@@ -1302,13 +1410,18 @@ async function runOneSchedule(
       studyIssueScore: investmentStudyBuild?.selection.score,
       studyIssueReasons: investmentStudyBuild?.selection.reasons,
       marketSession,
+      holidaySearchReplacement,
+      replacementContentType: holidaySearchReplacement ? "INVESTMENT_STUDY" : undefined,
+      nextMarketOpenDate: holidaySearchStudyBuild?.nextOpenDate ?? undefined,
     };
     await writeSchedulerEvent({
       key,
       contentType,
       scheduledFor,
       status,
-      summary: `${contentType} 자동 실행 ${status === "succeeded" ? "완료" : "부분 완료"}`,
+      summary: holidaySearchReplacement
+        ? `${marketSession?.market ?? "거래소"} 휴장 대체 검색 유입형 투자공부 ${status === "succeeded" ? "완료" : "부분 완료"}`
+        : `${contentType} 자동 실행 ${status === "succeeded" ? "완료" : "부분 완료"}`,
       payload: result as unknown as Prisma.InputJsonObject,
     });
     return result;
@@ -1329,6 +1442,9 @@ async function runOneSchedule(
       reason,
       qualityGate,
       marketSession,
+      holidaySearchReplacement,
+      replacementContentType: holidaySearchReplacement ? "INVESTMENT_STUDY" : undefined,
+      nextMarketOpenDate: holidaySearchStudyBuild?.nextOpenDate ?? undefined,
     };
     await writeSchedulerEvent({
       key,
@@ -1336,8 +1452,10 @@ async function runOneSchedule(
       scheduledFor,
       status: result.status,
       summary: capacityDeferred
-        ? `${contentType} 자동 실행 대기 · Hermes 한도 부족`
-        : `${contentType} 자동 실행 실패`,
+        ? `${effectiveContentType} 자동 실행 대기 · Hermes 한도 부족`
+        : holidaySearchReplacement
+          ? `${marketSession?.market ?? "거래소"} 휴장 대체 검색 유입형 투자공부 실패`
+          : `${contentType} 자동 실행 실패`,
       payload: {
         ...(result as unknown as Prisma.InputJsonObject),
         failurePhase: referencePreflightFailure ? "reference_preflight" : capacityDeferred ? "capacity" : "runtime",
