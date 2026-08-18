@@ -620,93 +620,11 @@ async function insertImageCaption(
   return false;
 }
 
-export async function removeNaverSourceParagraphAfterImage(
-  page: import("playwright").Page,
-  caption: string,
-  sourceLabel: string,
-) {
-  const captionValue = buildNaverImageCaption(caption, sourceLabel);
-  for (const scope of [page, ...page.frames()]) {
-    const selection = await scope.evaluate(({ expectedCaption, expectedSource }) => {
-      const normalize = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
-      const images = Array.from(document.querySelectorAll<HTMLElement>(".se-component.se-image"));
-      const image = images.reverse().find((candidate) => {
-        const nativeCaption = candidate.querySelector<HTMLElement>(".se-caption p");
-        return normalize(nativeCaption?.innerText) === normalize(expectedCaption);
-      });
-      if (!image) return { selected: false, beforeCount: 0 };
-
-      const paragraphs = Array.from(document.querySelectorAll<HTMLElement>(".se-section-text p, .se-text-paragraph"));
-      const exactSourceParagraphs = paragraphs.filter((paragraph) => normalize(paragraph.innerText) === normalize(expectedSource));
-      const paragraph = exactSourceParagraphs.find((candidate) => (
-        Boolean(image.compareDocumentPosition(candidate) & Node.DOCUMENT_POSITION_FOLLOWING)
-      ));
-      if (!paragraph) return { selected: false, beforeCount: exactSourceParagraphs.length };
-
-      const editable = paragraph.closest<HTMLElement>('[contenteditable="true"]')
-        ?? paragraph.parentElement?.closest<HTMLElement>('[contenteditable="true"]');
-      editable?.focus();
-      const range = document.createRange();
-      range.selectNode(paragraph);
-      const browserSelection = window.getSelection();
-      if (!browserSelection) return { selected: false, beforeCount: exactSourceParagraphs.length };
-      browserSelection.removeAllRanges();
-      browserSelection.addRange(range);
-      // Use an editor input command instead of mutating the DOM directly so
-      // SmartEditor's internal document model records the paragraph removal.
-      document.execCommand("delete");
-      return { selected: true, beforeCount: exactSourceParagraphs.length };
-    }, { expectedCaption: captionValue, expectedSource: sourceLabel }).catch((error: unknown) => {
-      console.warn(`[naver-agent] image source paragraph selection failed: ${error instanceof Error ? error.message : String(error)}`);
-      return { selected: false, beforeCount: 0 };
-    });
-    if (!selection.selected) continue;
-
-    await page.waitForTimeout(200);
-    const afterCount = await scope.evaluate((expectedSource) => {
-      const normalize = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
-      return Array.from(document.querySelectorAll<HTMLElement>(".se-section-text p, .se-text-paragraph"))
-        .filter((paragraph) => normalize(paragraph.innerText) === normalize(expectedSource)).length;
-    }, sourceLabel).catch((error: unknown) => {
-      console.warn(`[naver-agent] image source paragraph verification failed: ${error instanceof Error ? error.message : String(error)}`);
-      return selection.beforeCount;
-    });
-    return afterCount === selection.beforeCount - 1;
-  }
-  return false;
-}
-
-async function formatNaverSourceParagraph(page: import("playwright").Page, sourceLabel: string) {
-  const target = await findNaverExactParagraph(page, sourceLabel);
-  if (!target) return false;
-  const { scope, paragraph } = target;
-  await paragraph.click({ clickCount: 3, delay: 80, timeout: 5000, force: true });
-  const centerButton = scope.locator(".se-contents-toolbar-cycle-toggle-button.se-align-center-toolbar-button:visible").first();
-  if (!(await centerButton.count().catch(() => 0))) return false;
-  await centerButton.click({ timeout: 5000 });
-  await scope.locator(".se-font-size-code-toolbar-button:visible").first().click({ timeout: 5000 });
-  await scope.locator(".se-toolbar-option-font-size-code-fs13-button:visible").click({ timeout: 5000 });
-  await page.waitForTimeout(200);
-  const formatted = await paragraph.evaluate((element) => ({
-    centered: element.classList.contains("se-text-paragraph-align-center"),
-    size13: Boolean(element.querySelector(".se-fs13")),
-  })).catch(() => ({ centered: false, size13: false }));
-  if (!formatted.centered || !formatted.size13) return false;
-  await paragraph.click({ timeout: 5000 });
-  await page.keyboard.press("Home");
-  await page.waitForTimeout(100);
-  return true;
-}
-
 async function prepareNaverInlineImagePlacement(
   page: import("playwright").Page,
   heading: string,
-  sourceLabel: string,
 ) {
-  if (!(await focusAfterNaverHeading(page, heading))) return false;
-  if (!(await page.keyboard.insertText(sourceLabel).then(() => true, () => false))) return false;
-  await page.waitForTimeout(150);
-  return formatNaverSourceParagraph(page, sourceLabel);
+  return focusAfterNaverHeading(page, heading);
 }
 
 async function applyNaverSectionTitles(page: import("playwright").Page, body: string) {
@@ -1461,7 +1379,7 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
         await applyNaverSectionTitles(page, naverBody);
         await applyNaverEmphasisParagraphs(page, naverBody);
         for (const [index, image] of imageManifest.bodyImages.entries()) {
-          if (!(await prepareNaverInlineImagePlacement(page, image.placementAfterHeading, image.sourceLabel))) {
+          if (!(await prepareNaverInlineImagePlacement(page, image.placementAfterHeading))) {
             throw new Error(`NAVER_IMAGE_PLACEMENT_HEADING_NOT_FOUND_${image.id}`);
           }
           const inlineFile = await downloadTrustedThumbnail({
@@ -1474,9 +1392,6 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
           await attachNaverImage(page, inlineFile, `inline-${index + 1}`);
           if (!(await insertImageCaption(page, image.caption, image.sourceLabel, true, image.placementAfterHeading))) {
             throw new Error(`NAVER_IMAGE_CAPTION_INSERT_FAILED_${image.id}`);
-          }
-          if (!(await removeNaverSourceParagraphAfterImage(page, image.caption, image.sourceLabel))) {
-            throw new Error(`NAVER_IMAGE_CAPTION_LAYOUT_FAILED_${image.id}`);
           }
         }
         const afterImages = await countNaverImages(page);
