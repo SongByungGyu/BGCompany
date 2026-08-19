@@ -21,7 +21,7 @@ Phase 1-S scheduler prepares stock-market blog drafts on a fixed KST schedule.
 cron tick
 → POST /api/stock-blog/scheduler
 → check due schedule and duplicate EventLog
-→ check KRX and NYSE sessions; replace a closed market preview with one date-level search-intent investment-study post, or persist `deferred` when KRX status is unavailable
+→ check the operator-reviewed official KRX closure list and the NYSE rule calendar; replace a closed market preview with one date-level search-intent investment-study post
 → for disclosure/earnings, scan official OpenDART/SEC events and stop without generation when none exist
 → for investment study, collect current references; Tuesday selects a verified upcoming event question, Thursday selects a result/practical question, and conditional slots stop when the issue score is below the threshold
 → check Hermes remaining count when runnerMode=hermes
@@ -45,6 +45,7 @@ STOCK_BLOG_SCHEDULER_LOOKBACK_MINUTES=180
 STOCK_BLOG_LARGE_CAP_EVENTS_ENABLED=false
 STOCK_BLOG_WEEKDAY_INVESTMENT_STUDY_ENABLED=false
 KIS_HOLIDAY_MAX_AGE_MINUTES=10080
+# Populate the complete current-year KRX closure list after reviewing official KRX and government calendar sources.
 STOCK_BLOG_KRX_CLOSED_DATES=
 STOCK_BLOG_KRX_OPEN_DATES=
 STOCK_BLOG_US_CLOSED_DATES=
@@ -81,6 +82,8 @@ Run every 10 minutes. The service itself decides whether a schedule is due and p
 ## Safety
 
 - Do not increase `HERMES_DAILY_RUN_LIMIT` without explicit approval.
+- Do not use the live KIS holiday endpoint as a morning-publication gate. A normal weekday not present in the reviewed KRX closure list is treated as open.
+- Review the full KRX closure list at least annually and add ad-hoc closures immediately after an official KRX notice.
 - Do not run Hermes smoke tests from cron.
 - Do not generate a disclosure/earnings article unless an official OpenDART or SEC filing is present.
 - Do not generate the conditional investment-study article unless verified market data is fresh and the issue score passes; allow at most one conditional study post per week.

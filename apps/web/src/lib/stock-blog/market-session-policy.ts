@@ -67,6 +67,38 @@ export function getConfiguredMarketDateOverride(input: {
   };
 }
 
+export function getKrxMarketSession(
+  marketDate: string,
+  reviewedCalendar: { closedDates?: string; openDates?: string } = {},
+): StockMarketSession {
+  const configured = getConfiguredMarketDateOverride({ market: "KRX", marketDate, ...reviewedCalendar });
+  if (configured) {
+    return {
+      ...configured,
+      source: configured.state === "unknown" ? configured.source : "krx-reviewed-calendar",
+      reason: configured.state === "open"
+        ? "공식 KRX 일정에서 개장일로 검토된 날짜입니다."
+        : configured.state === "closed"
+          ? "공식 KRX 일정에서 휴장일로 검토된 날짜입니다."
+          : configured.reason,
+    };
+  }
+  const date = parseIsoDate(marketDate);
+  if (!date) {
+    return { market: "KRX", marketDate, state: "unknown", source: "krx-reviewed-calendar", reason: "유효하지 않은 시장 날짜입니다." };
+  }
+  if (date.getUTCDay() === 0 || date.getUTCDay() === 6) {
+    return { market: "KRX", marketDate, state: "closed", source: "krx-reviewed-calendar", reason: "국내 증시 주말 휴장입니다." };
+  }
+  return {
+    market: "KRX",
+    marketDate,
+    state: "open",
+    source: "krx-reviewed-calendar",
+    reason: "검토된 KRX 휴장일 목록에 해당하지 않는 평일입니다.",
+  };
+}
+
 function observedHoliday(year: number, month: number, day: number) {
   const holiday = new Date(Date.UTC(year, month, day));
   if (holiday.getUTCDay() === 6) holiday.setUTCDate(holiday.getUTCDate() - 1);

@@ -9,10 +9,6 @@ import { evaluateStockBlogPublishQuality } from "@/lib/stock-blog/quality-gate";
 import { collectStockBlogReferences } from "@/lib/stock-blog/references/reference-adapter";
 import type { ReferenceBundle } from "@/lib/stock-blog/references/reference-types";
 import {
-  getKisKoreaMarketCalendar,
-  rememberKisKoreaMarketSession,
-} from "@/lib/stock-blog/references/kis-market-data-provider";
-import {
   largeCapEventsToReferenceItems,
   scanLargeCapDisclosureEvents,
   type LargeCapDisclosureScanResult,
@@ -33,11 +29,10 @@ import {
 import {
   addIsoDays,
   evaluateStockBlogMarketSession,
-  getConfiguredMarketDateOverride,
+  getKrxMarketSession,
   getNyseMarketSession,
   getStockBlogMarketDependency,
   type StockBlogMarketSessionDecision,
-  type StockMarketCode,
   type StockMarketSession,
 } from "@/lib/stock-blog/market-session-policy";
 import {
@@ -157,7 +152,6 @@ const DEFAULT_LOOKBACK_MINUTES = 180;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MINUTES = 10;
 const EVENT_TYPE = "StockBlogScheduledRun";
-const MARKET_CALENDAR_EVENT_TYPE = "StockMarketCalendarCheck";
 const PUBLISH_CIRCUIT_BREAKER_EVENT_ID = "event-stock-auto-publish-circuit-breaker";
 
 type StockBlogSchedulerDefinition = StockBlogScheduleItem & {
@@ -532,7 +526,10 @@ async function findNextOpenMarketDate(session: StockMarketSession) {
   for (let offset = 1; offset <= 10; offset += 1) {
     const candidate = addIsoDays(session.marketDate, offset);
     const candidateSession = session.market === "KRX"
-      ? await resolveKoreaMarketSession(candidate)
+      ? getKrxMarketSession(candidate, {
+        closedDates: process.env.STOCK_BLOG_KRX_CLOSED_DATES,
+        openDates: process.env.STOCK_BLOG_KRX_OPEN_DATES,
+      })
       : getNyseMarketSession(candidate, {
         closedDates: process.env.STOCK_BLOG_US_CLOSED_DATES,
         openDates: process.env.STOCK_BLOG_US_OPEN_DATES,
@@ -665,121 +662,21 @@ function eventPayload(value: Prisma.JsonValue): Record<string, Prisma.JsonValue>
     : {};
 }
 
-function marketCalendarEventId(market: StockMarketCode, marketDate: string) {
-  return `event-stock-market-calendar-${market.toLowerCase()}-${marketDate.replace(/-/g, "")}`;
-}
-
-function compactMarketDate(marketDate: string) {
-  return marketDate.replace(/-/g, "");
-}
-
-function isoMarketDate(compactDate: string) {
-  return `${compactDate.slice(0, 4)}-${compactDate.slice(4, 6)}-${compactDate.slice(6, 8)}`;
-}
-
-function configuredMarketSession(market: StockMarketCode, marketDate: string) {
-  const prefix = market === "KRX" ? "STOCK_BLOG_KRX" : "STOCK_BLOG_US";
-  return getConfiguredMarketDateOverride({
-    market,
-    marketDate,
-    closedDates: process.env[`${prefix}_CLOSED_DATES`],
-    openDates: process.env[`${prefix}_OPEN_DATES`],
-  });
-}
-
-function marketSessionFromEvent(
-  event: Awaited<ReturnType<typeof prisma.eventLog.findUnique>>,
-  market: StockMarketCode,
-  marketDate: string,
-) {
-  if (!event) return null;
-  const payload = eventPayload(event.payload);
-  const state = payload.state;
-  if (
-    payload.market !== market
-    || payload.marketDate !== marketDate
-    || (state !== "open" && state !== "closed")
-  ) return null;
-  const session: StockMarketSession = {
-    market,
-    marketDate,
-    state,
-    source: typeof payload.source === "string" ? payload.source : "calendar-cache",
-    reason: typeof payload.reason === "string" ? payload.reason : `${market} 거래소 일정 캐시`,
-  };
-  if (market === "KRX") rememberKisKoreaMarketSession(compactMarketDate(marketDate), state === "open");
-  return session;
-}
-
-async function persistKoreaMarketSessions(sessions: Awaited<ReturnType<typeof getKisKoreaMarketCalendar>>["sessions"]) {
-  await prisma.$transaction(sessions.map((item) => {
-    const marketDate = isoMarketDate(item.marketDate);
-    const state = item.isOpen ? "open" : "closed";
-    const reason = item.isOpen ? "KIS가 국내 증시 개장일로 확인했습니다." : "KIS가 국내 증시 휴장일로 확인했습니다.";
-    return prisma.eventLog.upsert({
-      where: { id: marketCalendarEventId("KRX", marketDate) },
-      create: {
-        id: marketCalendarEventId("KRX", marketDate),
-        type: MARKET_CALENDAR_EVENT_TYPE,
-        timestamp: new Date(),
-        summary: `KRX ${marketDate} ${item.isOpen ? "개장" : "휴장"} 확인`,
-        payload: { market: "KRX", marketDate, state, source: "kis-ctca0903r", reason },
-      },
-      update: {
-        timestamp: new Date(),
-        summary: `KRX ${marketDate} ${item.isOpen ? "개장" : "휴장"} 확인`,
-        payload: { market: "KRX", marketDate, state, source: "kis-ctca0903r", reason },
-      },
-    });
-  }));
-}
-
-async function resolveKoreaMarketSession(marketDate: string): Promise<StockMarketSession> {
-  const configured = configuredMarketSession("KRX", marketDate);
-  if (configured) return configured;
-  const id = marketCalendarEventId("KRX", marketDate);
-  const cached = marketSessionFromEvent(
-    await prisma.eventLog.findUnique({ where: { id } }),
-    "KRX",
-    marketDate,
-  );
-  if (cached) return cached;
-
-  const result = await getKisKoreaMarketCalendar(compactMarketDate(marketDate));
-  if (result.sessions.length) await persistKoreaMarketSessions(result.sessions);
-  const session = result.sessions.find((item) => item.marketDate === compactMarketDate(marketDate));
-  if (result.status === "ready" && session) {
-    return {
-      market: "KRX",
-      marketDate,
-      state: session.isOpen ? "open" : "closed",
-      source: "kis-ctca0903r",
-      reason: session.isOpen ? "KIS가 국내 증시 개장일로 확인했습니다." : "KIS가 국내 증시 휴장일로 확인했습니다.",
-    };
-  }
-  return {
-    market: "KRX",
-    marketDate,
-    state: "unknown",
-    source: "kis-ctca0903r",
-    reason: result.reason ?? "KIS 국내 개장일 응답을 확인하지 못했습니다.",
-  };
-}
-
 async function resolveScheduleMarketDecision(
   contentType: StockBlogContentType,
   marketDate: string,
 ): Promise<StockBlogMarketSessionDecision> {
   const dependency = getStockBlogMarketDependency(contentType);
   if (!dependency) return evaluateStockBlogMarketSession({ contentType });
-  const configured = configuredMarketSession(dependency, marketDate);
-  const session = configured
-    ?? (dependency === "KRX"
-      ? await resolveKoreaMarketSession(marketDate)
-      : getNyseMarketSession(marketDate, {
-        closedDates: process.env.STOCK_BLOG_US_CLOSED_DATES,
-        openDates: process.env.STOCK_BLOG_US_OPEN_DATES,
-      }));
+  const session = dependency === "KRX"
+    ? getKrxMarketSession(marketDate, {
+      closedDates: process.env.STOCK_BLOG_KRX_CLOSED_DATES,
+      openDates: process.env.STOCK_BLOG_KRX_OPEN_DATES,
+    })
+    : getNyseMarketSession(marketDate, {
+      closedDates: process.env.STOCK_BLOG_US_CLOSED_DATES,
+      openDates: process.env.STOCK_BLOG_US_OPEN_DATES,
+    });
   return evaluateStockBlogMarketSession({ contentType, session });
 }
 
