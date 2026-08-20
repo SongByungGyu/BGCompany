@@ -208,6 +208,23 @@ test("인증된 수동 복구는 운영 복구 상한 안에서 연속된 품질
   assert.deepEqual(decision, { allowed: true, attempt: 5 });
 });
 
+test("참고자료 사전검증 시도 횟수가 누적돼도 생성 품질 수동 복구를 별도로 허용한다", () => {
+  const decision = evaluateStockBlogSchedulerRetry({
+    exists: true,
+    status: "failed",
+    previousAttempt: 13,
+    elapsedMs: 60 * 60 * 1000,
+    autoPublish: true,
+    autoPublishRetryLimit: 2,
+    maxRetries: 12,
+    retryDelayMinutes: 10,
+    retryableGenerationFailure: true,
+    manualRecovery: true,
+  });
+
+  assert.deepEqual(decision, { allowed: true, attempt: 14 });
+});
+
 test("인증된 수동 복구도 실제 발행 실패의 재시도 한도는 우회하지 않는다", () => {
   const decision = evaluateStockBlogSchedulerRetry({
     exists: true,

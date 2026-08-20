@@ -112,11 +112,18 @@ export function evaluateStockBlogSchedulerRetry(
         input.retryableGenerationFailure ? 1 : 0,
       )
     : input.maxRetries;
+  const carriedReferencePreflightAttempts = Boolean(
+    input.retryableGenerationFailure
+      && input.previousAttempt > maxAttempts + 1,
+  );
+  const manualRecoveryLimit = carriedReferencePreflightAttempts
+    ? input.maxRetries + maxAttempts
+    : Math.max(maxAttempts + 1, input.maxRetries);
   const manualRecoveryAllowed = input.manualRecovery
     && input.status !== "running"
     && input.status !== "deferred"
     && (input.referencePreflightFailure || input.retryableGenerationFailure)
-    && input.previousAttempt < Math.max(maxAttempts + 1, input.maxRetries);
+    && input.previousAttempt < manualRecoveryLimit;
   if (manualRecoveryAllowed) {
     return { allowed: true, attempt: input.previousAttempt + 1 };
   }
