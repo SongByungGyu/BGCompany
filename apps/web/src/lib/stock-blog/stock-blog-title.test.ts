@@ -74,3 +74,18 @@ test("유상증자 질문형 제목은 포괄적인 주식 기초 제목으로 �
     sourceTitle: "유상증자 공시가 나오면 주가는 왜 떨어질까? 엘비세미콘 숫자 6개",
   }), "유상증자 공시가 나오면 주가는 왜 떨어질까? 엘비세미콘 숫자 6개｜8월 20일 기준");
 });
+
+test("유상증자 질문형 후보는 포괄적인 투자 공부 대체 제목보다 우선한다", () => {
+  const sourceTitle = "유상증자 공시가 나오면 주가는 왜 떨어질까? 엘비세미콘 숫자 6개";
+  const selected = selectBestStockBlogEditorialTitle({
+    template: "INVESTMENT_STUDY",
+    marketDate: "2026-08-20",
+    candidates: [
+      sourceTitle,
+      sourceTitle,
+      sourceTitle,
+      "주식 기초 공부: 숫자로 이해하는 투자 개념",
+    ],
+  });
+  assert.equal(selected.title, `${sourceTitle}｜8월 20일 기준`);
+});

@@ -111,7 +111,12 @@ function scoreTitle(input: {
   ), 0);
   const lengthPenalty = core.length < 18 ? 12 : core.length > 62 ? 8 : 0;
   const duplicatePenalty = strongestRecentSimilarity >= 0.8 ? 70 : strongestRecentSimilarity * 35;
-  return Math.round((50 + Math.min(18, intentMatches * 4) + Math.min(18, specificitySignals * 3) - lengthPenalty - duplicatePenalty) * 10) / 10;
+  const genericStudyPenalty = input.template === "INVESTMENT_STUDY"
+    && core.includes("주식 투자 공부")
+    && core.includes("주식 기초 공부")
+    ? 15
+    : 0;
+  return Math.round((50 + Math.min(18, intentMatches * 4) + Math.min(18, specificitySignals * 3) - lengthPenalty - duplicatePenalty - genericStudyPenalty) * 10) / 10;
 }
 
 function withDateSuffix(value: string, suffix: string) {
