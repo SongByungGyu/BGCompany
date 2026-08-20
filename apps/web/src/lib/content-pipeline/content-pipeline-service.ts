@@ -11,6 +11,7 @@ import { buildBlogImagePrompts } from "@/lib/stock-blog/references/reference-nor
 import { evaluateStockBlogPublishQuality, evaluateStockBlogReferences, getRealStockReferences } from "@/lib/stock-blog/quality-gate";
 import { FRED_DEGRADED_DISCLOSURE, ensureFredDegradedDisclosure, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import { KIS_SECTOR_DEGRADED_DISCLOSURE, ensureKisSectorDegradedDisclosure, isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
+import { KIS_OVERSEAS_DEGRADED_DISCLOSURE, ensureKisOverseasDegradedDisclosure, isAllowedKisOverseasDegradedSnapshot } from "@/lib/stock-blog/references/kis-overseas-degraded-policy";
 import { generateStockBlogImages, type GeneratedStockBlogImages } from "@/lib/stock-blog/stock-blog-image-generator";
 import { applyVerifiedSchedule, type VerifiedSchedule, type VerifiedScheduleValidation } from "@/lib/stock-blog/verified-schedule";
 import type { HermesRunTelemetry, NormalizedHermesRunResult } from "@/lib/hermes/hermes-types";
@@ -123,14 +124,16 @@ function withMarketDataDisclosure(writer: WriterExecution, referenceBundle?: Ref
   const snapshot = referenceBundle?.marketSnapshot;
   const fredDegraded = isAllowedFredDegradedSnapshot(snapshot);
   const kisSectorDegraded = isAllowedKisSectorDegradedSnapshot(snapshot);
-  if (!fredDegraded && !kisSectorDegraded) return writer;
+  const kisOverseasDegraded = isAllowedKisOverseasDegradedSnapshot(snapshot);
+  if (!fredDegraded && !kisSectorDegraded && !kisOverseasDegraded) return writer;
 
   const result = { ...writer.result };
   for (const key of ["fullDraft", "markdownDraft"] as const) {
     const value = result[key];
     if (typeof value === "string") {
       const withFred = ensureFredDegradedDisclosure(value, snapshot);
-      result[key] = ensureKisSectorDegradedDisclosure(withFred, snapshot);
+      const withSector = ensureKisSectorDegradedDisclosure(withFred, snapshot);
+      result[key] = ensureKisOverseasDegradedDisclosure(withSector, snapshot);
     }
   }
   const htmlDraft = result.htmlDraft;
@@ -138,6 +141,7 @@ function withMarketDataDisclosure(writer: WriterExecution, referenceBundle?: Ref
     const disclosures = [
       fredDegraded ? FRED_DEGRADED_DISCLOSURE : null,
       kisSectorDegraded ? KIS_SECTOR_DEGRADED_DISCLOSURE : null,
+      kisOverseasDegraded ? KIS_OVERSEAS_DEGRADED_DISCLOSURE : null,
     ].filter((item): item is string => typeof item === "string" && !htmlDraft.includes(item));
     if (disclosures.length) {
       result.htmlDraft = `${htmlDraft.trimEnd()}\n${disclosures.map((item) => `<p>${item}</p>`).join("\n")}`;

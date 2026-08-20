@@ -1,6 +1,7 @@
 import type { MarketSnapshot } from "@/lib/stock-blog/references/reference-types";
 import { isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import { isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
+import { isAllowedKisOverseasDegradedSnapshot } from "@/lib/stock-blog/references/kis-overseas-degraded-policy";
 import type { StockBlogContentImage, StockBlogImageQualityAudit, StockBlogImageQualityIssueCode } from "@/lib/stock-blog/stock-blog-image-types";
 import { hasMeaningfulInvestorFlowValues } from "@/lib/stock-blog/investor-flow-policy";
 
@@ -52,6 +53,7 @@ export function evaluateStockBlogImageQuality(images: StockBlogContentImage[], s
         snapshot.dataQuality !== "verified"
         && !isAllowedFredDegradedSnapshot(snapshot)
         && !isAllowedKisSectorDegradedSnapshot(snapshot)
+        && !isAllowedKisOverseasDegradedSnapshot(snapshot)
       )
       || snapshot.freshness?.status !== "fresh"
       || snapshot.fallbackUsed !== false

@@ -724,6 +724,7 @@ echo "STOCK_MARKET_DATA_PROVIDER=$(printenv STOCK_MARKET_DATA_PROVIDER)"
 echo "STOCK_MARKET_DATA_ALLOW_MANUAL_FALLBACK=$(printenv STOCK_MARKET_DATA_ALLOW_MANUAL_FALLBACK)"
 echo "STOCK_MARKET_DATA_ALLOW_FRED_DEGRADED=$(printenv STOCK_MARKET_DATA_ALLOW_FRED_DEGRADED)"
 echo "STOCK_MARKET_DATA_ALLOW_KIS_SECTOR_DEGRADED=$(printenv STOCK_MARKET_DATA_ALLOW_KIS_SECTOR_DEGRADED)"
+echo "STOCK_MARKET_DATA_ALLOW_KIS_OVERSEAS_DEGRADED=$(printenv STOCK_MARKET_DATA_ALLOW_KIS_OVERSEAS_DEGRADED)"
 echo "STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES=$(printenv STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES)"
 '
 ```
@@ -735,10 +736,13 @@ STOCK_MARKET_DATA_PROVIDER=kis-fred
 STOCK_MARKET_DATA_ALLOW_MANUAL_FALLBACK=false
 STOCK_MARKET_DATA_ALLOW_FRED_DEGRADED=true
 STOCK_MARKET_DATA_ALLOW_KIS_SECTOR_DEGRADED=true
+STOCK_MARKET_DATA_ALLOW_KIS_OVERSEAS_DEGRADED=true
 STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES=false
 ```
 
 KIS 업종 순위만 비어 있고 나머지 KIS 핵심 지표와 FRED 자료가 모두 최신·정상인 경우에는 강세·약세 업종 항목을 제외하고 제한 운영한다. 본문에는 KIS 업종 자료 누락 사실을 자동으로 고지하며, 업종 데이터는 추정하거나 다른 수치로 채우지 않는다. 이 제한 운영은 `STOCK_MARKET_DATA_ALLOW_KIS_SECTOR_DEGRADED=false`로 비활성화할 수 있다.
+
+한국장 장전 글에서 KIS 해외지수·원달러 환율만 비고 국내 지수·수급·업종과 FRED 금리·일정이 모두 최신·정상인 경우에는 누락된 수치, 본문 항목, 연결 그래프를 제외하고 발행한다. 미국장 전망·주간 글에는 적용하지 않으며, `STOCK_MARKET_DATA_ALLOW_KIS_OVERSEAS_DEGRADED=false`로 비활성화할 수 있다.
 
 그 외 `needs_credentials`, `needs_data`, `error`, stale/expired가 발생하면 mock 또는 Manual로 자동 대체하지 않는다. scheduler와 실제 Hermes를 중지한 상태에서 자격증명, provider 상태, 기준 시각을 확인한다. KIS 주문·잔고·계좌 API는 점검 목적으로도 호출하지 않는다.
 

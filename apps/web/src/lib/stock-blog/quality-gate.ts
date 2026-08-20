@@ -1,6 +1,7 @@
 import type { ContentPipelineRun } from "@/features/content-pipeline/content-pipeline-types";
 import { FRED_DEGRADED_DISCLOSURE, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import { KIS_SECTOR_DEGRADED_DISCLOSURE, isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
+import { KIS_OVERSEAS_DEGRADED_DISCLOSURE, isAllowedKisOverseasDegradedSnapshot } from "@/lib/stock-blog/references/kis-overseas-degraded-policy";
 import type { ReferenceBundle, ReferenceItem, StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 import {
   assessStockBlogEditorialQuality,
@@ -63,6 +64,7 @@ export type StockBlogQualityDiagnostics = {
   marketSnapshotDisclosures: string[];
   hasFredDegradedDisclosure: boolean;
   hasKisSectorDegradedDisclosure: boolean;
+  hasKisOverseasDegradedDisclosure: boolean;
   staleMarketDataItems: string[];
   manualMarketSnapshot: boolean;
   repeatedPhraseWarnings: string[];
@@ -249,7 +251,8 @@ function diagnostics(input: {
   const marketSnapshot = input.bundle?.marketSnapshot;
   const fredDegraded = isAllowedFredDegradedSnapshot(marketSnapshot);
   const kisSectorDegraded = isAllowedKisSectorDegradedSnapshot(marketSnapshot);
-  const marketSnapshotDegraded = fredDegraded || kisSectorDegraded;
+  const kisOverseasDegraded = isAllowedKisOverseasDegradedSnapshot(marketSnapshot);
+  const marketSnapshotDegraded = fredDegraded || kisSectorDegraded || kisOverseasDegraded;
   return {
     referenceProvider: input.bundle?.provider,
     referenceMode: input.bundle?.mode,
@@ -288,6 +291,7 @@ function diagnostics(input: {
     marketSnapshotDisclosures: marketSnapshot?.disclosures ?? [],
     hasFredDegradedDisclosure: body.includes(FRED_DEGRADED_DISCLOSURE),
     hasKisSectorDegradedDisclosure: body.includes(KIS_SECTOR_DEGRADED_DISCLOSURE),
+    hasKisOverseasDegradedDisclosure: body.includes(KIS_OVERSEAS_DEGRADED_DISCLOSURE),
     staleMarketDataItems: marketSnapshot?.freshness?.staleItems ?? [],
     manualMarketSnapshot: marketSnapshot?.provider === "manual",
     repeatedPhraseWarnings,
@@ -382,6 +386,10 @@ export function evaluateStockBlogPublishQuality(input: {
     d.marketSnapshotDegradedMode === "kis_sector_unavailable"
     && !d.hasKisSectorDegradedDisclosure
   ) reasons.push("KIS 업종 제한 모드 고지 문구 누락");
+  if (
+    d.marketSnapshotDegradedMode === "kis_overseas_unavailable"
+    && !d.hasKisOverseasDegradedDisclosure
+  ) reasons.push("해외지수·환율 제외 모드 고지 문구 누락");
   if (requireReal && !editorialQuality.passed) {
     reasons.push(`편집 품질 ${STOCK_BLOG_EDITORIAL_QUALITY_TARGET}점 이상 필요: 현재 ${editorialQuality.score}점 · ${editorialQuality.failedChecks.join(", ")}`);
   }

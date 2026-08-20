@@ -7,6 +7,7 @@ import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title"
 import type { MarketSnapshot, MarketSnapshotMetric } from "@/lib/stock-blog/references/reference-types";
 import { isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import { isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
+import { isAllowedKisOverseasDegradedSnapshot } from "@/lib/stock-blog/references/kis-overseas-degraded-policy";
 import { evaluateStockBlogImageQuality } from "@/lib/stock-blog/stock-blog-image-quality";
 import { getStockBlogImagePlacementHeadings } from "@/lib/stock-blog/stock-blog-image-placements";
 import type { StockBlogContentImage, StockBlogImageDataPoint, StockBlogImageQualityAudit } from "@/lib/stock-blog/stock-blog-image-types";
@@ -238,6 +239,8 @@ function numericMetric(metric: MarketSnapshotMetric | undefined, field: "value" 
   return { value, metric };
 }
 
+type VerifiedNumericMetric = ReturnType<typeof numericMetric>;
+
 function dataPoint(key: string, label: string, value: number, unit: string, asOf: string): StockBlogImageDataPoint {
   return { key, label, value, unit, asOf };
 }
@@ -368,6 +371,7 @@ export async function generateStockBlogImages(input: {
       snapshot.dataQuality !== "verified"
       && !isAllowedFredDegradedSnapshot(snapshot)
       && !isAllowedKisSectorDegradedSnapshot(snapshot)
+      && !isAllowedKisOverseasDegradedSnapshot(snapshot)
     )
     || snapshot.freshness?.status !== "fresh"
     || snapshot.fallbackUsed !== false
@@ -391,13 +395,17 @@ export async function generateStockBlogImages(input: {
     : editorialTitle;
   const thumbnailSubtitle = titleFocus || input.topic;
   try {
+    const omitMissingOverseasItems = isAllowedKisOverseasDegradedSnapshot(snapshot);
     const kospi = numericMetric(snapshot.korea?.kospi, "changePct", "KOSPI_CHANGE");
     const kosdaq = numericMetric(snapshot.korea?.kosdaq, "changePct", "KOSDAQ_CHANGE");
-    const sp500 = numericMetric(snapshot.us?.sp500, "changePct", "SP500_CHANGE");
-    const nasdaq = numericMetric(snapshot.us?.nasdaq, "changePct", "NASDAQ_CHANGE");
-    const dow = numericMetric(snapshot.us?.dow, "changePct", "DOW_CHANGE");
-    const fx = numericMetric(snapshot.us?.fx, "value", "USDKRW_VALUE");
-    const fxChange = numericMetric(snapshot.us?.fx, "changePct", "USDKRW_CHANGE");
+    const sp500 = snapshot.us?.sp500 ? numericMetric(snapshot.us.sp500, "changePct", "SP500_CHANGE") : undefined;
+    const nasdaq = snapshot.us?.nasdaq ? numericMetric(snapshot.us.nasdaq, "changePct", "NASDAQ_CHANGE") : undefined;
+    const dow = snapshot.us?.dow ? numericMetric(snapshot.us.dow, "changePct", "DOW_CHANGE") : undefined;
+    const fx = snapshot.us?.fx ? numericMetric(snapshot.us.fx, "value", "USDKRW_VALUE") : undefined;
+    const fxChange = snapshot.us?.fx ? numericMetric(snapshot.us.fx, "changePct", "USDKRW_CHANGE") : undefined;
+    if (!omitMissingOverseasItems && (!sp500 || !nasdaq || !dow || !fx || !fxChange)) {
+      throw new Error("IMAGE_DATA_MISSING_OVERSEAS_CORE");
+    }
     const twoYear = numericMetric(snapshot.macro?.us2Year, "value", "US2Y_VALUE");
     const tenYear = numericMetric(snapshot.macro?.us10Year, "value", "US10Y_VALUE");
     const spread = numericMetric(snapshot.macro?.yieldSpread10Y2Y, "value", "SPREAD_VALUE");
@@ -432,11 +440,28 @@ export async function generateStockBlogImages(input: {
       : undefined;
 
     await mkdir(outputDir, { recursive: true });
-    const indexSource = `기준일 ${dateLabel(kospi.metric.asOf!)}(한국) · ${dateLabel(sp500.metric.asOf!)}(미국) | 출처 한국투자증권 Open API`;
+    const overseasIndexMetrics = [sp500, nasdaq, dow].filter((metric): metric is VerifiedNumericMetric => Boolean(metric));
+    const hasOverseasIndexMetrics = overseasIndexMetrics.length > 0;
+    const indexTitle = hasOverseasIndexMetrics ? "한국·미국 주요 지수 등락 비교" : "한국 주요 지수 등락 비교";
+    const indexCaption = hasOverseasIndexMetrics
+      ? "최근 거래일 기준 한국과 미국 주요 지수 등락률 비교"
+      : "최근 거래일 기준 코스피와 코스닥 등락률 비교";
+    const indexSource = hasOverseasIndexMetrics
+      ? `기준일 ${dateLabel(kospi.metric.asOf!)}(한국) · ${dateLabel(overseasIndexMetrics[0].metric.asOf!)}(미국) | 출처 한국투자증권 Open API`
+      : `기준일 ${dateLabel(kospi.metric.asOf!)} | 출처 한국투자증권 Open API`;
+    const indexRows = [
+      { label: "KOSPI", value: kospi.value, display: `${signed(kospi.value)}%` },
+      { label: "KOSDAQ", value: kosdaq.value, display: `${signed(kosdaq.value)}%` },
+      ...(sp500 ? [{ label: "S&P 500", value: sp500.value, display: `${signed(sp500.value)}%` }] : []),
+      ...(nasdaq ? [{ label: "NASDAQ", value: nasdaq.value, display: `${signed(nasdaq.value)}%` }] : []),
+      ...(dow ? [{ label: "Dow Jones", value: dow.value, display: `${signed(dow.value)}%` }] : []),
+    ];
     const flowSource = formattedInvestorFlows
       ? `기준일 ${dateLabel(kospiFlows[0].metric.asOf!)} | 단위 ${formattedInvestorFlows.unit} | 출처 한국투자증권 Open API`
       : undefined;
-    const macroSource = `기준일 ${dateLabel(tenYear.metric.asOf!)}(금리) · ${dateLabel(fx.metric.asOf!)}(환율) | 출처 한국투자증권 Open API · FRED`;
+    const macroSource = fx
+      ? `기준일 ${dateLabel(tenYear.metric.asOf!)}(금리) · ${dateLabel(fx.metric.asOf!)}(환율) | 출처 한국투자증권 Open API · FRED`
+      : undefined;
     const files: Array<{ name: string; svg: string }> = [
       {
         name: "thumbnail.svg",
@@ -445,16 +470,12 @@ export async function generateStockBlogImages(input: {
       {
         name: "major-index-change.svg",
         svg: horizontalComparisonSvg({
-          title: "한국·미국 주요 지수 등락 비교",
-          subtitle: "각 시장의 최근 거래일 등락률을 같은 단위로 비교했습니다.",
+          title: indexTitle,
+          subtitle: hasOverseasIndexMetrics
+            ? "확인된 각 시장의 최근 거래일 등락률만 같은 단위로 비교했습니다."
+            : "확인된 국내 최근 거래일 등락률만 같은 단위로 비교했습니다.",
           source: indexSource,
-          rows: [
-            { label: "KOSPI", value: kospi.value, display: `${signed(kospi.value)}%` },
-            { label: "KOSDAQ", value: kosdaq.value, display: `${signed(kosdaq.value)}%` },
-            { label: "S&P 500", value: sp500.value, display: `${signed(sp500.value)}%` },
-            { label: "NASDAQ", value: nasdaq.value, display: `${signed(nasdaq.value)}%` },
-            { label: "Dow Jones", value: dow.value, display: `${signed(dow.value)}%` },
-          ],
+          rows: indexRows,
         }),
       },
     ];
@@ -469,17 +490,19 @@ export async function generateStockBlogImages(input: {
         }),
       });
     }
-    files.push({
-      name: "fx-and-us-yields.svg",
-      svg: ratesAndFxSvg({
-        fx: fx.value,
-        fxChange: fxChange.value,
-        twoYear: twoYear.value,
-        tenYear: tenYear.value,
-        spread: spread.value,
-        source: macroSource,
-      }),
-    });
+    if (fx && fxChange && macroSource) {
+      files.push({
+        name: "fx-and-us-yields.svg",
+        svg: ratesAndFxSvg({
+          fx: fx.value,
+          fxChange: fxChange.value,
+          twoYear: twoYear.value,
+          tenYear: tenYear.value,
+          spread: spread.value,
+          source: macroSource,
+        }),
+      });
+    }
     await Promise.all(files.map((file) => writeFile(path.join(outputDir, file.name), file.svg, "utf8")));
     const sizes = await Promise.all(files.map((file) => stat(path.join(outputDir, file.name))));
     if (sizes.some((file) => !file.isFile() || file.size < 500)) throw new Error("IMAGE_FILE_VERIFICATION_FAILED");
@@ -509,23 +532,29 @@ export async function generateStockBlogImages(input: {
         id: "major-index-change",
         role: "body",
         type: "chart",
-        title: "한국·미국 주요 지수 등락 비교",
+        title: indexTitle,
         placementAfterHeading: placements.majorIndexChange,
         imageUrl: `${relativeDir}/major-index-change.svg`,
-        caption: "최근 거래일 기준 한국과 미국 주요 지수 등락률 비교",
+        caption: indexCaption,
         sourceLabel: indexSource,
         sourceName: "한국투자증권 Open API",
         sourceUrl: kospi.metric.url,
         licenseType: "generated-data-chart",
         collectedAt: snapshot.collectedAt,
         usageAllowed: true,
-        dataKeys: ["korea.kospi.changePct", "korea.kosdaq.changePct", "us.sp500.changePct", "us.nasdaq.changePct", "us.dow.changePct"],
+        dataKeys: [
+          "korea.kospi.changePct",
+          "korea.kosdaq.changePct",
+          ...(sp500 ? ["us.sp500.changePct"] : []),
+          ...(nasdaq ? ["us.nasdaq.changePct"] : []),
+          ...(dow ? ["us.dow.changePct"] : []),
+        ],
         dataPoints: [
           dataPoint("korea.kospi.changePct", "KOSPI", kospi.value, "%", kospi.metric.asOf!),
           dataPoint("korea.kosdaq.changePct", "KOSDAQ", kosdaq.value, "%", kosdaq.metric.asOf!),
-          dataPoint("us.sp500.changePct", "S&P 500", sp500.value, "%", sp500.metric.asOf!),
-          dataPoint("us.nasdaq.changePct", "NASDAQ", nasdaq.value, "%", nasdaq.metric.asOf!),
-          dataPoint("us.dow.changePct", "Dow Jones", dow.value, "%", dow.metric.asOf!),
+          ...(sp500 ? [dataPoint("us.sp500.changePct", "S&P 500", sp500.value, "%", sp500.metric.asOf!)] : []),
+          ...(nasdaq ? [dataPoint("us.nasdaq.changePct", "NASDAQ", nasdaq.value, "%", nasdaq.metric.asOf!)] : []),
+          ...(dow ? [dataPoint("us.dow.changePct", "Dow Jones", dow.value, "%", dow.metric.asOf!)] : []),
         ],
         width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
       },
@@ -550,30 +579,32 @@ export async function generateStockBlogImages(input: {
         width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
       });
     }
-    contentImages.push({
-      id: "fx-and-us-yields",
-      role: "body",
-      type: "chart",
-      title: "원·달러 환율과 미국 국채금리 현황",
-      placementAfterHeading: placements.fxAndUsYields,
-      imageUrl: `${relativeDir}/fx-and-us-yields.svg`,
-      caption: "원·달러 환율과 미국 2년물·10년물 국채금리 비교",
-      sourceLabel: macroSource,
-      sourceName: "한국투자증권 Open API · FRED",
-      sourceUrl: tenYear.metric.url,
-      licenseType: "generated-data-chart",
-      collectedAt: snapshot.collectedAt,
-      usageAllowed: true,
-      dataKeys: ["us.fx.value", "us.fx.changePct", "macro.us2Year.value", "macro.us10Year.value", "macro.yieldSpread10Y2Y.value"],
-      dataPoints: [
-        dataPoint("us.fx.value", "USD/KRW", fx.value, "원", fx.metric.asOf!),
-        dataPoint("us.fx.changePct", "USD/KRW 등락률", fxChange.value, "%", fxChange.metric.asOf!),
-        dataPoint("macro.us2Year.value", "미국 2년물", twoYear.value, "%", twoYear.metric.asOf!),
-        dataPoint("macro.us10Year.value", "미국 10년물", tenYear.value, "%", tenYear.metric.asOf!),
-        dataPoint("macro.yieldSpread10Y2Y.value", "10Y-2Y", spread.value, "%p", spread.metric.asOf!),
-      ],
-      width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
-    });
+    if (fx && fxChange && macroSource) {
+      contentImages.push({
+        id: "fx-and-us-yields",
+        role: "body",
+        type: "chart",
+        title: "원·달러 환율과 미국 국채금리 현황",
+        placementAfterHeading: placements.fxAndUsYields,
+        imageUrl: `${relativeDir}/fx-and-us-yields.svg`,
+        caption: "원·달러 환율과 미국 2년물·10년물 국채금리 비교",
+        sourceLabel: macroSource,
+        sourceName: "한국투자증권 Open API · FRED",
+        sourceUrl: tenYear.metric.url,
+        licenseType: "generated-data-chart",
+        collectedAt: snapshot.collectedAt,
+        usageAllowed: true,
+        dataKeys: ["us.fx.value", "us.fx.changePct", "macro.us2Year.value", "macro.us10Year.value", "macro.yieldSpread10Y2Y.value"],
+        dataPoints: [
+          dataPoint("us.fx.value", "USD/KRW", fx.value, "원", fx.metric.asOf!),
+          dataPoint("us.fx.changePct", "USD/KRW 등락률", fxChange.value, "%", fxChange.metric.asOf!),
+          dataPoint("macro.us2Year.value", "미국 2년물", twoYear.value, "%", twoYear.metric.asOf!),
+          dataPoint("macro.us10Year.value", "미국 10년물", tenYear.value, "%", tenYear.metric.asOf!),
+          dataPoint("macro.yieldSpread10Y2Y.value", "10Y-2Y", spread.value, "%p", spread.metric.asOf!),
+        ],
+        width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
+      });
+    }
     const imageQuality = evaluateStockBlogImageQuality(contentImages, snapshot);
     if (imageQuality.status !== "passed") throw new Error(imageQuality.issues.map((issue) => `${issue.code}:${issue.message}`).join(" | "));
     return {

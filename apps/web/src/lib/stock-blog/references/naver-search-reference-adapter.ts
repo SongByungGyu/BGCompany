@@ -2,6 +2,7 @@ import { buildReferenceQueries } from "./reference-query-builder";
 import { analyzeCompetitorBlogReference, summarizeCompetitorStructures } from "./competitor-blog-structure-analyzer";
 import { isAllowedFredDegradedSnapshot } from "./fred-degraded-policy";
 import { isAllowedKisSectorDegradedSnapshot } from "./kis-sector-degraded-policy";
+import { isAllowedKisOverseasDegradedSnapshot } from "./kis-overseas-degraded-policy";
 import { collectMarketSnapshot } from "./market-snapshot-provider";
 import { dedupeReferenceItems, normalizeReferenceItem, sourceNameFromUrl, stripHtml, summarizeReferenceItems } from "./reference-normalizer";
 import type { CompetitorBlogReference, ReferenceAdapter, ReferenceBundle, ReferenceItem, ReferenceSearchInput } from "./reference-types";
@@ -205,7 +206,8 @@ export const naverSearchReferenceAdapter: ReferenceAdapter = {
     const usableMarketSnapshot = (
       marketSnapshot.status === "ready" && marketSnapshot.dataQuality === "verified"
     ) || isAllowedFredDegradedSnapshot(marketSnapshot)
-      || isAllowedKisSectorDegradedSnapshot(marketSnapshot);
+      || isAllowedKisSectorDegradedSnapshot(marketSnapshot)
+      || isAllowedKisOverseasDegradedSnapshot(marketSnapshot);
     if (!usableMarketSnapshot) missingItems.push(...marketSnapshot.missingItems);
 
     return {

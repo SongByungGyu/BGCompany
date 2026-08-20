@@ -3,6 +3,9 @@ import path from "node:path";
 import { buildManualReferenceBundle } from "./stock-reference-normalizer";
 import { collectMarketSnapshot } from "./market-snapshot-provider";
 import { getStockReferenceTemplate } from "./stock-reference-templates";
+import { isAllowedFredDegradedSnapshot } from "./fred-degraded-policy";
+import { isAllowedKisSectorDegradedSnapshot } from "./kis-sector-degraded-policy";
+import { isAllowedKisOverseasDegradedSnapshot } from "./kis-overseas-degraded-policy";
 import type { ReferenceAdapter, ReferenceBundle, ReferenceSearchInput } from "./reference-types";
 
 type ManualReferenceFile = {
@@ -62,12 +65,20 @@ export const manualStockReferenceProvider: ReferenceAdapter = {
       missingItems: selected.missingItems,
     });
     const marketSnapshot = await collectMarketSnapshot(input);
+    const usableMarketSnapshot = (
+      marketSnapshot.status === "ready" && marketSnapshot.dataQuality === "verified"
+    ) || isAllowedFredDegradedSnapshot(marketSnapshot)
+      || isAllowedKisSectorDegradedSnapshot(marketSnapshot)
+      || isAllowedKisOverseasDegradedSnapshot(marketSnapshot);
     return {
       ...bundle,
-      status: bundle.items.length ? (marketSnapshot.status === "ready" ? "ready" : "needs_data") : "needs_reference",
+      status: bundle.items.length ? (usableMarketSnapshot ? "ready" : "needs_data") : "needs_reference",
       marketSnapshot,
       marketDate: marketSnapshot.marketDate,
-      missingItems: Array.from(new Set([...(bundle.missingItems ?? []), ...marketSnapshot.missingItems])),
+      missingItems: Array.from(new Set([
+        ...(bundle.missingItems ?? []),
+        ...(usableMarketSnapshot ? [] : marketSnapshot.missingItems),
+      ])),
     };
   },
 };

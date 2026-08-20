@@ -9,6 +9,7 @@ import { resolveStockBriefingNaverCategory } from "@/lib/naver-drafts/naver-cate
 import { evaluateStockBlogPublishQuality, getRealStockReferences } from "@/lib/stock-blog/quality-gate";
 import { ensureFredDegradedDisclosure, FRED_DEGRADED_DISCLOSURE, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import { ensureKisSectorDegradedDisclosure, KIS_SECTOR_DEGRADED_DISCLOSURE, isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
+import { ensureKisOverseasDegradedDisclosure, KIS_OVERSEAS_DEGRADED_DISCLOSURE, isAllowedKisOverseasDegradedSnapshot } from "@/lib/stock-blog/references/kis-overseas-degraded-policy";
 import { renderNaverBody, type NaverBodyBlock } from "@/lib/stock-blog/naver-body";
 import { selectBestStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
 import {
@@ -347,6 +348,7 @@ function buildPlainBody(pipeline: ContentPipelineRun, template: StockBriefingTem
   const marketDisclosureBlocks: NaverBodyBlock[] = [
     ...(isAllowedFredDegradedSnapshot(snapshot) ? [{ type: "paragraph" as const, text: FRED_DEGRADED_DISCLOSURE }] : []),
     ...(isAllowedKisSectorDegradedSnapshot(snapshot) ? [{ type: "paragraph" as const, text: KIS_SECTOR_DEGRADED_DISCLOSURE }] : []),
+    ...(isAllowedKisOverseasDegradedSnapshot(snapshot) ? [{ type: "paragraph" as const, text: KIS_OVERSEAS_DEGRADED_DISCLOSURE }] : []),
   ];
   const blocks: NaverBodyBlock[] = [
     { type: "heading", text: title },
@@ -463,8 +465,11 @@ function buildDraftFromPipeline(pipeline: ContentPipelineRun, publishedPosts: Pu
   const refs = collectReferences(pipeline);
   const writerBody = buildWriterEditorialBody(pipeline, template);
   const snapshot = collectReferenceBundle(pipeline)?.marketSnapshot;
-  const disclosedWriterBody = ensureKisSectorDegradedDisclosure(
-    ensureFredDegradedDisclosure(writerBody, snapshot),
+  const disclosedWriterBody = ensureKisOverseasDegradedDisclosure(
+    ensureKisSectorDegradedDisclosure(
+      ensureFredDegradedDisclosure(writerBody, snapshot),
+      snapshot,
+    ),
     snapshot,
   );
   const baseBody = pipeline.runnerMode === "hermes" && disclosedWriterBody
@@ -599,7 +604,8 @@ function automaticPublishBlockReasons(pipeline: ContentPipelineRun, body: string
   const bundle = collectReferenceBundle(pipeline);
   const snapshot = bundle?.marketSnapshot;
   const allowedDegradedSnapshot = isAllowedFredDegradedSnapshot(snapshot)
-    || isAllowedKisSectorDegradedSnapshot(snapshot);
+    || isAllowedKisSectorDegradedSnapshot(snapshot)
+    || isAllowedKisOverseasDegradedSnapshot(snapshot);
   const quality = evaluateStockBlogPublishQuality({
     pipeline,
     referenceBundle: bundle,

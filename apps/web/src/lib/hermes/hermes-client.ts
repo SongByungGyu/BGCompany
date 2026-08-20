@@ -16,6 +16,7 @@ import type {
 } from "./hermes-types";
 import { getRealStockReferences } from "@/lib/stock-blog/quality-gate";
 import { FRED_DEGRADED_DISCLOSURE } from "@/lib/stock-blog/references/fred-degraded-policy";
+import { KIS_OVERSEAS_DEGRADED_DISCLOSURE } from "@/lib/stock-blog/references/kis-overseas-degraded-policy";
 import {
   BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION,
   getStockBlogEditorialPolicy,
@@ -191,6 +192,8 @@ const STOCK_REFERENCE_POLICY = [
   "If referenceBundle is missing, insufficient, mock, or real-disabled, explicitly return a blocked/needs_reference result instead of guessing.",
   "If marketSnapshot.degradedMode is fred_unavailable, omit unavailable U.S. Treasury yield and economic-calendar values and never infer replacements.",
   `When marketSnapshot.degradedMode is fred_unavailable, include this exact disclosure in the final body: ${FRED_DEGRADED_DISCLOSURE}`,
+  "If marketSnapshot.degradedMode is kis_overseas_unavailable, omit every unavailable U.S. index and USD/KRW value, comparison, heading claim, and chart reference; never infer or replace the missing numbers.",
+  `When marketSnapshot.degradedMode is kis_overseas_unavailable, include this exact disclosure in the final body: ${KIS_OVERSEAS_DEGRADED_DISCLOSURE}`,
   "Avoid buy/sell recommendations, guaranteed returns, sensational claims, or unsupported forecasts.",
 ];
 
@@ -337,6 +340,7 @@ export function buildQaAuditHermesPayload(input: QaAuditHermesInput): HermesQaAu
         requiredCompetitorReferences: 3,
         requireVerifiedOrAllowedFredDegradedMarketSnapshot: true,
         requiredFredDegradedDisclosure: FRED_DEGRADED_DISCLOSURE,
+        requiredKisOverseasDegradedDisclosure: KIS_OVERSEAS_DEGRADED_DISCLOSURE,
         requiredEditorialQualityScore: STOCK_BLOG_EDITORIAL_QUALITY_TARGET,
         requiredThirtySecondSummaryLabels: ["판단", "상방 조건", "하방 조건", "다음 확인"],
         requiredCoreVariableCount: 2,

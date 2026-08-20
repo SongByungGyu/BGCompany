@@ -9,6 +9,12 @@ import {
   KIS_SECTOR_DEGRADED_MODE,
   KIS_SECTOR_DEGRADED_PROVIDER,
 } from "./kis-sector-degraded-policy";
+import {
+  canUseKisOverseasDegradedMode,
+  KIS_OVERSEAS_DEGRADED_DISCLOSURE,
+  KIS_OVERSEAS_DEGRADED_MODE,
+  KIS_OVERSEAS_DEGRADED_PROVIDER,
+} from "./kis-overseas-degraded-policy";
 import { aggregateFreshness } from "./market-data-utils";
 import { supplementFredMacroData } from "./official-us-macro-provider";
 import type { MarketSnapshot, ReferenceSearchInput } from "./reference-types";
@@ -96,7 +102,12 @@ function requiredAutomaticItems(snapshot: Pick<MarketSnapshot, "korea" | "us" | 
   return missing;
 }
 
-export function buildAutomaticMarketSnapshot(kis: KisResult, fred: FredResult, collectedAt = new Date().toISOString()): MarketSnapshot {
+export function buildAutomaticMarketSnapshot(
+  kis: KisResult,
+  fred: FredResult,
+  contentType: ReferenceSearchInput["contentType"] = "KOREA_DAILY_PREVIEW",
+  collectedAt = new Date().toISOString(),
+): MarketSnapshot {
   const sources = [...kis.sources, ...fred.sources];
   const freshness = aggregateFreshness(sources, collectedAt);
   const kisFreshness = aggregateFreshness(kis.sources, collectedAt);
@@ -117,6 +128,28 @@ export function buildAutomaticMarketSnapshot(kis: KisResult, fred: FredResult, c
       degradedReason: fred.missingItems.join(", ") || "FRED/공식 미국 거시지표 조회 지연",
       disclosures: [FRED_DEGRADED_DISCLOSURE],
       freshness: kisFreshness,
+      sources,
+      korea: kis.korea,
+      us,
+      macro: fred.macro,
+      upcoming: fred.upcoming,
+      missingItems,
+    };
+  }
+  const kisOverseasDegraded = canUseKisOverseasDegradedMode(contentType, kis, fred, freshness);
+  if (kisOverseasDegraded) {
+    return {
+      provider: "kis-fred",
+      status: "ready",
+      fallbackUsed: false,
+      marketDate: marketDate(),
+      collectedAt,
+      dataQuality: "partial",
+      degradedMode: KIS_OVERSEAS_DEGRADED_MODE,
+      degradedProviders: [KIS_OVERSEAS_DEGRADED_PROVIDER],
+      degradedReason: kis.missingItems.join(", ") || "해외지수·환율 조회 지연",
+      disclosures: [KIS_OVERSEAS_DEGRADED_DISCLOSURE],
+      freshness,
       sources,
       korea: kis.korea,
       us,
@@ -176,7 +209,7 @@ async function collectAutomaticSnapshot(input: ReferenceSearchInput): Promise<Ma
   const fred = primaryFred.status === "ready"
     ? primaryFred
     : await supplementFredMacroData(primaryFred);
-  return buildAutomaticMarketSnapshot(kis, fred);
+  return buildAutomaticMarketSnapshot(kis, fred, input.contentType);
 }
 
 export async function collectMarketSnapshot(input: ReferenceSearchInput): Promise<MarketSnapshot> {

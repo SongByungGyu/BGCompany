@@ -2,6 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { evaluateStockBlogImageQuality } from "./stock-blog-image-quality";
 import type { MarketSnapshot } from "./references/reference-types";
+import {
+  KIS_OVERSEAS_DEGRADED_DISCLOSURE,
+  KIS_OVERSEAS_DEGRADED_MODE,
+  KIS_OVERSEAS_DEGRADED_PROVIDER,
+} from "./references/kis-overseas-degraded-policy";
 import type { StockBlogContentImage } from "./stock-blog-image-types";
 
 const snapshot: MarketSnapshot = {
@@ -27,6 +32,23 @@ test("verified MarketSnapshot charts pass image quality audit", () => {
   const result = evaluateStockBlogImageQuality([image("thumbnail", "thumbnail", "thumbnail"), image("chart-1", "body", "chart"), image("chart-2", "body", "chart")], snapshot);
   assert.equal(result.status, "passed");
   assert.equal(result.chartImageCount, 2);
+});
+
+test("해외지수·환율 제외 모드는 확인된 국내 차트만 품질 검증한다", () => {
+  const degradedSnapshot: MarketSnapshot = {
+    ...snapshot,
+    dataQuality: "partial",
+    degradedMode: KIS_OVERSEAS_DEGRADED_MODE,
+    degradedProviders: [KIS_OVERSEAS_DEGRADED_PROVIDER],
+    disclosures: [KIS_OVERSEAS_DEGRADED_DISCLOSURE],
+    missingItems: ["S&P 500", "NASDAQ", "Dow Jones", "USD/KRW"],
+  };
+  const result = evaluateStockBlogImageQuality([
+    image("thumbnail", "thumbnail", "thumbnail"),
+    image("domestic-index", "body", "chart"),
+    image("domestic-flow", "body", "chart"),
+  ], degradedSnapshot);
+  assert.equal(result.status, "passed");
 });
 
 test("chart value mismatch blocks automatic publishing", () => {
