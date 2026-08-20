@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { MarketSnapshot } from "./references/reference-types.ts";
 import { applyVerifiedSchedule } from "./verified-schedule.ts";
+import { STOCK_BLOG_INVESTMENT_DISCLAIMER } from "./stock-blog-editorial-policy.ts";
 
 function snapshot(overrides?: Partial<MarketSnapshot>): MarketSnapshot {
   return {
@@ -114,6 +115,41 @@ test("일일 브리핑은 검증 범위 일정이 비어 있으면 일정 섹션
   assert.equal(applied.validation.ok, true);
   assert.equal(applied.validation.checkedEventCount, 0);
   assert.doesNotMatch(String(applied.result.fullDraft), /Later Event|주요 일정/);
+});
+
+test("오전 전망은 별도 일정을 빼고 마무리 뒤에 실제 기사 제목과 원문을 고정한다", () => {
+  const applied = applyVerifiedSchedule(writerResult([
+    { heading: "1. 30초 요약", body: "판단: 중립입니다." },
+    { heading: "검증된 미국 주요 일정", body: "Alpha Market Data를 확인합니다." },
+    { heading: "함께 확인한 기사", body: "요약문으로 바꾼 가짜 기사명\nhttps://search.example.com/redirect" },
+  ]), snapshot({
+    marketDate: "2026-08-20",
+    upcoming: [{ date: "2026-08-20", event: "Alpha Market Data", market: "US", url: "https://official.example.com/alpha" }],
+  }), {
+    contentType: "KOREA_DAILY_PREVIEW",
+    references: [{
+      id: "news-1",
+      sourceType: "news",
+      provider: "naver-search",
+      title: "코스피, 외국인 수급에 장중 변동성 확대",
+      url: "https://search.example.com/news-1",
+      originalUrl: "https://news.example.com/articles/1",
+      publisher: "테스트경제",
+      publishedAt: "2026-08-20T00:00:00Z",
+      summary: "기사 요약은 공개 참고기사 제목으로 사용하지 않습니다.",
+    }],
+  });
+  const fullDraft = String(applied.result.fullDraft);
+
+  assert.equal(applied.validation.ok, true);
+  assert.equal(applied.validation.checkedEventCount, 0);
+  assert.doesNotMatch(fullDraft, /검증된 미국 주요 일정|Alpha Market Data/);
+  assert.match(fullDraft, /코스피, 외국인 수급에 장중 변동성 확대 - 테스트경제/);
+  assert.match(fullDraft, /https:\/\/news\.example\.com\/articles\/1/);
+  assert.doesNotMatch(fullDraft, /요약문으로 바꾼 가짜 기사명|search\.example\.com\/redirect/);
+  assert.ok(fullDraft.indexOf("마무리") < fullDraft.indexOf("함께 확인한 기사"));
+  assert.ok(fullDraft.indexOf("함께 확인한 기사") < fullDraft.indexOf(STOCK_BLOG_INVESTMENT_DISCLAIMER));
+  assert.equal(fullDraft.endsWith(STOCK_BLOG_INVESTMENT_DISCLAIMER), true);
 });
 
 test("다음 주 전망은 검증 범위 일정이 비어 있으면 계속 차단한다", () => {

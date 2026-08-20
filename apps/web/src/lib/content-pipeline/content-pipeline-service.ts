@@ -154,6 +154,7 @@ function withVerifiedSchedule(writer: WriterExecution, referenceBundle?: Referen
   if (writer.agentRunStatus !== "succeeded") return writer;
   const applied = applyVerifiedSchedule(writer.result, referenceBundle?.marketSnapshot, {
     contentType: referenceBundle?.contentType,
+    references: getRealStockReferences(referenceBundle),
   });
   if (applied.validation.ok) return { ...writer, result: applied.result };
 

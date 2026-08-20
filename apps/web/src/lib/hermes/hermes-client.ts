@@ -194,6 +194,8 @@ const STOCK_REFERENCE_POLICY = [
   `When marketSnapshot.degradedMode is fred_unavailable, include this exact disclosure in the final body: ${FRED_DEGRADED_DISCLOSURE}`,
   "If marketSnapshot.degradedMode is kis_overseas_unavailable, omit every unavailable U.S. index and USD/KRW value, comparison, heading claim, and chart reference; never infer or replace the missing numbers.",
   `When marketSnapshot.degradedMode is kis_overseas_unavailable, include this exact disclosure in the final body: ${KIS_OVERSEAS_DEGRADED_DISCLOSURE}`,
+  "End the public body in this exact order: conclusion, '함께 확인한 기사', then the investment disclaimer once. Nothing may follow the disclaimer.",
+  "Under '함께 확인한 기사', use actual titles and original URLs from realReferences; do not substitute summaries or invented labels.",
   "Avoid buy/sell recommendations, guaranteed returns, sensational claims, or unsupported forecasts.",
 ];
 
@@ -300,6 +302,8 @@ export function buildContentWriterHermesPayload(input: ContentWriterHermesInput)
       competitorBlogReferences: input.referenceBundle?.competitorBlogReferences,
       editorialBenchmarkGuidelines: input.editorialBenchmarkGuidelines,
       bodyStructure: editorialPolicy.bodyStructure,
+      publicBodyEndingOrder: ["마무리", "함께 확인한 기사", "투자 유의문구"],
+      omitStandaloneScheduleSection: contentType === "KOREA_DAILY_PREVIEW",
       prohibitedPhrases: input.prohibitedPhrases,
       blogImagePrompts: input.blogImagePrompts,
       referencePolicy: STOCK_REFERENCE_POLICY,
