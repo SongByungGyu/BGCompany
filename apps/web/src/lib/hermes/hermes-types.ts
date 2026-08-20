@@ -109,6 +109,8 @@ export type HermesContentWriterPayload = {
     competitorBlogReferences?: CompetitorBlogReference[];
     editorialBenchmarkGuidelines?: string[];
     bodyStructure?: string[];
+    publicBodyEndingOrder?: string[];
+    omitStandaloneScheduleSection?: boolean;
     prohibitedPhrases?: string[];
     blogImagePrompts?: BlogImagePrompt[];
     referencePolicy?: string[];

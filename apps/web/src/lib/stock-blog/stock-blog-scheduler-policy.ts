@@ -117,7 +117,7 @@ export function evaluateStockBlogSchedulerRetry(
       && input.previousAttempt > maxAttempts + 1,
   );
   const manualRecoveryLimit = carriedReferencePreflightAttempts
-    ? input.maxRetries + maxAttempts
+    ? input.maxRetries + maxAttempts + 1
     : Math.max(maxAttempts + 1, input.maxRetries);
   const manualRecoveryAllowed = input.manualRecovery
     && input.status !== "running"

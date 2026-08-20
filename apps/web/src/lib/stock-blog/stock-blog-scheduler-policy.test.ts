@@ -225,6 +225,36 @@ test("참고자료 사전검증 시도 횟수가 누적돼도 생성 품질 수�
   assert.deepEqual(decision, { allowed: true, attempt: 14 });
 });
 
+test("사전검증 뒤 생성 품질을 코드로 수정하면 네 번째 수동 복구까지 허용한다", () => {
+  const allowed = evaluateStockBlogSchedulerRetry({
+    exists: true,
+    status: "failed",
+    previousAttempt: 15,
+    elapsedMs: 60 * 60 * 1000,
+    autoPublish: true,
+    autoPublishRetryLimit: 2,
+    maxRetries: 12,
+    retryDelayMinutes: 10,
+    retryableGenerationFailure: true,
+    manualRecovery: true,
+  });
+  const blocked = evaluateStockBlogSchedulerRetry({
+    exists: true,
+    status: "failed",
+    previousAttempt: 16,
+    elapsedMs: 60 * 60 * 1000,
+    autoPublish: true,
+    autoPublishRetryLimit: 2,
+    maxRetries: 12,
+    retryDelayMinutes: 10,
+    retryableGenerationFailure: true,
+    manualRecovery: true,
+  });
+
+  assert.deepEqual(allowed, { allowed: true, attempt: 16 });
+  assert.equal(blocked.allowed, false);
+});
+
 test("인증된 수동 복구도 실제 발행 실패의 재시도 한도는 우회하지 않는다", () => {
   const decision = evaluateStockBlogSchedulerRetry({
     exists: true,

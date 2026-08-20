@@ -1,4 +1,4 @@
-import type { MarketSnapshot, StockReferenceBriefingTemplate } from "./references/reference-types.ts";
+import type { MarketSnapshot, ReferenceItem, StockReferenceBriefingTemplate } from "./references/reference-types.ts";
 import { STOCK_BLOG_INVESTMENT_DISCLAIMER } from "./stock-blog-editorial-policy.ts";
 
 export type VerifiedScheduleEvent = {
@@ -41,10 +41,12 @@ type ApplyVerifiedScheduleResult = {
 
 type ApplyVerifiedScheduleOptions = {
   contentType?: StockReferenceBriefingTemplate;
+  references?: ReferenceItem[];
 };
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const SCHEDULE_HEADING_PATTERN = /(?:주요\s*)?(?:경제\s*)?(?:일정|캘린더)|(?:다음|이번)\s*주.*(?:일정|이벤트)/i;
+const ARTICLE_HEADING_PATTERN = /함께\s*확인한\s*기사/i;
 const MAX_VERIFIED_EVENTS = 12;
 
 function stringValue(value: unknown) {
@@ -75,6 +77,11 @@ function normalizeVerifiedEvents(snapshot?: MarketSnapshot, contentType?: StockR
   const issues: string[] = [];
   if (!snapshot) {
     return { events: [] as VerifiedScheduleEvent[], issues: ["검증된 시장 스냅샷이 없습니다."], from: undefined, through: undefined };
+  }
+  // The morning preview has no standalone schedule section in editorial policy v7.
+  // Omitting it prevents internal validation notes from leaking into the public post.
+  if (contentType === "KOREA_DAILY_PREVIEW" || contentType === "WEEKLY_MARKET_REVIEW") {
+    return { events: [] as VerifiedScheduleEvent[], issues, from: undefined, through: undefined };
   }
   if (!Array.isArray(snapshot.upcoming) || snapshot.upcoming.length === 0) {
     return { events: [] as VerifiedScheduleEvent[], issues: [], from: undefined, through: undefined };
@@ -110,13 +117,10 @@ function normalizeVerifiedEvents(snapshot?: MarketSnapshot, contentType?: StockR
   });
 
   events.sort((left, right) => left.date.localeCompare(right.date) || left.event.localeCompare(right.event));
-  if (contentType === "WEEKLY_MARKET_REVIEW") {
-    return { events: [] as VerifiedScheduleEvent[], issues, from: undefined, through: undefined };
-  }
   if (!ISO_DATE_PATTERN.test(snapshot.marketDate)) {
     return { events: events.slice(0, MAX_VERIFIED_EVENTS), issues, from: undefined, through: undefined };
   }
-  const dailyPreview = contentType === "KOREA_DAILY_PREVIEW" || contentType === "KOREA_MARKET_CLOSE_US_PREVIEW";
+  const dailyPreview = contentType === "KOREA_MARKET_CLOSE_US_PREVIEW";
   if (contentType !== "NEXT_WEEK_MARKET_PREVIEW" && !dailyPreview) {
     return { events: events.slice(0, MAX_VERIFIED_EVENTS), issues, from: undefined, through: undefined };
   }
@@ -206,7 +210,9 @@ function assembleDraft(input: {
     plainParts.push(introduction);
     markdownParts.push(introduction);
   }
-  for (const section of input.sections) {
+  const bodySections = input.sections.filter((section) => !ARTICLE_HEADING_PATTERN.test(stringValue(section.heading)));
+  const articleSections = input.sections.filter((section) => ARTICLE_HEADING_PATTERN.test(stringValue(section.heading)));
+  for (const section of bodySections) {
     const heading = stringValue(section.heading);
     const body = withoutDisclaimer(stringValue(section.body));
     if (heading) {
@@ -223,12 +229,48 @@ function assembleDraft(input: {
     plainParts.push("마무리", conclusion);
     markdownParts.push("## 마무리", conclusion);
   }
+  for (const section of articleSections) {
+    const heading = stringValue(section.heading);
+    const body = withoutDisclaimer(stringValue(section.body));
+    if (heading) {
+      plainParts.push(heading);
+      markdownParts.push(`## ${heading}`);
+    }
+    if (body) {
+      plainParts.push(body);
+      markdownParts.push(body);
+    }
+  }
   plainParts.push(STOCK_BLOG_INVESTMENT_DISCLAIMER);
   markdownParts.push(STOCK_BLOG_INVESTMENT_DISCLAIMER);
   return {
     fullDraft: plainParts.join("\n\n"),
     markdownDraft: markdownParts.join("\n\n"),
   };
+}
+
+function canonicalArticleBody(references?: ReferenceItem[]) {
+  if (!references?.length) return "";
+  const seen = new Set<string>();
+  const articles = references.flatMap((item) => {
+    if (item.sourceType !== "news") return [];
+    const title = stringValue(item.title).replace(/\s+/g, " ");
+    const publisher = stringValue(item.publisher || item.sourceName).replace(/\s+/g, " ");
+    const candidateUrl = stringValue(item.originalUrl || item.url);
+    let url = "";
+    try {
+      const parsed = new URL(candidateUrl);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") url = parsed.toString();
+    } catch {
+      return [];
+    }
+    if (!title || !url || seen.has(url)) return [];
+    seen.add(url);
+    return [{ title, publisher, url }];
+  }).slice(0, 3);
+  return articles.map((item, index) => (
+    `${index + 1}. ${item.title}${item.publisher ? ` - ${item.publisher}` : ""}\n${item.url}`
+  )).join("\n");
 }
 
 function normalizeMentionedDate(year: string | undefined, month: string, day: string, expectedYear: string) {
@@ -333,8 +375,11 @@ export function applyVerifiedSchedule(
   };
   const scheduleBody = renderScheduleBody(schedule);
   const sections: WriterSection[] = [];
+  const originalArticleSection = originalSections.find((section) => ARTICLE_HEADING_PATTERN.test(stringValue(section.heading)));
+  const articleBody = canonicalArticleBody(options.references) || stringValue(originalArticleSection?.body);
   let scheduleInserted = false;
   for (const section of originalSections) {
+    if (ARTICLE_HEADING_PATTERN.test(stringValue(section.heading))) continue;
     if (SCHEDULE_HEADING_PATTERN.test(stringValue(section.heading))) {
       if (!scheduleInserted && events.length > 0) {
         sections.push({ heading: stringValue(section.heading) || scheduleHeading(schedule), body: scheduleBody });
@@ -345,11 +390,10 @@ export function applyVerifiedSchedule(
     sections.push(normalizeMarketClassification(section));
   }
   if (!scheduleInserted && events.length > 0) {
-    const articleIndex = sections.findIndex((section) => stringValue(section.heading).includes("함께 확인한 기사"));
     const scheduleSection = { heading: scheduleHeading(schedule), body: scheduleBody };
-    if (articleIndex >= 0) sections.splice(articleIndex, 0, scheduleSection);
-    else sections.push(scheduleSection);
+    sections.push(scheduleSection);
   }
+  if (articleBody) sections.push({ heading: "함께 확인한 기사", body: articleBody });
 
   const introduction = stringValue(writerResult.introduction);
   const conclusion = stringValue(writerResult.conclusion);
