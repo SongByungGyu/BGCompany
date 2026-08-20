@@ -643,8 +643,9 @@ Do not run Hermes, OpenAI, Naver Search, stock APIs, Playwright/Selenium, or Nav
 - 같은 활성화 키가 켜져 있으면 국장·미장 휴장으로 건너뛴 전망 슬롯을 휴장 이유·다음 개장일·거래시간 검색형 투자공부로 대체한다. 양 시장이 같은 날 쉬면 날짜별 발행키로 한 건만 허용한다.
 - 국장 개장 판정은 KIS 실시간 휴장 API를 발행 게이트로 사용하지 않는다. KRX 공식 규칙과 정부 월력요항을 직접 검토해 연간 `STOCK_BLOG_KRX_CLOSED_DATES`를 유지하고, 목록에 없는 평일은 정상 개장으로 처리한다.
 - 조건부 투자공부는 최신 MarketSnapshot과 최근 72시간 기사에서 코스피·나스닥 급변, 물가·금리·반도체·실적·주주환원·환율·유가 신호를 확인한다.
-- 자동 승인 후 `NaverDraftJob`만 생성하며, 네이버 자동 발행은 하지 않는다.
-- Local Naver Draft Agent는 운영 PC에서 별도로 실행되어야 한다.
+- 자동 승인 후 `NaverDraftJob`을 생성하며, 자동 발행 플래그와 최종 품질·중복 게이트를 모두 통과한 작업만 Local Naver Draft Agent가 공개한다.
+- 오전 한국장 글은 06:50에 준비를 시작한다. 해외지수·환율 선택 자료는 07:30까지 재수집하고, 이후에도 없으면 해당 수치·항목·그래프만 제외한다. 로컬 에이전트는 08:05부터 작업을 가져가 08:20보다 먼저 공개하지 않는다.
+- Local Naver Draft Agent는 운영 PC에서 별도로 상시 실행되어야 한다. Windows 작업은 로그온 시와 매일 06:00에 시작하고 지원되는 PC에서는 절전 상태를 깨우도록 등록한다.
 - 권장 cron은 10분마다 tick을 호출하는 방식이며, 실제 due 여부는 서버가 판단한다.
 - cron 로그 예: `/opt/bg-company/logs/stock-blog-scheduler.log`
 
@@ -737,12 +738,13 @@ STOCK_MARKET_DATA_ALLOW_MANUAL_FALLBACK=false
 STOCK_MARKET_DATA_ALLOW_FRED_DEGRADED=true
 STOCK_MARKET_DATA_ALLOW_KIS_SECTOR_DEGRADED=true
 STOCK_MARKET_DATA_ALLOW_KIS_OVERSEAS_DEGRADED=true
+STOCK_MARKET_DATA_KIS_OVERSEAS_DEGRADED_AFTER_KST=07:30
 STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES=false
 ```
 
 KIS 업종 순위만 비어 있고 나머지 KIS 핵심 지표와 FRED 자료가 모두 최신·정상인 경우에는 강세·약세 업종 항목을 제외하고 제한 운영한다. 본문에는 KIS 업종 자료 누락 사실을 자동으로 고지하며, 업종 데이터는 추정하거나 다른 수치로 채우지 않는다. 이 제한 운영은 `STOCK_MARKET_DATA_ALLOW_KIS_SECTOR_DEGRADED=false`로 비활성화할 수 있다.
 
-한국장 장전 글에서 KIS 해외지수·원달러 환율만 비고 국내 지수·수급·업종과 FRED 금리·일정이 모두 최신·정상인 경우에는 누락된 수치, 본문 항목, 연결 그래프를 제외하고 발행한다. 미국장 전망·주간 글에는 적용하지 않으며, `STOCK_MARKET_DATA_ALLOW_KIS_OVERSEAS_DEGRADED=false`로 비활성화할 수 있다.
+한국장 장전 글에서 KIS 해외지수·원달러 환율만 비고 국내 지수·수급·업종과 FRED 금리·일정이 모두 최신·정상인 경우에는 07:30 KST까지 재수집한다. 마감 뒤에도 없으면 누락된 수치, 본문 항목, 연결 그래프를 제외하고 발행한다. 미국장 전망·주간 글에는 적용하지 않으며, `STOCK_MARKET_DATA_ALLOW_KIS_OVERSEAS_DEGRADED=false`로 비활성화할 수 있다.
 
 그 외 `needs_credentials`, `needs_data`, `error`, stale/expired가 발생하면 mock 또는 Manual로 자동 대체하지 않는다. scheduler와 실제 Hermes를 중지한 상태에서 자격증명, provider 상태, 기준 시각을 확인한다. KIS 주문·잔고·계좌 API는 점검 목적으로도 호출하지 않는다.
 

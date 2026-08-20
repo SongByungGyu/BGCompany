@@ -119,6 +119,9 @@ export function evaluateStockBlogSchedulerRetry(
   const manualRecoveryLimit = carriedReferencePreflightAttempts
     ? input.maxRetries + maxAttempts + 1
     : Math.max(maxAttempts + 1, input.maxRetries);
+  const effectiveMaxAttempts = input.autoPublish && carriedReferencePreflightAttempts
+    ? manualRecoveryLimit
+    : maxAttempts;
   const manualRecoveryAllowed = input.manualRecovery
     && input.status !== "running"
     && input.status !== "deferred"
@@ -128,11 +131,11 @@ export function evaluateStockBlogSchedulerRetry(
     return { allowed: true, attempt: input.previousAttempt + 1 };
   }
 
-  if (!preserveAttempt && input.previousAttempt >= maxAttempts) {
+  if (!preserveAttempt && input.previousAttempt >= effectiveMaxAttempts) {
     return {
       allowed: false,
       attempt: input.previousAttempt,
-      reason: `실패 재시도 한도 ${Math.max(0, maxAttempts - 1)}회에 도달했습니다.`,
+      reason: `실패 재시도 한도 ${Math.max(0, effectiveMaxAttempts - 1)}회에 도달했습니다.`,
     };
   }
 

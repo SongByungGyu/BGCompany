@@ -37,7 +37,7 @@ import { STOCK_BLOG_MAX_HERMES_RUNS } from "./qa-revision-policy";
 export { STOCK_BLOG_MAX_HERMES_RUNS, STOCK_BLOG_MAX_QA_ATTEMPTS } from "./qa-revision-policy";
 
 const STOCK_BLOG_SCHEDULE: StockBlogScheduleItem[] = [
-  { contentType: "KOREA_DAILY_PREVIEW", label: "전일 한국장 리뷰·오늘 한국장 전망", cadence: "평일", scheduledTimeKst: "07:20 KST 생성 시작 · 08:20 이전 발행 목표", objective: "전일 한국장을 짧게 복기하고 간밤 미국장 결과를 반영해 오늘 코스피 전망을 정리합니다.", primaryAudience: "한국 주식 투자자", recommendedRunnerMode: "hermes" },
+  { contentType: "KOREA_DAILY_PREVIEW", label: "전일 한국장 리뷰·오늘 한국장 전망", cadence: "평일", scheduledTimeKst: "06:50 KST 준비 시작 · 08:20 KST 고정 공개", objective: "06:50부터 검증 자료를 준비하고 누락된 선택 항목은 제외해 08:20에 오늘 코스피 전망을 공개합니다.", primaryAudience: "한국 주식 투자자", recommendedRunnerMode: "hermes" },
   { contentType: "KOREA_MARKET_CLOSE_US_PREVIEW", label: "전일 미국장 리뷰·오늘 미국장 전망", cadence: "평일", scheduledTimeKst: "17:00 KST", objective: "전일 미국장을 짧게 복기하고 오늘 밤 미국장 관전 포인트를 정리합니다.", primaryAudience: "미국 주식 투자자", recommendedRunnerMode: "hermes" },
   { contentType: "WEEKLY_MARKET_REVIEW", label: "이번 주 한국·미국 시장 복기", cadence: "매주 토요일", scheduledTimeKst: "09:00 KST", objective: "이번 주 지수·수급·주도 업종과 변동 원인을 중심으로 복기합니다.", primaryAudience: "토요일에 한 주의 시장 흐름을 복기하는 투자자", recommendedRunnerMode: "hermes" },
   { contentType: "INVESTMENT_STUDY", label: "일정·결과·실전 질문 투자 공부", cadence: "평일 화·목 고정 + 월·수·금 이슈 시 주 1회", scheduledTimeKst: "12:10 KST", objective: "화요일에는 이번 주 공식 일정과 발표시간, 목요일에는 발표 결과와 주가 반응을 설명하고 조용한 날에는 검색형 실전 질문에 답합니다.", primaryAudience: "경제 일정과 실제 주가 반응의 이유를 검색하는 투자자", recommendedRunnerMode: "hermes" },

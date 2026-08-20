@@ -51,6 +51,8 @@ export type NaverDraftJob = {
   publishKey?: string | null;
   marketDate?: string | null;
   scheduleSlot?: string | null;
+  publishNotBefore?: string | null;
+  claimAvailableAt?: string | null;
   errorCode?: string | null;
   disclaimer: string | null;
 };
@@ -193,7 +195,7 @@ export function normalizeNaverCategoryLabel(value: string) {
 export function resolveNaverPublishCategory(category?: string | null, scheduleSlot?: string | null) {
   if (normalizeNaverCategoryLabel(category ?? "") !== "주식시장브리핑") return category?.trim() || null;
   const slot = scheduleSlot?.trim() ?? "";
-  if (["07:20", "08:30"].includes(slot)) return "오늘의 한국장 전망";
+  if (["07:20", "08:20", "08:30"].includes(slot)) return "오늘의 한국장 전망";
   if (slot === "17:00") return "오늘의 미국장 전망";
   if (slot === "09:00") return "주간 시장 정리";
   if (slot === "19:00") return "차주 시장 전망";
@@ -1465,11 +1467,18 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
       }
       const publishGate = await context.beginPublish?.();
       if (!publishGate?.allowed) {
+        const gateStillWaiting = publishGate?.status === "publish_ready";
         return {
-          status: publishGate?.status === "duplicate_blocked" ? "duplicate_blocked" : "publish_blocked",
+          status: publishGate?.status === "duplicate_blocked"
+            ? "duplicate_blocked"
+            : gateStillWaiting
+              ? "failed"
+              : "publish_blocked",
           externalUrl: page.url(),
-          errorCode: publishGate?.errorCode ?? "NAVER_SERVER_PUBLISH_BLOCKED",
-          errorMessage: "Server-side final duplicate/canary check blocked publishing.",
+          errorCode: publishGate?.errorCode ?? (gateStillWaiting ? "NAVER_PUBLISH_GATE_NOT_READY" : "NAVER_SERVER_PUBLISH_BLOCKED"),
+          errorMessage: gateStillWaiting
+            ? "The scheduled publish gate was still waiting, so the pre-publish job will be retried safely."
+            : "Server-side final duplicate/canary check blocked publishing.",
         };
       }
       try {

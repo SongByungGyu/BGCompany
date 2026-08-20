@@ -225,6 +225,34 @@ test("참고자료 사전검증 시도 횟수가 누적돼도 생성 품질 수�
   assert.deepEqual(decision, { allowed: true, attempt: 14 });
 });
 
+test("07:30까지 사전검증을 반복한 오전 글은 생성 품질 오류도 자동 복구한다", () => {
+  const allowed = evaluateStockBlogSchedulerRetry({
+    exists: true,
+    status: "failed",
+    previousAttempt: 6,
+    elapsedMs: 10 * 60 * 1000,
+    autoPublish: true,
+    autoPublishRetryLimit: 2,
+    maxRetries: 5,
+    retryDelayMinutes: 10,
+    retryableGenerationFailure: true,
+  });
+  const blocked = evaluateStockBlogSchedulerRetry({
+    exists: true,
+    status: "failed",
+    previousAttempt: 9,
+    elapsedMs: 10 * 60 * 1000,
+    autoPublish: true,
+    autoPublishRetryLimit: 2,
+    maxRetries: 5,
+    retryDelayMinutes: 10,
+    retryableGenerationFailure: true,
+  });
+
+  assert.deepEqual(allowed, { allowed: true, attempt: 7 });
+  assert.equal(blocked.allowed, false);
+});
+
 test("사전검증 뒤 생성 품질을 코드로 수정하면 네 번째 수동 복구까지 허용한다", () => {
   const allowed = evaluateStockBlogSchedulerRetry({
     exists: true,

@@ -30,6 +30,11 @@ import {
   getStockBlogEditorialPolicy,
   STOCK_BLOG_INVESTMENT_DISCLAIMER,
 } from "@/lib/stock-blog/stock-blog-editorial-policy";
+import {
+  isNaverDraftClaimDue,
+  isNaverDraftPublishDue,
+  resolveNaverDraftSchedule,
+} from "@/lib/naver-drafts/naver-draft-schedule-policy";
 
 export type NaverDraftJobStatus =
   | "created"
@@ -96,6 +101,8 @@ export type SerializedNaverDraftJob = {
   publishKey: string | null;
   marketDate: string | null;
   scheduleSlot: string | null;
+  publishNotBefore: string | null;
+  claimAvailableAt: string | null;
   publishedAt: string | null;
   publishedUrl: string | null;
   naverPostId: string | null;
@@ -510,6 +517,7 @@ function buildDraftFromPipeline(pipeline: ContentPipelineRun, publishedPosts: Pu
 }
 
 export function serializeNaverDraftJob(job: NaverDraftJob): SerializedNaverDraftJob {
+  const schedule = resolveNaverDraftSchedule(job);
   return {
     id: job.id,
     contentPipelineId: job.contentPipelineId,
@@ -546,6 +554,8 @@ export function serializeNaverDraftJob(job: NaverDraftJob): SerializedNaverDraft
     publishKey: job.publishKey,
     marketDate: job.marketDate,
     scheduleSlot: job.scheduleSlot,
+    publishNotBefore: schedule?.publishNotBefore.toISOString() ?? null,
+    claimAvailableAt: schedule?.claimAvailableAt.toISOString() ?? null,
     publishedAt: job.publishedAt?.toISOString() ?? null,
     publishedUrl: job.publishedUrl,
     naverPostId: job.naverPostId,
@@ -785,6 +795,15 @@ function maxClaimAgeDate() {
   return new Date(Date.now() - safeMinutes * 60 * 1000);
 }
 
+const reclaimablePrePublishStatuses = [
+  "claimed",
+  "in_progress",
+  "image_uploading",
+  "draft_saving",
+  "draft_saved",
+  "publish_ready",
+];
+
 function safeRetryEventPayload(value: Prisma.JsonValue | undefined) {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, Prisma.JsonValue>
@@ -855,27 +874,32 @@ async function scheduleSafeNaverDraftRetry(
 
 export async function getNextNaverDraftJob() {
   const staleBefore = maxClaimAgeDate();
-  const job = await prisma.naverDraftJob.findFirst({
+  const candidates = await prisma.naverDraftJob.findMany({
     where: {
       OR: [
         { status: "queued" },
-        { status: { in: ["claimed", "in_progress"] }, claimedAt: { lt: staleBefore } },
+        { allowPublish: true, status: { in: reclaimablePrePublishStatuses }, claimedAt: { lt: staleBefore } },
       ],
     },
     orderBy: { createdAt: "asc" },
+    take: 50,
   });
+  const now = new Date();
+  const job = candidates.find((candidate) => isNaverDraftClaimDue(candidate, now));
   return job ? serializeNaverDraftJobWithPipeline(job) : null;
 }
 
 export async function claimNaverDraftJob(jobId: string, claimedBy: string) {
   const now = new Date();
   const staleBefore = maxClaimAgeDate();
+  const current = await prisma.naverDraftJob.findUnique({ where: { id: jobId } });
+  if (!current || !isNaverDraftClaimDue(current, now)) return null;
   const updated = await prisma.naverDraftJob.updateMany({
     where: {
       id: jobId,
       OR: [
         { status: "queued" },
-        { status: { in: ["claimed", "in_progress"] }, claimedAt: { lt: staleBefore } },
+        { allowPublish: true, status: { in: reclaimablePrePublishStatuses }, claimedAt: { lt: staleBefore } },
       ],
     },
     data: { status: "claimed", claimedBy, claimedAt: now, errorCode: null, errorMessage: null },
@@ -902,6 +926,9 @@ function isAllowedPublishedUrl(value?: string) {
 async function beginNaverPublish(jobId: string, claimedBy?: string) {
   const current = await prisma.naverDraftJob.findUnique({ where: { id: jobId } });
   if (!current) throw new Error("NAVER_DRAFT_JOB_NOT_FOUND");
+  if (current.status === "publish_ready" && current.allowPublish && !isNaverDraftPublishDue(current)) {
+    return current;
+  }
   if (current.status === "publish_ready" && current.allowPublish) {
     const detail = current.contentPipelineId ? await getContentPipelineDetail(current.contentPipelineId) : null;
     const reasons = detail?.pipeline
@@ -1011,6 +1038,7 @@ export async function reportNaverDraftJobStatus(jobId: string, input: StatusRepo
     errorMessage: input.errorMessage,
   };
   if (input.status === "in_progress") data.startedAt = now;
+  if (reclaimablePrePublishStatuses.includes(input.status)) data.claimedAt = now;
   if (input.status === "published") {
     data.publishedAt = now;
     data.publishedUrl = input.publishedUrl;

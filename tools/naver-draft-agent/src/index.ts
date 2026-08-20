@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:net";
 import path from "node:path";
 import { runNaverWriter, testNaverBrowser, type NaverDraftJob } from "./naver-writer.js";
+import { getScheduledPublishWaitMs, nextPublishHeartbeatDelay } from "./publish-schedule.js";
 
 type AgentConfig = {
   baseUrl: string;
@@ -82,6 +83,21 @@ async function saveLocalDraft(job: NaverDraftJob) {
   return file;
 }
 
+async function waitForScheduledPublish(
+  cfg: AgentConfig,
+  job: NaverDraftJob,
+) {
+  let waitMs = getScheduledPublishWaitMs(job.publishNotBefore);
+  if (waitMs > 0) {
+    console.log(`[naver-agent] ${job.id} prepared; waiting until ${job.publishNotBefore}`);
+  }
+  while (waitMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, nextPublishHeartbeatDelay(waitMs)));
+    waitMs = getScheduledPublishWaitMs(job.publishNotBefore);
+    if (waitMs > 0) await reportStatus(cfg, job.id, { status: "publish_ready" });
+  }
+}
+
 async function processJob(cfg: AgentConfig, job: NaverDraftJob) {
   console.log(`[naver-agent] claiming ${job.id}`);
   const claimed = await claimJob(cfg, job.id);
@@ -94,12 +110,19 @@ async function processJob(cfg: AgentConfig, job: NaverDraftJob) {
       await reportStatus(cfg, claimed.job.id, body);
     },
     beginPublish: async () => {
-      const response = await reportStatus(cfg, claimed.job.id, { status: "publishing" });
-      return {
-        allowed: response.job.status === "publishing",
-        status: response.job.status ?? "publish_blocked",
-        errorCode: (response.job as NaverDraftJob & { errorCode?: string | null }).errorCode,
-      };
+      await waitForScheduledPublish(cfg, claimed.job);
+      for (let attempt = 0; attempt < 60; attempt += 1) {
+        const response = await reportStatus(cfg, claimed.job.id, { status: "publishing" });
+        if (response.job.status !== "publish_ready") {
+          return {
+            allowed: response.job.status === "publishing",
+            status: response.job.status ?? "publish_blocked",
+            errorCode: (response.job as NaverDraftJob & { errorCode?: string | null }).errorCode,
+          };
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+      return { allowed: false, status: "publish_ready", errorCode: "NAVER_PUBLISH_NOT_DUE" };
     },
   });
   await reportStatus(cfg, claimed.job.id, result);

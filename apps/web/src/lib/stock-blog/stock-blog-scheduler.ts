@@ -158,6 +158,8 @@ type StockBlogSchedulerDefinition = StockBlogScheduleItem & {
   scheduleId: string;
   weekdays: number[];
   scheduledTime: string;
+  publishTime?: string;
+  maxAttempts?: number;
   title: (date: string) => string;
   topic: string;
   investmentStudyMode?: "fixed" | "conditional";
@@ -170,10 +172,12 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     contentType: "KOREA_DAILY_PREVIEW",
     label: "한국 증시 장전 브리핑",
     cadence: "평일",
-    scheduledTimeKst: "07:20 KST 생성 시작 · 08:20 이전 발행 목표",
-    scheduledTime: "07:20",
+    scheduledTimeKst: "06:50 KST 준비 시작 · 08:20 KST 고정 공개",
+    scheduledTime: "06:50",
+    publishTime: "08:20",
+    maxAttempts: 5,
     weekdays: [1, 2, 3, 4, 5],
-    objective: "07:20부터 생성해 08:20 전에 전일 한국장을 짧게 복기하고 간밤 미국장을 반영한 당일 한국장 전망을 발행합니다.",
+    objective: "06:50부터 자료를 수집하고 07:30 이후 누락된 선택 항목은 제외해 08:20에 당일 한국장 전망을 공개합니다.",
     primaryAudience: "한국 주식 투자자",
     recommendedRunnerMode: "hermes",
     topic: "전일 한국장 코멘트와 간밤 미국 지수·금리·원달러 환율이 오늘 코스피에 미칠 영향",
@@ -719,6 +723,7 @@ function retryState(
   now: Date,
   config: StockBlogSchedulerConfig,
   manualRecovery = false,
+  maxAttempts = config.maxRetries,
 ) {
   const payload = existing ? eventPayload(existing.payload) : {};
   const reason = typeof payload.reason === "string" ? payload.reason : "";
@@ -738,7 +743,7 @@ function retryState(
     elapsedMs: existing ? now.getTime() - existing.timestamp.getTime() : 0,
     autoPublish: config.autoPublish,
     autoPublishRetryLimit: config.autoPublishRetryLimit,
-    maxRetries: config.maxRetries,
+    maxRetries: maxAttempts,
     retryDelayMinutes: config.retryDelayMinutes,
     referencePreflightFailure: isStockReferencePreflightFailure(reason),
     retryableGenerationFailure,
@@ -840,7 +845,8 @@ async function runOneSchedule(
   const scheduledFor = scheduledAt.toISOString();
   const scheduledParts = getZonedParts(scheduledAt, config.timezone);
   const marketDate = `${scheduledParts.year}-${pad(scheduledParts.month)}-${pad(scheduledParts.day)}`;
-  let publishKey = `${contentType}:${marketDate}:${definition.scheduledTime}`;
+  const publishTime = definition.publishTime ?? definition.scheduledTime;
+  let publishKey = `${contentType}:${marketDate}:${publishTime}`;
 
   if (config.autoPublish) {
     await clearRecoverablePipelineCircuitBreaker(key);
@@ -854,7 +860,7 @@ async function runOneSchedule(
   }
 
   const existing = await prisma.eventLog.findUnique({ where: { id } });
-  const retry = retryState(existing, now, config, options.manualRecovery);
+  const retry = retryState(existing, now, config, options.manualRecovery, definition.maxAttempts);
   if (!retry.allowed) return { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "already_ran", attempt: retry.attempt, reason: retry.reason };
   const attempt = retry.attempt;
   const marketDecision = await resolveScheduleMarketDecision(contentType, marketDate);
@@ -1150,7 +1156,7 @@ async function runOneSchedule(
           allowPublish: config.autoPublish,
           publishKey: config.autoPublish ? publishKey : null,
           marketDate: config.autoPublish ? marketDate : null,
-          scheduleSlot: config.autoPublish ? definition.scheduledTime : null,
+          scheduleSlot: config.autoPublish ? publishTime : null,
         });
         const result: StockBlogSchedulerRunResult = {
           scheduleId: definition.scheduleId,
@@ -1274,7 +1280,7 @@ async function runOneSchedule(
           allowPublish: config.autoPublish,
           publishKey: config.autoPublish ? publishKey : null,
           marketDate: config.autoPublish ? marketDate : null,
-          scheduleSlot: config.autoPublish ? definition.scheduledTime : null,
+          scheduleSlot: config.autoPublish ? publishTime : null,
         });
         naverDraftJobId = job.id;
       } catch (error) {

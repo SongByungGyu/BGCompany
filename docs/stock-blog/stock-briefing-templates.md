@@ -6,8 +6,8 @@ The templates are deterministic preparation rules. They do not fetch live market
 
 ## 1. KOREA_DAILY_PREVIEW
 
-- Schedule: weekdays, generation starts at 07:20 KST and publishing targets before 08:20 KST
-- Recommended writing window: 07:20-08:20 KST
+- Schedule: weekdays, preparation starts at 06:50 KST and publishing is gated until 08:20 KST
+- Recommended writing window: 06:50-08:05 KST, with optional overseas-index/FX collection retried until 07:30 KST
 - Purpose: today's Korean stock market status and outlook
 - Recommended Naver category: 오늘의 한국장 전망
 

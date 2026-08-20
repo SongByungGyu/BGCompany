@@ -7,6 +7,7 @@ export const KIS_OVERSEAS_DEGRADED_PROVIDER = "kis-overseas" as const;
 export const KIS_OVERSEAS_DEGRADED_DISCLOSURE = "※ 확인되지 않은 해외지수·환율 수치와 관련 그래프는 제외하고, 검증된 국내 지수·수급·미국 금리 자료만 사용했습니다.";
 
 const OPTIONAL_KOREA_PREVIEW_ITEMS = new Set(["S&P 500", "NASDAQ", "Dow Jones", "USD/KRW"]);
+const DEFAULT_DEGRADED_AFTER_KST = "07:30";
 
 function hasRequiredKoreaPreviewCore(kis: KisResult, fred: FredResult) {
   return Boolean(
@@ -25,13 +26,27 @@ export function isKisOverseasDegradedEnabled() {
   return process.env.STOCK_MARKET_DATA_ALLOW_KIS_OVERSEAS_DEGRADED !== "false";
 }
 
+export function isKisOverseasDegradedCutoffReached(
+  now = new Date(),
+  cutoffKst = process.env.STOCK_MARKET_DATA_KIS_OVERSEAS_DEGRADED_AFTER_KST?.trim() || DEFAULT_DEGRADED_AFTER_KST,
+) {
+  const match = /^(\d{2}):(\d{2})$/.exec(cutoffKst);
+  if (!match) return false;
+  const cutoffMinutes = Number(match[1]) * 60 + Number(match[2]);
+  if (cutoffMinutes < 0 || cutoffMinutes >= 24 * 60) return false;
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  return kst.getUTCHours() * 60 + kst.getUTCMinutes() >= cutoffMinutes;
+}
+
 export function canUseKisOverseasDegradedMode(
   contentType: StockReferenceBriefingTemplate,
   kis: KisResult,
   fred: FredResult,
   freshness: MarketSnapshotFreshness,
+  options: { now?: Date; cutoffKst?: string } = {},
 ) {
   if (!isKisOverseasDegradedEnabled() || contentType !== "KOREA_DAILY_PREVIEW") return false;
+  if (!isKisOverseasDegradedCutoffReached(options.now, options.cutoffKst)) return false;
   if (kis.status !== "needs_data" || fred.status !== "ready") return false;
   if (!hasRequiredKoreaPreviewCore(kis, fred)) return false;
   if (freshness.status !== "fresh" || freshness.staleItems.length > 0) return false;

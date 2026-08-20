@@ -6,7 +6,7 @@ Phase 1-S scheduler prepares stock-market blog drafts on a fixed KST schedule.
 
 | Content type | Cadence | Time |
 |---|---:|---:|
-| KOREA_DAILY_PREVIEW | Weekdays | 07:20 KST generation start, publish before 08:20 KST |
+| KOREA_DAILY_PREVIEW | Weekdays | 06:50 KST preparation start, 07:30 KST optional-data cutoff, 08:20 KST fixed publish |
 | KOREA_MARKET_CLOSE_US_PREVIEW | Weekdays | 17:00 KST |
 | WEEKLY_MARKET_REVIEW | Saturday | 09:00 KST |
 | INVESTMENT_STUDY | Tuesday fixed | 12:10 KST, verified upcoming schedule/search question |
@@ -28,10 +28,12 @@ cron tick
 → start content pipeline
 → auto approve Director request
 → create NaverDraftJob
-→ Local Naver Draft Agent saves or publishes according to the approved auto-publish flags
+→ Local Naver Draft Agent claims the morning job at 08:05, prepares the editor, keeps a heartbeat while waiting, and publishes no earlier than 08:20 KST
 ```
 
 Auto-publish remains separately controlled by `STOCK_BLOG_SCHEDULER_AUTO_PUBLISH`. Duplicate publish keys, quality gates, safe retry limits, and the publish circuit breaker continue to apply.
+
+For the morning preview, unavailable optional KIS overseas-index/FX data is retried until 07:30 KST. After the cutoff, only those missing values, headings, and charts are omitted; verified domestic index/flow and FRED core data remain mandatory. A job interrupted before the publish click is reclaimed with the same job and publish key, so recovery cannot create a second post.
 
 ## Environment
 
@@ -42,6 +44,9 @@ STOCK_BLOG_SCHEDULER_RUNNER_MODE=mock
 STOCK_BLOG_SCHEDULER_AUTO_APPROVE=true
 STOCK_BLOG_SCHEDULER_AUTO_CREATE_DRAFT=true
 STOCK_BLOG_SCHEDULER_LOOKBACK_MINUTES=180
+STOCK_BLOG_SCHEDULER_MAX_RETRIES=12
+STOCK_MARKET_DATA_KIS_OVERSEAS_DEGRADED_AFTER_KST=07:30
+NAVER_DRAFT_CLAIM_LEAD_MINUTES=15
 STOCK_BLOG_LARGE_CAP_EVENTS_ENABLED=false
 STOCK_BLOG_WEEKDAY_INVESTMENT_STUDY_ENABLED=false
 KIS_HOLIDAY_MAX_AGE_MINUTES=10080

@@ -38,6 +38,7 @@ NAVER_ALLOW_DRAFT_SAVE=false
 4. In dry-run mode it reports `draft_saved` with a `dry-run://` URL.
 5. In non-dry-run mode it opens a local Chromium profile and fills Naver Blog fields where possible.
 6. The job either stops for user verification/manual publishing or enters guarded automatic publishing when every opt-in and server gate passes.
+7. Scheduled jobs are claimed only inside the configured lead window. The agent can prepare the editor early, sends a 30-second heartbeat while waiting, and cannot pass the server publish gate before `publishNotBefore`.
 
 ## Browser troubleshooting
 
@@ -82,3 +83,5 @@ Publishing is off by default. A publish click is possible only when all of the f
 - image upload, editor readability, draft save, and the server-side final duplicate/canary check all pass
 
 Login, security verification, CAPTCHA, image upload, draft save, and publish errors stop the job. The agent never retries a publish click automatically and never uploads the persistent browser profile or cookie/storage values.
+
+Pre-publish editor/image failures are re-queued by the server under the same job and publish key. A stale `image_uploading`, `draft_saving`, or `publish_ready` job is reclaimed after the claim timeout; the final publish click is still attempted at most through the guarded server gate.

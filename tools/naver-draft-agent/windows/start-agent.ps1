@@ -8,7 +8,9 @@ $envFile = Join-Path $AgentRoot ".env"
 if (-not (Test-Path -LiteralPath $packageJson)) { throw "package.json not found: $packageJson" }
 if (-not (Test-Path -LiteralPath $envFile)) { throw ".env not found: $envFile" }
 
-$npm = (Get-Command npm.cmd -ErrorAction Stop).Source
+$node = (Get-Command node.exe -ErrorAction Stop).Source
+$compiledAgent = Join-Path $AgentRoot "dist\index.js"
+if (-not (Test-Path -LiteralPath $compiledAgent)) { throw "Compiled agent not found: $compiledAgent. Run npm run build first." }
 $agentSingletonPort = 43923
 $logDir = Join-Path $AgentRoot "logs"
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
@@ -24,7 +26,7 @@ while ($true) {
       Start-Sleep -Seconds 15
       continue
     }
-    & $npm run start *>> $logFile
+    & $node $compiledAgent *>> $logFile
     $exitCode = $LASTEXITCODE
     "[$(Get-Date -Format o)] Agent exited with code $exitCode. Restarting in 10 seconds." | Add-Content -LiteralPath $logFile
   } catch {
