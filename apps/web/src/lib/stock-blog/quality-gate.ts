@@ -62,6 +62,7 @@ export type StockBlogQualityDiagnostics = {
   marketSnapshotDegraded: boolean;
   marketSnapshotDegradedMode?: string;
   marketSnapshotDisclosures: string[];
+  marketSnapshotDiagnostics: NonNullable<NonNullable<ReferenceBundle["marketSnapshot"]>["diagnostics"]>;
   hasFredDegradedDisclosure: boolean;
   hasKisSectorDegradedDisclosure: boolean;
   hasKisOverseasDegradedDisclosure: boolean;
@@ -289,6 +290,7 @@ function diagnostics(input: {
     marketSnapshotDegraded,
     marketSnapshotDegradedMode: marketSnapshot?.degradedMode,
     marketSnapshotDisclosures: marketSnapshot?.disclosures ?? [],
+    marketSnapshotDiagnostics: marketSnapshot?.diagnostics ?? [],
     hasFredDegradedDisclosure: body.includes(FRED_DEGRADED_DISCLOSURE),
     hasKisSectorDegradedDisclosure: body.includes(KIS_SECTOR_DEGRADED_DISCLOSURE),
     hasKisOverseasDegradedDisclosure: body.includes(KIS_OVERSEAS_DEGRADED_DISCLOSURE),

@@ -119,6 +119,14 @@ export type MarketSnapshotFreshness = {
   staleItems: string[];
 };
 
+export type MarketSnapshotDiagnostic = {
+  provider: "kis" | "fred" | "official-us" | "system";
+  item: string;
+  code: string;
+  httpStatus?: number;
+  recovered?: boolean;
+};
+
 export type MarketSnapshot = {
   provider: "manual" | "configured-api" | "kis-fred";
   status: "ready" | "needs_credentials" | "needs_data" | "error";
@@ -153,6 +161,7 @@ export type MarketSnapshot = {
     yieldSpread10Y2Y?: MarketSnapshotMetric;
   };
   upcoming?: Array<{ date: string; event: string; market?: string; sourceName?: string; url?: string }>;
+  diagnostics?: MarketSnapshotDiagnostic[];
   missingItems: string[];
 };
 

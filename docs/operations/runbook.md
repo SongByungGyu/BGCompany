@@ -740,11 +740,16 @@ STOCK_MARKET_DATA_ALLOW_KIS_SECTOR_DEGRADED=true
 STOCK_MARKET_DATA_ALLOW_KIS_OVERSEAS_DEGRADED=true
 STOCK_MARKET_DATA_KIS_OVERSEAS_DEGRADED_AFTER_KST=07:30
 STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES=false
+KIS_OVERSEAS_GROUP_MAX_RETRIES=2
+KIS_OVERSEAS_GROUP_RETRY_DELAY_MS=1500
+FRED_MARKET_MAX_AGE_MINUTES=5760
 ```
 
 KIS 업종 순위만 비어 있고 나머지 KIS 핵심 지표와 FRED 자료가 모두 최신·정상인 경우에는 강세·약세 업종 항목을 제외하고 제한 운영한다. 본문에는 KIS 업종 자료 누락 사실을 자동으로 고지하며, 업종 데이터는 추정하거나 다른 수치로 채우지 않는다. 이 제한 운영은 `STOCK_MARKET_DATA_ALLOW_KIS_SECTOR_DEGRADED=false`로 비활성화할 수 있다.
 
-한국장 장전 글에서 KIS 해외지수·원달러 환율만 비고 국내 지수·수급·업종과 FRED 금리·일정이 모두 최신·정상인 경우에는 07:30 KST까지 재수집한다. 마감 뒤에도 없으면 누락된 수치, 본문 항목, 연결 그래프를 제외하고 발행한다. 미국장 전망·주간 글에는 적용하지 않으며, `STOCK_MARKET_DATA_ALLOW_KIS_OVERSEAS_DEGRADED=false`로 비활성화할 수 있다.
+KIS 해외지수·원달러 환율이 비면 누락 항목만 그룹 단위로 최대 2회 추가 재조회한다. 그래도 없으면 같은 FRED 키로 등록된 `SP500`, `NASDAQCOM`, `DJIA`, `DEXKOUS` 공식 시계열을 사용하고, 프로세스에 아직 최신인 직전 검증값이 있으면 그 값을 마지막으로 재사용한다. 모든 보완 출처·응답코드·복구 여부는 MarketSnapshot 진단에 남긴다.
+
+평일 오전 글은 07:35 KST, 토요일 주간 글은 08:20 KST를 마감 대체 시각으로 사용한다. 전체 참고자료 수집은 세 번, 글 생성·품질수정은 자동 두 번까지만 수행한다. 원래 오전 글이 계속 막혀도 국내 지수·수급·업종과 FRED 금리·일정이 최신·정상이라면 누락된 해외 수치와 그래프를 제외·고지한 검색 유입형 투자공부 한 건으로 전환한다. 대체 글은 `INVESTMENT_STUDY_DATA_FALLBACK:<marketDate>:<publishTime>` 발행키를 사용해 원래 글과 중복 발행을 막는다. 미국장 전망에는 이 대체 규칙을 적용하지 않는다.
 
 그 외 `needs_credentials`, `needs_data`, `error`, stale/expired가 발생하면 mock 또는 Manual로 자동 대체하지 않는다. scheduler와 실제 Hermes를 중지한 상태에서 자격증명, provider 상태, 기준 시각을 확인한다. KIS 주문·잔고·계좌 API는 점검 목적으로도 호출하지 않는다.
 

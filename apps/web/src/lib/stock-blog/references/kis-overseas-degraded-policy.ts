@@ -8,6 +8,10 @@ export const KIS_OVERSEAS_DEGRADED_DISCLOSURE = "※ 확인되지 않은 해외�
 
 const OPTIONAL_KOREA_PREVIEW_ITEMS = new Set(["S&P 500", "NASDAQ", "Dow Jones", "USD/KRW"]);
 const DEFAULT_DEGRADED_AFTER_KST = "07:30";
+const ELIGIBLE_CONTENT_TYPES = new Set<StockReferenceBriefingTemplate>([
+  "KOREA_DAILY_PREVIEW",
+  "INVESTMENT_STUDY",
+]);
 
 function hasRequiredKoreaPreviewCore(kis: KisResult, fred: FredResult) {
   return Boolean(
@@ -45,7 +49,7 @@ export function canUseKisOverseasDegradedMode(
   freshness: MarketSnapshotFreshness,
   options: { now?: Date; cutoffKst?: string } = {},
 ) {
-  if (!isKisOverseasDegradedEnabled() || contentType !== "KOREA_DAILY_PREVIEW") return false;
+  if (!isKisOverseasDegradedEnabled() || !ELIGIBLE_CONTENT_TYPES.has(contentType)) return false;
   if (!isKisOverseasDegradedCutoffReached(options.now, options.cutoffKst)) return false;
   if (kis.status !== "needs_data" || fred.status !== "ready") return false;
   if (!hasRequiredKoreaPreviewCore(kis, fred)) return false;

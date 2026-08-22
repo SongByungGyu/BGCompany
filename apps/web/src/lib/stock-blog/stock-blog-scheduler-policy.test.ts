@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  evaluateStockBlogPhaseBudget,
   evaluateStockBlogRecoveryDate,
   evaluateStockBlogSchedulerRetry,
   isNaverDraftAssemblyQualityFailure,
@@ -354,4 +355,50 @@ test("중단된 running 실행은 30분 뒤 같은 시도로 복구한다", () =
 
   assert.equal(waiting.allowed, false);
   assert.deepEqual(recovered, { allowed: true, attempt: 2 });
+});
+
+test("시장자료는 세 번만 다시 받고 마감 시각이 되면 대체 글로 진행한다", () => {
+  const waiting = evaluateStockBlogPhaseBudget({
+    previousReason: "STOCK_REFERENCE_PREFLIGHT_BLOCKED: needs_data · S&P 500",
+    referenceAttempt: 3,
+    generationAttempt: 0,
+    referenceMaxAttempts: 3,
+    generationMaxAttempts: 2,
+    dataFallbackCutoffReached: false,
+  });
+  const fallbackDue = evaluateStockBlogPhaseBudget({
+    previousReason: "STOCK_REFERENCE_PREFLIGHT_BLOCKED: needs_data · S&P 500",
+    referenceAttempt: 3,
+    generationAttempt: 0,
+    referenceMaxAttempts: 3,
+    generationMaxAttempts: 2,
+    dataFallbackCutoffReached: true,
+  });
+
+  assert.equal(waiting.allowed, false);
+  assert.match(waiting.reason ?? "", /재조회 3회/);
+  assert.deepEqual(fallbackDue, { allowed: true });
+});
+
+test("글 품질수정은 자동 두 번으로 제한하고 인증된 수동 복구는 허용한다", () => {
+  const automatic = evaluateStockBlogPhaseBudget({
+    previousReason: "STOCK_CONTENT_QUALITY_FAILED: QA 92",
+    referenceAttempt: 3,
+    generationAttempt: 2,
+    referenceMaxAttempts: 3,
+    generationMaxAttempts: 2,
+    dataFallbackCutoffReached: true,
+  });
+  const manual = evaluateStockBlogPhaseBudget({
+    previousReason: "STOCK_CONTENT_QUALITY_FAILED: QA 92",
+    referenceAttempt: 3,
+    generationAttempt: 2,
+    referenceMaxAttempts: 3,
+    generationMaxAttempts: 2,
+    dataFallbackCutoffReached: true,
+    manualRecovery: true,
+  });
+
+  assert.equal(automatic.allowed, false);
+  assert.deepEqual(manual, { allowed: true });
 });

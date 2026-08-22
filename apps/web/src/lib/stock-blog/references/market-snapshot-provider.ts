@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { collectFredMacroData, type FredResult } from "./fred-macro-provider";
+import { collectFredMarketData, FRED_MARKET_SERIES, type FredMarketResult } from "./fred-market-data-provider";
 import { collectKisMarketData, type KisResult } from "./kis-market-data-provider";
 import { canUseFredDegradedMode, FRED_DEGRADED_DISCLOSURE, FRED_DEGRADED_MODE } from "./fred-degraded-policy";
 import {
@@ -17,7 +18,7 @@ import {
 } from "./kis-overseas-degraded-policy";
 import { aggregateFreshness } from "./market-data-utils";
 import { supplementFredMacroData } from "./official-us-macro-provider";
-import type { MarketSnapshot, ReferenceSearchInput } from "./reference-types";
+import type { MarketSnapshot, MarketSnapshotDiagnostic, ReferenceSearchInput } from "./reference-types";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -107,13 +108,31 @@ export function buildAutomaticMarketSnapshot(
   fred: FredResult,
   contentType: ReferenceSearchInput["contentType"] = "KOREA_DAILY_PREVIEW",
   collectedAt = new Date().toISOString(),
+  fredMarket: FredMarketResult = { status: "ready", us: {}, sources: [], missingItems: [], diagnostics: [] },
 ): MarketSnapshot {
-  const sources = [...kis.sources, ...fred.sources];
+  const sources = [...kis.sources, ...fred.sources, ...fredMarket.sources];
   const freshness = aggregateFreshness(sources, collectedAt);
   const kisFreshness = aggregateFreshness(kis.sources, collectedAt);
-  const us = { ...kis.us, treasuryYield: fred.macro?.us10Year };
+  const us = { ...fredMarket.us, ...kis.us, treasuryYield: fred.macro?.us10Year };
+  const recoveredOverseasItems = new Set(
+    Object.entries(FRED_MARKET_SERIES)
+      .filter(([, definition]) => Boolean(us[definition.key]))
+      .map(([label]) => label),
+  );
+  const unresolvedKisItems = kis.missingItems.filter((item) => !recoveredOverseasItems.has(item));
+  const recoveredKis: KisResult = {
+    ...kis,
+    status: unresolvedKisItems.length ? kis.status : "ready",
+    us,
+    missingItems: unresolvedKisItems,
+  };
   const requiredMissing = requiredAutomaticItems({ korea: kis.korea, us, macro: fred.macro, upcoming: fred.upcoming });
-  const missingItems = Array.from(new Set([...kis.missingItems, ...fred.missingItems, ...requiredMissing, ...freshness.staleItems]));
+  const missingItems = Array.from(new Set([...unresolvedKisItems, ...fred.missingItems, ...fredMarket.missingItems, ...requiredMissing, ...freshness.staleItems]));
+  const diagnostics: MarketSnapshotDiagnostic[] = [
+    ...(kis.diagnostics ?? []).map((item) => ({ provider: "kis" as const, ...item })),
+    ...(fred.diagnostics ?? []).map((item) => ({ provider: "fred" as const, ...item })),
+    ...fredMarket.diagnostics,
+  ];
   const fredDegraded = canUseFredDegradedMode(kis, fred, kisFreshness);
   if (fredDegraded) {
     return {
@@ -133,10 +152,11 @@ export function buildAutomaticMarketSnapshot(
       us,
       macro: fred.macro,
       upcoming: fred.upcoming,
+      diagnostics,
       missingItems,
     };
   }
-  const kisOverseasDegraded = canUseKisOverseasDegradedMode(contentType, kis, fred, freshness);
+  const kisOverseasDegraded = canUseKisOverseasDegradedMode(contentType, recoveredKis, fred, freshness);
   if (kisOverseasDegraded) {
     return {
       provider: "kis-fred",
@@ -155,10 +175,11 @@ export function buildAutomaticMarketSnapshot(
       us,
       macro: fred.macro,
       upcoming: fred.upcoming,
+      diagnostics,
       missingItems,
     };
   }
-  const kisSectorDegraded = canUseKisSectorDegradedMode(kis, fred, freshness);
+  const kisSectorDegraded = canUseKisSectorDegradedMode(recoveredKis, fred, freshness);
   if (kisSectorDegraded) {
     return {
       provider: "kis-fred",
@@ -177,6 +198,7 @@ export function buildAutomaticMarketSnapshot(
       us,
       macro: fred.macro,
       upcoming: fred.upcoming,
+      diagnostics,
       missingItems,
     };
   }
@@ -200,6 +222,7 @@ export function buildAutomaticMarketSnapshot(
     us,
     macro: fred.macro,
     upcoming: fred.upcoming,
+    diagnostics,
     missingItems,
   };
 }
@@ -209,7 +232,11 @@ async function collectAutomaticSnapshot(input: ReferenceSearchInput): Promise<Ma
   const fred = primaryFred.status === "ready"
     ? primaryFred
     : await supplementFredMacroData(primaryFred);
-  return buildAutomaticMarketSnapshot(kis, fred, input.contentType);
+  const missingOverseasItems = Object.entries(FRED_MARKET_SERIES)
+    .filter(([, definition]) => !kis.us?.[definition.key])
+    .map(([label]) => label);
+  const fredMarket = await collectFredMarketData(missingOverseasItems);
+  return buildAutomaticMarketSnapshot(kis, fred, input.contentType, new Date().toISOString(), fredMarket);
 }
 
 export async function collectMarketSnapshot(input: ReferenceSearchInput): Promise<MarketSnapshot> {

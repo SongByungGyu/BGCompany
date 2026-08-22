@@ -8,7 +8,7 @@ Phase 1-S scheduler prepares stock-market blog drafts on a fixed KST schedule.
 |---|---:|---:|
 | KOREA_DAILY_PREVIEW | Weekdays | 06:50 KST preparation start, 07:30 KST optional-data cutoff, 08:20 KST fixed publish |
 | KOREA_MARKET_CLOSE_US_PREVIEW | Weekdays | 17:00 KST |
-| WEEKLY_MARKET_REVIEW | Saturday | 09:00 KST |
+| WEEKLY_MARKET_REVIEW | Saturday | 07:30 KST preparation start, 08:20 KST fallback cutoff, 09:00 KST fixed publish |
 | INVESTMENT_STUDY | Tuesday fixed | 12:10 KST, verified upcoming schedule/search question |
 | INVESTMENT_STUDY | Thursday fixed | 12:10 KST, announcement result/practical question |
 | INVESTMENT_STUDY | Monday, Wednesday, or Friday conditional | 12:10 KST, only one extra post per week when the issue score passes |
@@ -21,6 +21,8 @@ Phase 1-S scheduler prepares stock-market blog drafts on a fixed KST schedule.
 cron tick
 → POST /api/stock-blog/scheduler
 → check due schedule and duplicate EventLog
+→ retry only unresolved KIS overseas items, then supplement them with official FRED market series or the process-local last verified close
+→ stop the full reference phase after three failed scheduler attempts; at the morning cutoff switch to one search-intent investment-study post when verified domestic/FRED core evidence remains
 → check the operator-reviewed official KRX closure list and the NYSE rule calendar; replace a closed market preview with one date-level search-intent investment-study post
 → for disclosure/earnings, scan official OpenDART/SEC events and stop without generation when none exist
 → for investment study, collect current references; Tuesday selects a verified upcoming event question, Thursday selects a result/practical question, and conditional slots stop when the issue score is below the threshold
@@ -33,7 +35,7 @@ cron tick
 
 Auto-publish remains separately controlled by `STOCK_BLOG_SCHEDULER_AUTO_PUBLISH`. Duplicate publish keys, quality gates, safe retry limits, and the publish circuit breaker continue to apply.
 
-For the morning preview, unavailable optional KIS overseas-index/FX data is retried until 07:30 KST. After the cutoff, only those missing values, headings, and charts are omitted; verified domestic index/flow and FRED core data remain mandatory. A job interrupted before the publish click is reclaimed with the same job and publish key, so recovery cannot create a second post.
+For the weekday morning preview, unavailable optional KIS overseas-index/FX data is retried until 07:35 KST. Saturday preparation starts at 07:30 KST and uses an 08:20 KST fallback cutoff for the 09:00 KST publish slot. Each unresolved overseas item is retried in a bounded group and then supplemented with the official FRED `SP500`, `NASDAQCOM`, `DJIA`, and `DEXKOUS` series. The scheduler performs at most three full reference attempts and two automatic generation/quality attempts. At the cutoff, a failed morning briefing is replaced with one verified search-intent investment-study post; unavailable values and charts are omitted and disclosed. A job interrupted before the publish click is reclaimed with the same job and publish key, so recovery cannot create a second post.
 
 ## Environment
 
@@ -46,6 +48,9 @@ STOCK_BLOG_SCHEDULER_AUTO_CREATE_DRAFT=true
 STOCK_BLOG_SCHEDULER_LOOKBACK_MINUTES=180
 STOCK_BLOG_SCHEDULER_MAX_RETRIES=12
 STOCK_MARKET_DATA_KIS_OVERSEAS_DEGRADED_AFTER_KST=07:30
+KIS_OVERSEAS_GROUP_MAX_RETRIES=2
+KIS_OVERSEAS_GROUP_RETRY_DELAY_MS=1500
+FRED_MARKET_MAX_AGE_MINUTES=5760
 NAVER_DRAFT_CLAIM_LEAD_MINUTES=15
 STOCK_BLOG_LARGE_CAP_EVENTS_ENABLED=false
 STOCK_BLOG_WEEKDAY_INVESTMENT_STUDY_ENABLED=false

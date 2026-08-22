@@ -23,6 +23,11 @@ export type StockBlogRecoveryDateDecision = {
   reason?: string;
 };
 
+export type StockBlogPhaseBudgetDecision = {
+  allowed: boolean;
+  reason?: string;
+};
+
 const STOCK_REFERENCE_PREFLIGHT_PREFIX = "STOCK_REFERENCE_PREFLIGHT_BLOCKED:";
 const STOCK_CONTENT_QUALITY_PREFIX = "STOCK_CONTENT_QUALITY_FAILED:";
 const NAVER_DRAFT_QUALITY_PREFIX = "NAVER_DRAFT_QUALITY_FAILED:";
@@ -39,6 +44,40 @@ export function isStockContentQualityFailure(reason: string) {
 
 export function isNaverDraftAssemblyQualityFailure(reason: string) {
   return reason.includes(NAVER_DRAFT_QUALITY_PREFIX);
+}
+
+export function evaluateStockBlogPhaseBudget(input: {
+  previousReason: string;
+  referenceAttempt: number;
+  generationAttempt: number;
+  referenceMaxAttempts?: number;
+  generationMaxAttempts?: number;
+  dataFallbackCutoffReached: boolean;
+  manualRecovery?: boolean;
+}): StockBlogPhaseBudgetDecision {
+  if (
+    isStockReferencePreflightFailure(input.previousReason)
+    && input.referenceMaxAttempts
+    && input.referenceAttempt >= input.referenceMaxAttempts
+    && !input.dataFallbackCutoffReached
+  ) {
+    return {
+      allowed: false,
+      reason: `시장자료 재조회 ${input.referenceMaxAttempts}회를 마쳐 마감 대체 시각까지 대기합니다.`,
+    };
+  }
+  if (
+    isStockContentQualityFailure(input.previousReason)
+    && input.generationMaxAttempts
+    && input.generationAttempt >= input.generationMaxAttempts
+    && !input.manualRecovery
+  ) {
+    return {
+      allowed: false,
+      reason: `글 생성·품질수정 ${input.generationMaxAttempts}회를 마쳐 자동 재생성을 중단했습니다.`,
+    };
+  }
+  return { allowed: true };
 }
 
 export function shouldClearReferencePreflightCircuitBreaker(input: {

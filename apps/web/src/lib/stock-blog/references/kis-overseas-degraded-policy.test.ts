@@ -49,6 +49,7 @@ const overseasOnlyGap: KisResult = {
 test("한국장 장전 글은 해외지수·환율만 비었을 때 누락 항목 제외 모드를 사용한다", () => {
   const afterCutoff = { now: new Date("2026-08-19T22:30:00Z"), cutoffKst: "07:30" };
   assert.equal(canUseKisOverseasDegradedMode("KOREA_DAILY_PREVIEW", overseasOnlyGap, fred, freshness, afterCutoff), true);
+  assert.equal(canUseKisOverseasDegradedMode("INVESTMENT_STUDY", overseasOnlyGap, fred, freshness, afterCutoff), true);
   assert.equal(canUseKisOverseasDegradedMode("KOREA_MARKET_CLOSE_US_PREVIEW", overseasOnlyGap, fred, freshness, afterCutoff), false);
   assert.equal(
     canUseKisOverseasDegradedMode(

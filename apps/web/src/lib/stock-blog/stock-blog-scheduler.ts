@@ -15,6 +15,7 @@ import {
 } from "@/lib/stock-blog/large-cap-disclosure-monitor";
 import {
   evaluateStockBlogRecoveryDate,
+  evaluateStockBlogPhaseBudget,
   evaluateStockBlogSchedulerRetry,
   isNaverDraftAssemblyQualityFailure,
   isStockContentQualityFailure,
@@ -26,6 +27,11 @@ import {
   buildHolidaySearchStudyPlan,
   getHolidaySearchStudyPublishKey,
 } from "@/lib/stock-blog/holiday-search-study";
+import {
+  buildMarketDataFallbackStudyPlan,
+  getMarketDataFallbackStudyPublishKey,
+} from "@/lib/stock-blog/market-data-fallback-study";
+import { isKisOverseasDegradedCutoffReached } from "@/lib/stock-blog/references/kis-overseas-degraded-policy";
 import {
   addIsoDays,
   evaluateStockBlogMarketSession,
@@ -101,6 +107,8 @@ export type StockBlogSchedulerRunResult = {
   scheduledFor: string;
   status: StockBlogSchedulerRunStatus;
   attempt?: number;
+  referenceAttempt?: number;
+  generationAttempt?: number;
   reason?: string;
   pipelineId?: string;
   approvalId?: string;
@@ -115,6 +123,7 @@ export type StockBlogSchedulerRunResult = {
   studyIssueReasons?: string[];
   marketSession?: StockMarketSession;
   holidaySearchReplacement?: boolean;
+  dataFailureStudyFallback?: boolean;
   replacementContentType?: "INVESTMENT_STUDY";
   nextMarketOpenDate?: string;
 };
@@ -160,6 +169,10 @@ type StockBlogSchedulerDefinition = StockBlogScheduleItem & {
   scheduledTime: string;
   publishTime?: string;
   maxAttempts?: number;
+  dataFailureFallback?: "investment-study";
+  dataFailureFallbackAfterKst?: string;
+  referenceMaxAttempts?: number;
+  generationMaxAttempts?: number;
   title: (date: string) => string;
   topic: string;
   investmentStudyMode?: "fixed" | "conditional";
@@ -175,7 +188,11 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     scheduledTimeKst: "06:50 KST 준비 시작 · 08:20 KST 고정 공개",
     scheduledTime: "06:50",
     publishTime: "08:20",
-    maxAttempts: 5,
+    maxAttempts: 6,
+    dataFailureFallback: "investment-study",
+    dataFailureFallbackAfterKst: "07:35",
+    referenceMaxAttempts: 3,
+    generationMaxAttempts: 2,
     weekdays: [1, 2, 3, 4, 5],
     objective: "06:50부터 자료를 수집하고 07:30 이후 누락된 선택 항목은 제외해 08:20에 당일 한국장 전망을 공개합니다.",
     primaryAudience: "한국 주식 투자자",
@@ -202,10 +219,16 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     contentType: "WEEKLY_MARKET_REVIEW",
     label: "토요일 한국·미국 주간 복기",
     cadence: "매주 토요일",
-    scheduledTimeKst: "09:00 KST",
-    scheduledTime: "09:00",
+    scheduledTimeKst: "07:30 KST 준비 시작 · 09:00 KST 고정 공개",
+    scheduledTime: "07:30",
+    publishTime: "09:00",
+    maxAttempts: 6,
+    dataFailureFallback: "investment-study",
+    dataFailureFallbackAfterKst: "08:20",
+    referenceMaxAttempts: 3,
+    generationMaxAttempts: 2,
     weekdays: [6],
-    objective: "이번 주 한국·미국 증시 흐름, 수급, 주도 업종과 실제 변동 원인을 복기합니다.",
+    objective: "07:30부터 이번 주 한국·미국 증시 자료를 수집하고 09:00에 수급·주도 업종과 실제 변동 원인을 복기합니다.",
     primaryAudience: "토요일에 한 주의 시장 흐름을 복기하는 투자자",
     recommendedRunnerMode: "hermes",
     topic: "이번 주 코스피·나스닥 흐름과 외국인 수급·주도 업종·금리 변동 원인",
@@ -579,6 +602,42 @@ async function buildHolidaySearchStudyPipelineInput(
   };
 }
 
+async function buildMarketDataFallbackStudyPipelineInput(
+  definition: StockBlogSchedulerDefinition,
+  runnerMode: StockBlogSchedulerRunnerMode,
+  marketDate: string,
+  now: Date,
+  timezone: string,
+) {
+  const plan = buildMarketDataFallbackStudyPlan({
+    marketDate,
+    sourceContentType: definition.contentType,
+  });
+  const referenceBundle = await collectStockBlogReferences({
+    topic: plan.topic,
+    title: plan.sourceTitle,
+    channel: "blog",
+    contentType: "INVESTMENT_STUDY",
+    market: "GLOBAL",
+    keywords: plan.keywords,
+    maxResults: 6,
+  });
+  return {
+    input: {
+      topic: plan.topic,
+      title: buildStockBlogEditorialTitle({
+        template: "INVESTMENT_STUDY",
+        marketDate: briefDateLabel(now, timezone),
+        sourceTitle: plan.sourceTitle,
+      }),
+      channel: "blog" as const,
+      runnerMode,
+      contentType: "INVESTMENT_STUDY" as const,
+      referenceBundle,
+    },
+  };
+}
+
 async function buildLargeCapPipelineInput(
   definition: StockBlogSchedulerDefinition,
   runnerMode: StockBlogSchedulerRunnerMode,
@@ -860,6 +919,43 @@ async function runOneSchedule(
   }
 
   const existing = await prisma.eventLog.findUnique({ where: { id } });
+  const previousPayload = existing ? eventPayload(existing.payload) : {};
+  const previousReason = typeof previousPayload.reason === "string" ? previousPayload.reason : "";
+  const previousReferenceAttempt = typeof previousPayload.referenceAttempt === "number"
+    ? previousPayload.referenceAttempt
+    : isStockReferencePreflightFailure(previousReason) && typeof previousPayload.attempt === "number"
+      ? previousPayload.attempt
+      : 0;
+  const previousGenerationAttempt = typeof previousPayload.generationAttempt === "number"
+    ? previousPayload.generationAttempt
+    : isStockContentQualityFailure(previousReason)
+      ? 1
+      : 0;
+  const dataFallbackCutoffReached = definition.dataFailureFallback === "investment-study"
+    && config.weekdayInvestmentStudyEnabled
+    && isKisOverseasDegradedCutoffReached(now, definition.dataFailureFallbackAfterKst);
+  const phaseBudget = evaluateStockBlogPhaseBudget({
+    previousReason,
+    referenceAttempt: previousReferenceAttempt,
+    generationAttempt: previousGenerationAttempt,
+    referenceMaxAttempts: definition.referenceMaxAttempts,
+    generationMaxAttempts: definition.generationMaxAttempts,
+    dataFallbackCutoffReached,
+    manualRecovery: options.manualRecovery,
+  });
+  if (!phaseBudget.allowed) {
+    return {
+      scheduleId: definition.scheduleId,
+      contentType,
+      scheduleKey: key,
+      scheduledFor,
+      status: "already_ran",
+      attempt: typeof previousPayload.attempt === "number" ? previousPayload.attempt : Math.max(previousReferenceAttempt, previousGenerationAttempt),
+      referenceAttempt: previousReferenceAttempt,
+      generationAttempt: previousGenerationAttempt,
+      reason: phaseBudget.reason,
+    };
+  }
   const retry = retryState(existing, now, config, options.manualRecovery, definition.maxAttempts);
   if (!retry.allowed) return { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "already_ran", attempt: retry.attempt, reason: retry.reason };
   const attempt = retry.attempt;
@@ -868,7 +964,13 @@ async function runOneSchedule(
   const holidaySearchReplacement = marketDecision.action === "skip"
     && marketSession?.state === "closed"
     && config.weekdayInvestmentStudyEnabled;
-  const effectiveContentType: StockBlogContentType = holidaySearchReplacement
+  const dataFailureStudyFallback = marketDecision.action === "run"
+    && !holidaySearchReplacement
+    && definition.dataFailureFallback === "investment-study"
+    && config.weekdayInvestmentStudyEnabled
+    && isStockReferencePreflightFailure(previousReason)
+    && dataFallbackCutoffReached;
+  const effectiveContentType: StockBlogContentType = holidaySearchReplacement || dataFailureStudyFallback
     ? "INVESTMENT_STUDY"
     : contentType;
   if (marketDecision.action !== "run" && !holidaySearchReplacement) {
@@ -922,8 +1024,56 @@ async function runOneSchedule(
       return result;
     }
   }
-  const previousPayload = existing ? eventPayload(existing.payload) : {};
-  const previousReason = typeof previousPayload.reason === "string" ? previousPayload.reason : "";
+  if (dataFailureStudyFallback) {
+    publishKey = getMarketDataFallbackStudyPublishKey(marketDate, publishTime);
+    const existingFallbackStudy = await prisma.naverDraftJob.findUnique({ where: { publishKey } });
+    if (existingFallbackStudy) {
+      const result: StockBlogSchedulerRunResult = {
+        scheduleId: definition.scheduleId,
+        contentType,
+        scheduleKey: key,
+        scheduledFor,
+        status: "already_ran",
+        attempt,
+        reason: "같은 날짜·시간대의 시장자료 지연 대체 투자공부가 이미 생성됐습니다.",
+        dataFailureStudyFallback: true,
+        replacementContentType: "INVESTMENT_STUDY",
+      };
+      await writeSchedulerEvent({
+        key,
+        contentType,
+        scheduledFor,
+        status: "already_ran",
+        summary: `${contentType} 시장자료 지연 대체 투자공부 중복 방지`,
+        payload: result as unknown as Prisma.InputJsonObject,
+      });
+      return result;
+    }
+  }
+  if (config.autoPublish && !holidaySearchReplacement && !dataFailureStudyFallback) {
+    const existingScheduledJob = await prisma.naverDraftJob.findUnique({ where: { publishKey } });
+    if (existingScheduledJob) {
+      const result: StockBlogSchedulerRunResult = {
+        scheduleId: definition.scheduleId,
+        contentType,
+        scheduleKey: key,
+        scheduledFor,
+        status: "already_ran",
+        attempt,
+        reason: "같은 날짜·시간대의 자동 발행 작업이 이미 생성됐습니다.",
+        naverDraftJobId: existingScheduledJob.id,
+      };
+      await writeSchedulerEvent({
+        key,
+        contentType,
+        scheduledFor,
+        status: "already_ran",
+        summary: `${contentType} 자동 발행키 중복 방지`,
+        payload: result as unknown as Prisma.InputJsonObject,
+      });
+      return result;
+    }
+  }
   const resumablePipelineId = options.manualRecovery
     && previousPayload.status === "partial_failed"
     && isNaverDraftAssemblyQualityFailure(previousReason)
@@ -941,22 +1091,37 @@ async function runOneSchedule(
     status: "running",
     summary: holidaySearchReplacement
       ? `${marketSession?.market} 휴장 대체 검색 유입형 투자공부 시작`
+      : dataFailureStudyFallback
+        ? `${contentType} 시장자료 지연 대체 검색형 투자공부 시작`
       : `${contentType} 자동 실행 시작`,
     payload: {
       phase: "started",
       runnerMode: config.runnerMode,
       attempt,
+      referenceAttempt: previousReferenceAttempt,
+      generationAttempt: previousGenerationAttempt,
       holidaySearchReplacement,
+      dataFailureStudyFallback,
       effectiveContentType,
     },
   });
 
   let holidaySearchStudyBuild: Awaited<ReturnType<typeof buildHolidaySearchStudyPipelineInput>> | null = null;
+  let dataFailureStudyBuild: Awaited<ReturnType<typeof buildMarketDataFallbackStudyPipelineInput>> | null = null;
   try {
     if (holidaySearchReplacement && marketSession && !resumablePipelineId) {
       holidaySearchStudyBuild = await buildHolidaySearchStudyPipelineInput(
         marketSession,
         config.runnerMode,
+        scheduledAt,
+        config.timezone,
+      );
+    }
+    if (dataFailureStudyFallback && !resumablePipelineId) {
+      dataFailureStudyBuild = await buildMarketDataFallbackStudyPipelineInput(
+        definition,
+        config.runnerMode,
+        marketDate,
         scheduledAt,
         config.timezone,
       );
@@ -1236,6 +1401,7 @@ async function runOneSchedule(
     const pipelineInput = largeCapScan
       ? await buildLargeCapPipelineInput(definition, config.runnerMode, scheduledAt, config.timezone, largeCapScan)
       : holidaySearchStudyBuild?.input
+        ?? dataFailureStudyBuild?.input
         ?? investmentStudyBuild?.input
         ?? buildPipelineInput(definition, config.runnerMode, scheduledAt, config.timezone);
     const pipeline = await startContentPipeline({
@@ -1300,6 +1466,8 @@ async function runOneSchedule(
       scheduledFor,
       status,
       attempt,
+      referenceAttempt: previousReferenceAttempt,
+      generationAttempt: previousGenerationAttempt + 1,
       reason: notes.join(" · ") || undefined,
       pipelineId: pipeline.id,
       approvalId: approvalId ?? undefined,
@@ -1314,7 +1482,8 @@ async function runOneSchedule(
       studyIssueReasons: investmentStudyBuild?.selection.reasons,
       marketSession,
       holidaySearchReplacement,
-      replacementContentType: holidaySearchReplacement ? "INVESTMENT_STUDY" : undefined,
+      dataFailureStudyFallback,
+      replacementContentType: holidaySearchReplacement || dataFailureStudyFallback ? "INVESTMENT_STUDY" : undefined,
       nextMarketOpenDate: holidaySearchStudyBuild?.nextOpenDate ?? undefined,
     };
     await writeSchedulerEvent({
@@ -1324,7 +1493,9 @@ async function runOneSchedule(
       status,
       summary: holidaySearchReplacement
         ? `${marketSession?.market ?? "거래소"} 휴장 대체 검색 유입형 투자공부 ${status === "succeeded" ? "완료" : "부분 완료"}`
-        : `${contentType} 자동 실행 ${status === "succeeded" ? "완료" : "부분 완료"}`,
+        : dataFailureStudyFallback
+          ? `${contentType} 시장자료 지연 대체 검색형 투자공부 ${status === "succeeded" ? "완료" : "부분 완료"}`
+          : `${contentType} 자동 실행 ${status === "succeeded" ? "완료" : "부분 완료"}`,
       payload: result as unknown as Prisma.InputJsonObject,
     });
     return result;
@@ -1342,11 +1513,14 @@ async function runOneSchedule(
       scheduledFor,
       status: capacityDeferred ? "deferred" : "failed",
       attempt,
+      referenceAttempt: previousReferenceAttempt + (referencePreflightFailure ? 1 : 0),
+      generationAttempt: previousGenerationAttempt + (!referencePreflightFailure && !capacityDeferred ? 1 : 0),
       reason,
       qualityGate,
       marketSession,
       holidaySearchReplacement,
-      replacementContentType: holidaySearchReplacement ? "INVESTMENT_STUDY" : undefined,
+      dataFailureStudyFallback,
+      replacementContentType: holidaySearchReplacement || dataFailureStudyFallback ? "INVESTMENT_STUDY" : undefined,
       nextMarketOpenDate: holidaySearchStudyBuild?.nextOpenDate ?? undefined,
     };
     await writeSchedulerEvent({
@@ -1358,7 +1532,9 @@ async function runOneSchedule(
         ? `${effectiveContentType} 자동 실행 대기 · Hermes 한도 부족`
         : holidaySearchReplacement
           ? `${marketSession?.market ?? "거래소"} 휴장 대체 검색 유입형 투자공부 실패`
-          : `${contentType} 자동 실행 실패`,
+          : dataFailureStudyFallback
+            ? `${contentType} 시장자료 지연 대체 검색형 투자공부 실패`
+            : `${contentType} 자동 실행 실패`,
       payload: {
         ...(result as unknown as Prisma.InputJsonObject),
         failurePhase: referencePreflightFailure ? "reference_preflight" : capacityDeferred ? "capacity" : "runtime",

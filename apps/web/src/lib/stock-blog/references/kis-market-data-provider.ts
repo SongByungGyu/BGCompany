@@ -25,6 +25,7 @@ export type KisDiagnostic = {
   item: string;
   code: string;
   httpStatus?: number;
+  recovered?: boolean;
 };
 
 export type KisResult = {
@@ -56,6 +57,7 @@ let tokenRequest: Promise<KisToken> | undefined;
 let requestQueue: Promise<void> = Promise.resolve();
 let lastRequestStartedAt = 0;
 const koreaMarketSessionCache = new Map<string, boolean>();
+const overseasMetricCache = new Map<string, { metric: NonNullable<MarketSnapshot["us"]>["sp500"]; source: MarketSnapshotSource }>();
 
 function requiredCredentials() {
   const appKey = process.env.KIS_APP_KEY?.trim();
@@ -83,6 +85,17 @@ function maxRetries() {
 function retryBaseDelayMs() {
   const parsed = Number.parseInt(process.env.KIS_RETRY_BASE_DELAY_MS ?? "500", 10);
   return Number.isFinite(parsed) ? Math.max(200, Math.min(parsed, 5000)) : 500;
+}
+
+function overseasGroupMaxRetries() {
+  const parsed = Number.parseInt(process.env.KIS_OVERSEAS_GROUP_MAX_RETRIES ?? "2", 10);
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(parsed, 2)) : 2;
+}
+
+function overseasGroupRetryDelayMs(attempt: number) {
+  const parsed = Number.parseInt(process.env.KIS_OVERSEAS_GROUP_RETRY_DELAY_MS ?? "1500", 10);
+  const base = Number.isFinite(parsed) ? Math.max(500, Math.min(parsed, 10000)) : 1500;
+  return Math.min(base * (attempt + 1), 15000);
 }
 
 function minRequestIntervalMs() {
@@ -152,6 +165,10 @@ export function rememberKisKoreaMarketSession(marketDate: string, isOpen: boolea
 
 export function resetKisKoreaMarketSessionCacheForTests() {
   koreaMarketSessionCache.clear();
+}
+
+export function resetKisOverseasMetricCacheForTests() {
+  overseasMetricCache.clear();
 }
 
 export function parseKisKoreaMarketCalendar(output: unknown) {
@@ -271,9 +288,14 @@ export async function getKisKoreaMarketCalendar(marketDate: string): Promise<Kis
 
 function safeDiagnostic(item: string, error: unknown): KisDiagnostic {
   const raw = error instanceof Error ? error.message : "KIS_UNKNOWN_ERROR";
+  const errorName = error instanceof Error ? error.name : "";
   const code = /^KIS_(?:AUTH_FAILED|RATE_LIMITED|PARSE_FAILED|QUERY_NOT_ALLOWLISTED|BASE_URL_NOT_ALLOWED|TOKEN_PARSE_FAILED|TOKEN_HTTP_\d{3}|HTTP_\d{3}|RESPONSE_[A-Za-z0-9_-]+)$/.test(raw)
     ? raw
-    : "KIS_UNKNOWN_ERROR";
+    : errorName === "TimeoutError" || errorName === "AbortError"
+      ? "KIS_TIMEOUT"
+      : error instanceof TypeError
+        ? "KIS_NETWORK_FAILED"
+        : "KIS_UNKNOWN_ERROR";
   const match = code.match(/(?:TOKEN_)?HTTP_(\d{3})$/);
   return { item, code, ...(match ? { httpStatus: Number(match[1]) } : {}) };
 }
@@ -356,6 +378,32 @@ function overseasMetric(label: string, body: Record<string, unknown>, collectedA
   return { metric: metricFromSource({ label, value, changePct, direction: directionFromChange(changePct), source: dataSource }), source: dataSource };
 }
 
+function cachedOverseasMetric(key: string, collectedAt: string) {
+  const cached = overseasMetricCache.get(key);
+  if (!cached?.metric?.asOf) return undefined;
+  const source = makeSource({
+    provider: cached.source.provider,
+    sourceName: cached.source.sourceName,
+    url: cached.source.url,
+    asOf: cached.source.asOf,
+    collectedAt,
+    maxAgeMinutes: cached.source.maxAgeMinutes,
+  }, new Date(collectedAt));
+  if (source.freshness !== "fresh") return undefined;
+  return {
+    metric: metricFromSource({
+      label: cached.metric.label,
+      value: cached.metric.value,
+      unit: cached.metric.unit,
+      changePct: cached.metric.changePct,
+      direction: cached.metric.direction,
+      asOf: cached.metric.asOf,
+      source,
+    }),
+    source,
+  };
+}
+
 export async function collectKisMarketData(input: ReferenceSearchInput): Promise<KisResult> {
   const credentials = requiredCredentials();
   if (!credentials) return { status: "needs_credentials", sources: [], missingItems: ["KIS_APP_KEY", "KIS_APP_SECRET"] };
@@ -427,16 +475,43 @@ export async function collectKisMarketData(input: ReferenceSearchInput): Promise
       ["dow", "N", process.env.KIS_DOW_CODE?.trim() || ".DJI", "Dow Jones"],
       ["fx", "X", process.env.KIS_USD_KRW_CODE?.trim() || "FX@KRW", "USD/KRW"],
     ] as const;
-    for (const [key, division, code, label] of overseasDefinitions) {
-      try {
-        const body = await kisGet(overseasPath, "FHKST03030100", {
-          FID_COND_MRKT_DIV_CODE: division, FID_INPUT_ISCD: code, FID_INPUT_DATE_1: startDate,
-          FID_INPUT_DATE_2: endDate, FID_PERIOD_DIV_CODE: "D",
-        }, credentials, token);
-        const result = overseasMetric(label, body, collectedAt, overseasPath);
-        if (result) { us[key] = result.metric; sources.push(result.source); }
-        else { missingItems.push(label); diagnostics.push({ item: label, code: "KIS_EMPTY_METRIC" }); }
-      } catch (error) { missingItems.push(label); diagnostics.push(safeDiagnostic(label, error)); }
+    const pending = new Map(overseasDefinitions.map((definition) => [definition[0], definition]));
+    const lastDiagnostics = new Map<string, KisDiagnostic>();
+    for (let groupAttempt = 0; groupAttempt <= overseasGroupMaxRetries() && pending.size > 0; groupAttempt += 1) {
+      for (const [key, division, code, label] of [...pending.values()]) {
+        try {
+          const body = await kisGet(overseasPath, "FHKST03030100", {
+            FID_COND_MRKT_DIV_CODE: division, FID_INPUT_ISCD: code, FID_INPUT_DATE_1: startDate,
+            FID_INPUT_DATE_2: endDate, FID_PERIOD_DIV_CODE: "D",
+          }, credentials, token);
+          const result = overseasMetric(label, body, collectedAt, overseasPath);
+          if (result) {
+            us[key] = result.metric;
+            sources.push(result.source);
+            overseasMetricCache.set(key, result);
+            pending.delete(key);
+            lastDiagnostics.delete(key);
+          } else {
+            lastDiagnostics.set(key, { item: label, code: "KIS_EMPTY_METRIC" });
+          }
+        } catch (error) {
+          lastDiagnostics.set(key, safeDiagnostic(label, error));
+        }
+      }
+      if (pending.size > 0 && groupAttempt < overseasGroupMaxRetries()) {
+        await wait(overseasGroupRetryDelayMs(groupAttempt));
+      }
+    }
+    for (const [key, , , label] of pending.values()) {
+      const cached = cachedOverseasMetric(key, collectedAt);
+      if (cached) {
+        us[key] = cached.metric;
+        sources.push(cached.source);
+        diagnostics.push({ item: label, code: "KIS_LAST_VERIFIED_FALLBACK_USED", recovered: true });
+      } else {
+        missingItems.push(label);
+        diagnostics.push(lastDiagnostics.get(key) ?? { item: label, code: "KIS_UNKNOWN_ERROR" });
+      }
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "KIS_ERROR";
@@ -467,6 +542,7 @@ export const KIS_READ_ONLY_POLICY = {
   retryableResponseCodes: Array.from(KIS_RETRYABLE_RESPONSE_CODES),
   minimumRequestIntervalMs: getKisMinRequestIntervalMs(),
   maximumRetries: KIS_MAX_RETRIES,
+  overseasGroupMaximumRetries: 2,
   prohibitedCapabilities: KIS_PROHIBITED_CAPABILITIES,
   documentation: KIS_DOC_URL,
 } as const;
