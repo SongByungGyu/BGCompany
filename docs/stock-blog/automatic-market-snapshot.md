@@ -5,7 +5,7 @@ BG Company의 운영 `MarketSnapshot`은 사용자가 시장 수치를 입력하
 ## Provider 구성
 
 - Primary: 한국투자증권 Open API(KIS)
-  - KOSPI/KOSDAQ 현재 지수
+  - KOSPI/KOSDAQ 지수(오전 전망은 당일 장 시작 전 0% 행을 제외하고 직전 실제 거래일 확정값 사용)
   - 시장별 투자자 매매동향
   - 국내 업종 강세/약세 흐름
   - S&P 500, NASDAQ, Dow Jones

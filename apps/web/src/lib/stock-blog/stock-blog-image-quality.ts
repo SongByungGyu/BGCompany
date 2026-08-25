@@ -71,6 +71,14 @@ export function evaluateStockBlogImageQuality(images: StockBlogContentImage[], s
         ) {
           issues.push({ code: "image_quality_failed", message: `${chart.title}: 전부 0인 수급값은 유효한 비교 차트로 사용하지 않습니다.` });
         }
+        if (chart.id === "major-index-change") {
+          const domesticPoints = chart.dataPoints.filter((point) => point.label === "KOSPI" || point.label === "KOSDAQ");
+          const currentMarketDate = snapshot.marketDate.replace(/-/g, "");
+          const usesCurrentMarketDate = domesticPoints.some((point) => point.asOf.replace(/\D/g, "").slice(0, 8) === currentMarketDate);
+          if (domesticPoints.length === 2 && domesticPoints.every((point) => point.value === 0) && usesCurrentMarketDate) {
+            issues.push({ code: "image_quality_failed", message: `${chart.title}: 장 시작 전 당일 0% 지수값은 직전 거래일 확정값으로 교체해야 합니다.` });
+          }
+        }
         for (const point of chart.dataPoints) {
           const actual = resolveSnapshotValue(snapshot, point.key);
           if (typeof actual !== "number" || !closeEnough(actual, point.value)) {

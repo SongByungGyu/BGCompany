@@ -99,6 +99,32 @@ test("전부 0인 KOSPI 투자자 수급 차트는 자동 발행을 차단한다
   assert.ok(result.issues.some((issue) => issue.message.includes("전부 0인 수급값")));
 });
 
+test("장 시작 전 당일 코스피·코스닥 0% 차트는 자동 발행을 차단한다", () => {
+  const zeroSnapshot: MarketSnapshot = {
+    ...snapshot,
+    marketDate: "2026-07-19",
+    korea: {
+      kospi: { ...snapshot.korea!.kospi!, changePct: 0, asOf: "2026-07-19T00:00:00.000Z" },
+      kosdaq: { ...snapshot.korea!.kospi!, label: "KOSDAQ", changePct: 0, asOf: "2026-07-19T00:00:00.000Z" },
+    },
+  };
+  const zeroChart = image("major-index-change", "body", "chart");
+  zeroChart.dataKeys = ["korea.kospi.changePct", "korea.kosdaq.changePct"];
+  zeroChart.dataPoints = [
+    { key: zeroChart.dataKeys[0], label: "KOSPI", value: 0, unit: "%", asOf: "2026-07-19T00:00:00.000Z" },
+    { key: zeroChart.dataKeys[1], label: "KOSDAQ", value: 0, unit: "%", asOf: "2026-07-19T00:00:00.000Z" },
+  ];
+
+  const result = evaluateStockBlogImageQuality([
+    image("thumbnail", "thumbnail", "thumbnail"),
+    zeroChart,
+    image("chart-2", "body", "chart"),
+  ], zeroSnapshot);
+
+  assert.equal(result.status, "blocked");
+  assert.ok(result.issues.some((issue) => issue.message.includes("직전 거래일 확정값")));
+});
+
 test("본문 이미지가 핵심 3장을 넘으면 정보 과밀로 차단한다", () => {
   const result = evaluateStockBlogImageQuality([
     image("thumbnail", "thumbnail", "thumbnail"),

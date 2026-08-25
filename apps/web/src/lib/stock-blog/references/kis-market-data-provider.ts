@@ -315,8 +315,45 @@ function source(label: string, asOf: string, collectedAt: string, endpoint: stri
   });
 }
 
-function indexMetric(label: string, output: unknown, collectedAt: string, endpoint: string) {
-  const row = asRecords(output)[0];
+function configuredKoreaMarketClosedDates() {
+  return new Set(
+    (process.env.STOCK_BLOG_KRX_CLOSED_DATES ?? "")
+      .split(",")
+      .map((value) => value.trim().replace(/-/g, ""))
+      .filter((value) => /^\d{8}$/.test(value)),
+  );
+}
+
+function isKnownClosedKoreaMarketDate(marketDate: string) {
+  if (!/^\d{8}$/.test(marketDate)) return true;
+  if (koreaMarketSessionCache.get(marketDate) === false || configuredKoreaMarketClosedDates().has(marketDate)) return true;
+  const date = new Date(Date.UTC(
+    Number.parseInt(marketDate.slice(0, 4), 10),
+    Number.parseInt(marketDate.slice(4, 6), 10) - 1,
+    Number.parseInt(marketDate.slice(6, 8), 10),
+  ));
+  const weekday = date.getUTCDay();
+  return weekday === 0 || weekday === 6;
+}
+
+export function selectKisCompletedDomesticIndexRow(output: unknown, beforeMarketDate: string) {
+  if (!/^\d{8}$/.test(beforeMarketDate)) return undefined;
+  return asRecords(output)
+    .filter((row) => {
+      const rowDate = typeof row.stck_bsop_date === "string" ? row.stck_bsop_date : "";
+      return /^\d{8}$/.test(rowDate)
+        && rowDate < beforeMarketDate
+        && !isKnownClosedKoreaMarketDate(rowDate)
+        && asNumber(row.bstp_nmix_prpr) !== undefined
+        && asNumber(row.bstp_nmix_prdy_ctrt) !== undefined;
+    })
+    .sort((left, right) => String(right.stck_bsop_date).localeCompare(String(left.stck_bsop_date)))[0];
+}
+
+function indexMetric(label: string, output: unknown, collectedAt: string, endpoint: string, completedBeforeDate?: string) {
+  const row = completedBeforeDate
+    ? selectKisCompletedDomesticIndexRow(output, completedBeforeDate)
+    : asRecords(output)[0];
   if (!row) return undefined;
   const value = asNumber(row.bstp_nmix_prpr);
   const changePct = asNumber(row.bstp_nmix_prdy_ctrt);
@@ -416,12 +453,15 @@ export async function collectKisMarketData(input: ReferenceSearchInput): Promise
   try {
     const token = await getAccessToken(credentials);
     const indexPath = "/uapi/domestic-stock/v1/quotations/inquire-index-daily-price";
+    const completedDomesticSessionBefore = input.contentType === "KOREA_DAILY_PREVIEW"
+      ? seoulDate(new Date(collectedAt))
+      : undefined;
     for (const [key, code, label] of [["kospi", "0001", "KOSPI"], ["kosdaq", "1001", "KOSDAQ"]] as const) {
       try {
         const body = await kisGet(indexPath, "FHPUP02120000", {
           FID_PERIOD_DIV_CODE: "D", FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: code, FID_INPUT_DATE_1: seoulDate(),
         }, credentials, token);
-        const result = indexMetric(label, body.output2, collectedAt, indexPath);
+        const result = indexMetric(label, body.output2, collectedAt, indexPath, completedDomesticSessionBefore);
         if (result) { korea[key] = result.metric; sources.push(result.source); } else missingItems.push(label);
       } catch (error) { missingItems.push(label); diagnostics.push(safeDiagnostic(label, error)); }
     }

@@ -5,6 +5,7 @@ import {
   parseKisKoreaMarketCalendar,
   rememberKisKoreaMarketSession,
   resetKisKoreaMarketSessionCacheForTests,
+  selectKisCompletedDomesticIndexRow,
 } from "./kis-market-data-provider.ts";
 
 const ENV = {
@@ -61,4 +62,40 @@ test("운영자 휴장일 지정도 다음 개장일 데이터 수명에 반영�
     STOCK_BLOG_KRX_CLOSED_DATES: "2026-08-17",
   }), 10080);
   resetKisKoreaMarketSessionCacheForTests();
+});
+
+test("오전 국내 지수는 당일 0% 행 대신 직전 거래일 확정값을 고른다", () => {
+  const row = selectKisCompletedDomesticIndexRow([
+    { stck_bsop_date: "20260825", bstp_nmix_prpr: "0", bstp_nmix_prdy_ctrt: "0.00" },
+    { stck_bsop_date: "20260824", bstp_nmix_prpr: "7321.45", bstp_nmix_prdy_ctrt: "1.23" },
+    { stck_bsop_date: "20260821", bstp_nmix_prpr: "7232.49", bstp_nmix_prdy_ctrt: "-0.44" },
+  ], "20260825");
+
+  assert.equal(row?.stck_bsop_date, "20260824");
+  assert.equal(row?.bstp_nmix_prdy_ctrt, "1.23");
+});
+
+test("휴장일 0% 행이 섞이면 그 이전 실제 영업일 확정값을 고른다", () => {
+  resetKisKoreaMarketSessionCacheForTests();
+  rememberKisKoreaMarketSession("20260817", false);
+  const row = selectKisCompletedDomesticIndexRow([
+    { stck_bsop_date: "20260818", bstp_nmix_prpr: "0", bstp_nmix_prdy_ctrt: "0.00" },
+    { stck_bsop_date: "20260817", bstp_nmix_prpr: "7280.12", bstp_nmix_prdy_ctrt: "0.00" },
+    { stck_bsop_date: "20260814", bstp_nmix_prpr: "7280.12", bstp_nmix_prdy_ctrt: "-0.57" },
+  ], "20260818");
+
+  assert.equal(row?.stck_bsop_date, "20260814");
+  assert.equal(row?.bstp_nmix_prdy_ctrt, "-0.57");
+  resetKisKoreaMarketSessionCacheForTests();
+});
+
+test("월요일 오전에는 주말 행을 건너뛰고 금요일 확정값을 고른다", () => {
+  const row = selectKisCompletedDomesticIndexRow([
+    { stck_bsop_date: "20260824", bstp_nmix_prpr: "0", bstp_nmix_prdy_ctrt: "0.00" },
+    { stck_bsop_date: "20260823", bstp_nmix_prpr: "7200", bstp_nmix_prdy_ctrt: "0.00" },
+    { stck_bsop_date: "20260822", bstp_nmix_prpr: "7200", bstp_nmix_prdy_ctrt: "0.00" },
+    { stck_bsop_date: "20260821", bstp_nmix_prpr: "7200", bstp_nmix_prdy_ctrt: "0.31" },
+  ], "20260824");
+
+  assert.equal(row?.stck_bsop_date, "20260821");
 });

@@ -442,10 +442,11 @@ export async function generateStockBlogImages(input: {
     await mkdir(outputDir, { recursive: true });
     const overseasIndexMetrics = [sp500, nasdaq, dow].filter((metric): metric is VerifiedNumericMetric => Boolean(metric));
     const hasOverseasIndexMetrics = overseasIndexMetrics.length > 0;
+    const domesticSessionLabel = input.template === "KOREA_DAILY_PREVIEW" ? "직전 거래일" : "최근 거래일";
     const indexTitle = hasOverseasIndexMetrics ? "한국·미국 주요 지수 등락 비교" : "한국 주요 지수 등락 비교";
     const indexCaption = hasOverseasIndexMetrics
-      ? "최근 거래일 기준 한국과 미국 주요 지수 등락률 비교"
-      : "최근 거래일 기준 코스피와 코스닥 등락률 비교";
+      ? `${domesticSessionLabel} 기준 한국과 미국 주요 지수 등락률 비교`
+      : `${domesticSessionLabel} 기준 코스피와 코스닥 등락률 비교`;
     const indexSource = hasOverseasIndexMetrics
       ? `기준일 ${dateLabel(kospi.metric.asOf!)}(한국) · ${dateLabel(overseasIndexMetrics[0].metric.asOf!)}(미국) | 출처 한국투자증권 Open API`
       : `기준일 ${dateLabel(kospi.metric.asOf!)} | 출처 한국투자증권 Open API`;
@@ -472,8 +473,8 @@ export async function generateStockBlogImages(input: {
         svg: horizontalComparisonSvg({
           title: indexTitle,
           subtitle: hasOverseasIndexMetrics
-            ? "확인된 각 시장의 최근 거래일 등락률만 같은 단위로 비교했습니다."
-            : "확인된 국내 최근 거래일 등락률만 같은 단위로 비교했습니다.",
+            ? `확인된 각 시장의 ${domesticSessionLabel} 등락률만 같은 단위로 비교했습니다.`
+            : `확인된 국내 ${domesticSessionLabel} 등락률만 같은 단위로 비교했습니다.`,
           source: indexSource,
           rows: indexRows,
         }),
