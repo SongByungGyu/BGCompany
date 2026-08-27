@@ -179,7 +179,7 @@ function withVerifiedSchedule(writer: WriterExecution, referenceBundle?: Referen
   };
 }
 
-function assertValidInput(input: unknown): ContentPipelineInput {
+export function assertValidInput(input: unknown): ContentPipelineInput {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new Error("request body must be a JSON object");
   }
@@ -201,7 +201,21 @@ function assertValidInput(input: unknown): ContentPipelineInput {
   if (!title) throw new Error("title is required");
   if (!channels.has(channel)) throw new Error("channel must be blog/instagram/youtube/newsletter");
   if (!["mock", "hermes-dry-run", "hermes"].includes(runnerMode)) throw new Error("runnerMode must be mock/hermes-dry-run/hermes");
-  return { topic, title, channel: channel as ContentChannel, runnerMode: runnerMode as ContentPipelineInput["runnerMode"], contentType, operationalRunKey, operationalAttempt };
+  const referenceBundle = asReferenceBundle(body.referenceBundle);
+  const blogImagePrompts = asBlogImagePrompts(body.blogImagePrompts);
+  const editorialBenchmarkGuidelines = asStringArray(body.editorialBenchmarkGuidelines);
+  return {
+    topic,
+    title,
+    channel: channel as ContentChannel,
+    runnerMode: runnerMode as ContentPipelineInput["runnerMode"],
+    contentType,
+    referenceBundle,
+    blogImagePrompts,
+    editorialBenchmarkGuidelines,
+    operationalRunKey,
+    operationalAttempt,
+  };
 }
 
 function channelLabel(channel: ContentChannel) {

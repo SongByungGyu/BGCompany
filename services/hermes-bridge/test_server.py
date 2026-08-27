@@ -390,7 +390,8 @@ class VerifiedSchedulePromptTests(unittest.TestCase):
         writer_prompt = bridge.build_content_writer_prompt({"input": input_data})
         qa_prompt = bridge.build_qa_audit_prompt({"input": input_data})
 
-        self.assertIn("공백 포함 2,000~3,200자", writer_prompt)
+        self.assertIn("공백 포함 2,000~2,800자", writer_prompt)
+        self.assertIn("2,200~2,500자를 목표", writer_prompt)
         self.assertIn("공백 포함 2,000~3,200자", qa_prompt)
 
     def test_qa_prompt_receives_server_schedule_validation(self) -> None:
@@ -473,6 +474,9 @@ class UsageGuardrailContractTests(unittest.TestCase):
                 "qaRevisionFeedback": {
                     "qaScore": 88,
                     "requiredRevisions": ["Correct the US index direction."],
+                    "currentBodyLength": 3841,
+                    "targetBodyRange": "2300~2900자",
+                    "requiredReductionChars": 941,
                 },
             },
         })
@@ -481,6 +485,8 @@ class UsageGuardrailContractTests(unittest.TestCase):
         self.assertIn("Correct the US index direction.", prompt)
         self.assertIn("previous writer result", prompt)
         self.assertIn("QA revision feedback", prompt)
+        self.assertIn('"requiredReductionChars":941', prompt)
+        self.assertIn("그 수치 이상을 실제로 줄인다", prompt)
 
     def test_usage_summary_counts_only_real_hermes_agent_runs(self) -> None:
         usage_source = (REPO_ROOT / "apps/web/src/lib/hermes/hermes-usage.ts").read_text()

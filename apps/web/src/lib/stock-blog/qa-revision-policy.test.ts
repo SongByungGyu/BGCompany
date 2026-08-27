@@ -79,3 +79,15 @@ test("passes only actionable QA fields back to the writer", () => {
     reason: undefined,
   });
 });
+
+test("tells the writer the exact reduction needed for an overlong study draft", () => {
+  const feedback = buildStockBlogQaRevisionFeedback({
+    ok: true,
+    qaScore: 89,
+    requiredRevisions: ["본문을 줄이세요."],
+  }, { fullDraft: "가".repeat(3841) }, "INVESTMENT_STUDY");
+
+  assert.equal(feedback.currentBodyLength, 3841);
+  assert.equal(feedback.targetBodyRange, "2300~2900자");
+  assert.equal(feedback.requiredReductionChars, 941);
+});

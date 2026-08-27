@@ -514,6 +514,9 @@ def build_content_writer_prompt(payload: dict[str, Any]) -> str:
             "qaScore",
             "finalRecommendation",
             "reason",
+            "currentBodyLength",
+            "targetBodyRange",
+            "requiredReductionChars",
         )
         if key in qa_feedback_source
     }
@@ -528,6 +531,7 @@ def build_content_writer_prompt(payload: dict[str, Any]) -> str:
 
 자동 수정 지침:
 - 이전 초안 전체를 버리고 새 주제를 만들지 말고, QA의 requiredRevisions와 사실성 지적을 빠짐없이 반영해 같은 글을 교정한다.
+- requiredReductionChars가 1 이상이면 핵심 실적 수치·조건·기사 3개·필수 섹션은 유지하되, 반복 설명과 부수적인 시장 문장을 합쳐 그 수치 이상을 실제로 줄인다. targetBodyRange 안에 들어오는지 introduction, sections, conclusion, cta를 합친 길이를 직접 점검한다.
 - verified market snapshot과 충돌한 문장은 입력 수치에 맞게 수정한다. QA 의견과 market snapshot이 충돌하면 market snapshot을 우선한다.
 - 이미 기준을 충족한 구조, 기사 3개, 체크리스트, 투자 유의문구, 이미지 연결용 heading은 유지한다.
 - QA가 지적하지 않은 정확한 수치·일정·출처를 임의로 바꾸거나 새로 만들지 않는다.
@@ -573,7 +577,11 @@ def build_content_writer_prompt(payload: dict[str, Any]) -> str:
         "LARGE_CAP_DISCLOSURE_EARNINGS",
     }
     body_min, body_target_min, body_target_max, body_max = (
-        (2000, 2300, 2900, 3200) if weekly_editorial else (1800, 2100, 2600, 2800)
+        (2000, 2200, 2500, 2800)
+        if content_type == "INVESTMENT_STUDY"
+        else (2000, 2300, 2900, 3200)
+        if weekly_editorial
+        else (1800, 2100, 2600, 2800)
     )
     upcoming_events = market_snapshot.get("upcoming") if isinstance(market_snapshot, dict) else None
     daily_schedule_will_be_injected = (

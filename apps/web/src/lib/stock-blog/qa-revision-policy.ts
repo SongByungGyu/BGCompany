@@ -69,6 +69,8 @@ export function buildStockBlogQaRevisionFeedback(
 ) {
   const requiredRevisions = stringList(result.requiredRevisions);
   const lengthRevision = draftLengthRevision(writerResult, contentType);
+  const currentBodyLength = draftLength(writerResult);
+  const { bodyLength } = getStockBlogEditorialPolicy(contentType);
   if (lengthRevision && !requiredRevisions.includes(lengthRevision)) {
     requiredRevisions.push(lengthRevision);
   }
@@ -87,5 +89,10 @@ export function buildStockBlogQaRevisionFeedback(
     qaScore: typeof result.qaScore === "number" ? result.qaScore : undefined,
     finalRecommendation: typeof result.finalRecommendation === "string" ? result.finalRecommendation : undefined,
     reason: typeof result.reason === "string" ? result.reason : undefined,
+    ...(currentBodyLength === undefined ? {} : {
+      currentBodyLength,
+      targetBodyRange: `${bodyLength.targetMin}~${bodyLength.targetMax}자`,
+      requiredReductionChars: Math.max(0, currentBodyLength - bodyLength.targetMax),
+    }),
   };
 }
