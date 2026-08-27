@@ -175,3 +175,50 @@ test("an extreme market move takes priority over an upcoming schedule question",
   assert.equal(selection.mode, "market_issue");
   assert.match(selection.title, /코스피 -2\.4%/);
 });
+
+test("Thursday prioritizes a verified NVIDIA earnings result over an extreme market move", () => {
+  const selection = selectInvestmentStudyTopic({
+    now: new Date("2026-08-27T03:10:00.000Z"),
+    angle: "result_or_practical",
+    referenceBundle: bundle({
+      marketDate: "2026-08-27",
+      items: [
+        {
+          id: "official-nvda",
+          sourceType: "disclosure",
+          provider: "sec-edgar",
+          title: "NVIDIA CORP 8-K 공식 제출",
+          publishedAt: "2026-08-26",
+          publisher: "SEC EDGAR",
+          reliability: "official",
+          symbols: ["NVDA"],
+          summary: "NVIDIA가 SEC에 Item 2.02 실적 자료를 제출했습니다.",
+        },
+        {
+          id: "news-nvda",
+          sourceType: "news",
+          provider: "naver",
+          title: "엔비디아 실적 발표 뒤 시간외 주가 상승",
+          publishedAt: "2026-08-27T01:00:00.000Z",
+        },
+      ],
+      marketSnapshot: {
+        provider: "kis-fred",
+        status: "ready",
+        marketDate: "2026-08-27",
+        collectedAt: "2026-08-27T03:00:00.000Z",
+        dataQuality: "verified",
+        freshness: { status: "fresh", checkedAt: "2026-08-27T03:00:00.000Z", staleItems: [] },
+        korea: { kospi: { label: "KOSPI", value: 7000, changePct: 2.4, direction: "up" } },
+        missingItems: [],
+      },
+    }),
+  });
+
+  assert.equal(selection.mode, "market_issue");
+  assert.match(selection.title, /엔비디아 실적 발표/);
+  assert.match(selection.title, /삼성전자·SK하이닉스 영향/);
+  assert.match(selection.topic, /공식 실적 자료/);
+  assert.equal(selection.score, 5);
+  assert.equal(qualifiesForConditionalInvestmentStudy(selection), true);
+});

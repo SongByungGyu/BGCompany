@@ -132,6 +132,15 @@ const ISSUE_CATEGORIES: IssueCategory[] = [
   },
 ];
 
+const RESULT_EVENT_STUDIES = [
+  {
+    pattern: /NVIDIA|엔비디아|\bNVDA\b/i,
+    title: "엔비디아 실적 발표, 시간외 주가는 왜 올랐을까? 삼성전자·SK하이닉스 영향",
+    topic: "엔비디아 공식 실적 자료와 SEC 제출에서 매출·데이터센터 매출·EPS·다음 분기 가이던스를 확인하고, 발표 직후 시간외 주가 반응이 삼성전자·SK하이닉스·HBM 관련주에 전달되는 경로를 설명합니다. 시장 예상치는 출처와 비교 시각이 확인된 수치만 사용합니다.",
+    keywords: ["엔비디아 실적 발표", "엔비디아 시간외 주가", "삼성전자", "SK하이닉스", "NVDA"],
+  },
+] as const;
+
 const SURPRISE_PATTERN = /급등|급락|폭락|반등|신고가|신저가|예상보다|서프라이즈|쇼크|돌파|회복/i;
 const HIGH_IMPACT_EVENT_PATTERN = /PPI|CPI|Producer Price|Consumer Price|FOMC|Federal Reserve|연준|고용|실업|Nonfarm|Payroll|Employment|금리|GDP|소매판매|Retail Sales/i;
 
@@ -159,6 +168,37 @@ function recentNewsItems(bundle: ReferenceBundle, now: Date) {
     const publishedAt = Date.parse(clean(item.publishedAt));
     return Number.isFinite(publishedAt) && publishedAt >= recentCutoff;
   });
+}
+
+function selectResultEventStudy(
+  bundle: ReferenceBundle,
+  now: Date,
+  news: ReferenceItem[],
+): InvestmentStudyTopicSelection | null {
+  const recentCutoff = now.getTime() - 96 * 60 * 60 * 1000;
+  for (const study of RESULT_EVENT_STUDIES) {
+    const official = bundle.items.find((item) => {
+      if (item.reliability !== "official" || item.sourceType !== "disclosure") return false;
+      const publishedAt = Date.parse(clean(item.publishedAt));
+      return Number.isFinite(publishedAt)
+        && publishedAt >= recentCutoff
+        && study.pattern.test(`${item.title}\n${item.summary ?? ""}\n${item.symbols?.join(" ") ?? ""}`);
+    });
+    if (!official) continue;
+    const relatedNews = news.filter((item) => study.pattern.test(`${item.title}\n${item.summary ?? ""}`));
+    return {
+      mode: "market_issue",
+      title: study.title,
+      topic: study.topic,
+      score: 5,
+      reasons: [
+        `${official.publisher ?? official.sourceName ?? "공식 공시"}에서 최근 실적 제출을 확인했습니다.`,
+        ...(relatedNews.length > 0 ? [`최근 72시간 내 관련 기사 ${relatedNews.length}건으로 발표 뒤 시장 반응을 교차 확인했습니다.`] : []),
+      ],
+      keywords: [...study.keywords],
+    };
+  }
+  return null;
 }
 
 function categoryMatches(items: ReferenceItem[]) {
@@ -258,6 +298,11 @@ export function selectInvestmentStudyTopic(input: {
   const angle = input.angle ?? "issue_explainer";
   const events = highImpactEvents(input.referenceBundle, input.now, angle === "upcoming_question" ? 4 : 1);
   const eventScore = events.length > 0 ? 2 : 0;
+
+  if (angle === "result_or_practical") {
+    const resultStudy = selectResultEventStudy(input.referenceBundle, input.now, news);
+    if (resultStudy) return resultStudy;
+  }
 
   if (strongestMove?.score >= 4) return selectMarketMoveLesson(strongestMove) ?? selectSearchQuestion(input.now);
   if (angle === "upcoming_question") {

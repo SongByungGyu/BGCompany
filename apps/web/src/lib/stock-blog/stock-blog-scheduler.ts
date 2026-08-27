@@ -505,7 +505,7 @@ async function buildInvestmentStudyPipelineInput(
     : definition.investmentStudyAngle === "result_or_practical"
       ? "이번 주 경제지표·실적 발표 실제값과 예상치 차이, 발표 뒤 코스피·나스닥·금리·수급 반응"
       : "오늘 코스피·코스닥·나스닥 급등락과 금리·환율·물가·반도체·실적 이슈의 투자 원리";
-  const referenceBundle = await collectStockBlogReferences({
+  const baseReferenceBundle = await collectStockBlogReferences({
     topic: discoveryTopic,
     title: discoveryTitle,
     channel: "blog",
@@ -516,12 +516,33 @@ async function buildInvestmentStudyPipelineInput(
       : ["코스피", "나스닥", "금리", "실적"],
     maxResults: 6,
   });
+  const resultScan = definition.investmentStudyAngle === "result_or_practical"
+    ? await scanLargeCapDisclosureEvents({ now })
+    : null;
+  const officialResultItems = resultScan
+    ? largeCapEventsToReferenceItems(resultScan.events.filter((event) => event.eventType === "earnings"))
+      .map((item) => ({ ...item, contentType: "INVESTMENT_STUDY" as const }))
+    : [];
+  const referenceBundle: ReferenceBundle = officialResultItems.length > 0
+    ? {
+      ...baseReferenceBundle,
+      items: [
+        ...officialResultItems,
+        ...baseReferenceBundle.items.filter((item) => !officialResultItems.some((official) => official.url === item.url)),
+      ],
+      keyThemes: Array.from(new Set([
+        ...officialResultItems.flatMap((item) => item.keywords ?? []),
+        ...baseReferenceBundle.keyThemes,
+      ])),
+      sourcePolicy: `${baseReferenceBundle.sourcePolicy} 실적 수치는 SEC·OpenDART 공식 제출을 우선 확인합니다.`,
+    }
+    : baseReferenceBundle;
   const selection = selectInvestmentStudyTopic({
     now,
     referenceBundle,
     angle: definition.investmentStudyAngle,
   });
-  const selectedReferenceBundle = definition.investmentStudyMode === "fixed" && selection.mode === "search_question"
+  const refinedReferenceBundle = definition.investmentStudyMode === "fixed"
     ? await collectStockBlogReferences({
       topic: selection.topic,
       title: selection.title,
@@ -532,6 +553,25 @@ async function buildInvestmentStudyPipelineInput(
       maxResults: 6,
     })
     : referenceBundle;
+  const selectionText = `${selection.title}\n${selection.topic}\n${selection.keywords.join(" ")}`.toLowerCase();
+  const selectedOfficialItems = officialResultItems.filter((item) => (
+    (item.keywords ?? []).some((keyword) => selectionText.includes(keyword.toLowerCase()))
+    || (item.symbols ?? []).some((symbol) => selectionText.includes(symbol.toLowerCase()))
+  ));
+  const selectedReferenceBundle: ReferenceBundle = selectedOfficialItems.length > 0
+    ? {
+      ...refinedReferenceBundle,
+      items: [
+        ...selectedOfficialItems,
+        ...refinedReferenceBundle.items.filter((item) => !selectedOfficialItems.some((official) => official.url === item.url)),
+      ],
+      keyThemes: Array.from(new Set([
+        ...selectedOfficialItems.flatMap((item) => item.keywords ?? []),
+        ...refinedReferenceBundle.keyThemes,
+      ])),
+      sourcePolicy: `${refinedReferenceBundle.sourcePolicy} 실적 수치는 SEC·OpenDART 공식 제출을 우선 확인합니다.`,
+    }
+    : refinedReferenceBundle;
   return {
     selection,
     input: {
