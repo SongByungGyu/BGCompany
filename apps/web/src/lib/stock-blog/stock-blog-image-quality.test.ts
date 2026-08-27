@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { evaluateStockBlogImageQuality } from "./stock-blog-image-quality";
-import type { MarketSnapshot } from "./references/reference-types";
+import type { MarketSnapshot, ReferenceBundle } from "./references/reference-types";
 import {
   KIS_OVERSEAS_DEGRADED_DISCLOSURE,
   KIS_OVERSEAS_DEGRADED_MODE,
@@ -136,4 +136,51 @@ test("본문 이미지가 핵심 3장을 넘으면 정보 과밀로 차단한다
 
   assert.equal(result.status, "blocked");
   assert.match(result.issues.map((issue) => issue.message).join("\n"), /2~3장/);
+});
+
+test("엔비디아 글에 일반 시장 그래프만 있으면 주제 불일치로 차단한다", () => {
+  const result = evaluateStockBlogImageQuality([
+    image("thumbnail", "thumbnail", "thumbnail"),
+    image("major-index-change", "body", "chart"),
+    image("fx-and-us-yields", "body", "chart"),
+  ], snapshot, {
+    requiredRelevanceTags: ["nvidia"],
+    minimumRelevantBodyImages: 2,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.ok(result.issues.some((issue) => issue.code === "image_not_relevant"));
+});
+
+test("공식 ReferenceBundle 수치와 주제가 일치하는 실적 차트는 통과한다", () => {
+  const bundle: ReferenceBundle = {
+    provider: "web", mode: "real", status: "ready", contentType: "INVESTMENT_STUDY",
+    generatedAt: "2026-08-27T00:00:00Z", marketDate: "2026-08-27", market: "GLOBAL", queries: [],
+    items: [{
+      id: "nvidia", sourceType: "company", provider: "nvidia-newsroom", title: "NVIDIA results",
+      url: "https://example.com/nvidia", reliability: "official",
+      metrics: [{ key: "nvidia.revenue", label: "매출", value: 96.2, unit: "십억달러", asOf: "2026-08-26", sourceName: "NVIDIA Newsroom", sourceUrl: "https://example.com/nvidia" }],
+    }],
+    keyThemes: [], repeatedKeywords: [], differentiationPoints: [], cautionNotes: [], sourcePolicy: "official", missingItems: [],
+  };
+  const referenceChart = (id: string) => ({
+    ...image(id, "body", "chart"),
+    relevanceTags: ["nvidia"],
+    dataKeys: ["reference.nvidia.revenue"],
+    dataPoints: [{ key: "reference.nvidia.revenue", label: "매출", value: 96.2, unit: "십억달러", asOf: "2026-08-26" }],
+  });
+  const thumbnail = image("thumbnail", "thumbnail", "thumbnail");
+  thumbnail.relevanceTags = ["nvidia"];
+
+  const result = evaluateStockBlogImageQuality([
+    thumbnail,
+    referenceChart("nvidia-earnings"),
+    referenceChart("nvidia-expectations"),
+  ], undefined, {
+    referenceBundle: bundle,
+    requiredRelevanceTags: ["nvidia"],
+    minimumRelevantBodyImages: 2,
+  });
+
+  assert.equal(result.status, "passed");
 });

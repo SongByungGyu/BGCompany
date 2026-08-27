@@ -21,6 +21,7 @@ export type StockBlogContentImage = {
   sourceLabel: string;
   sourceName: string;
   sourceUrl?: string;
+  relevanceTags?: string[];
   licenseType: StockBlogImageLicenseType;
   collectedAt: string;
   usageAllowed: boolean;

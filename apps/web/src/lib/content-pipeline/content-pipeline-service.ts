@@ -1664,6 +1664,7 @@ export async function regenerateContentPipelineImages(pipelineId: string) {
     topic: pipeline.topic,
     marketDate: bundle.marketDate,
     marketSnapshot: bundle.marketSnapshot,
+    referenceBundle: bundle,
   });
   const payload = event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
     ? event.payload as Record<string, unknown>
@@ -1792,6 +1793,7 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     topic: data.topic,
     marketDate: data.referenceBundle?.marketDate,
     marketSnapshot: data.referenceBundle?.marketSnapshot,
+    referenceBundle: data.referenceBundle,
   });
   const metadataInput = {
     pipelineId,

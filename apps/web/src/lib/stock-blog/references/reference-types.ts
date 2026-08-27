@@ -9,6 +9,16 @@ export type StockReferenceBriefingTemplate =
 export type ReferenceSourceType = "news" | "blog" | "disclosure" | "market_data" | "calendar" | "sector" | "company" | "macro" | "manual" | "mock";
 export type ReferenceProviderStatus = "ready" | "disabled" | "needs_credentials" | "needs_reference" | "needs_data" | "error";
 
+export type ReferenceMetric = {
+  key: string;
+  label: string;
+  value: number;
+  unit: string;
+  asOf: string;
+  sourceName: string;
+  sourceUrl?: string;
+};
+
 export type ReferenceItem = {
   id: string;
   sourceType: ReferenceSourceType;
@@ -30,6 +40,7 @@ export type ReferenceItem = {
   market?: "KR" | "US" | "GLOBAL";
   symbols?: string[];
   reliability?: "official" | "major_media" | "aggregator" | "manual" | "mock";
+  metrics?: ReferenceMetric[];
 };
 
 export type CompetitorBlogReference = {

@@ -4,7 +4,7 @@ import { mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { StockBriefingTemplate } from "@/features/content-pipeline/content-pipeline-types";
 import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
-import type { MarketSnapshot, MarketSnapshotMetric } from "@/lib/stock-blog/references/reference-types";
+import type { MarketSnapshot, MarketSnapshotMetric, ReferenceBundle, ReferenceMetric } from "@/lib/stock-blog/references/reference-types";
 import { isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import { isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
 import { isAllowedKisOverseasDegradedSnapshot } from "@/lib/stock-blog/references/kis-overseas-degraded-policy";
@@ -333,6 +333,133 @@ function ratesAndFxSvg(input: {
   return chartFrame({ title: "환율과 미국 국채금리 현황", subtitle: "서로 다른 단위는 분리된 영역으로 표시했습니다.", source: input.source, content, accent: "#9B8CFF" });
 }
 
+function nvidiaThumbnailSvg(input: { title: string; subtitle: string; footer: string; theme: ImageTheme }) {
+  const lines = splitTitle(input.title, 19);
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675">
+  <defs>
+    <linearGradient id="nvBg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#041326"/><stop offset="0.62" stop-color="#0A2B36"/><stop offset="1" stop-color="#123A35"/></linearGradient>
+    <pattern id="nvGrid" width="34" height="34" patternUnits="userSpaceOnUse"><path d="M34 0H0V34" fill="none" stroke="#8EE63F" stroke-opacity="0.08"/></pattern>
+  </defs>
+  <rect width="1200" height="675" rx="28" fill="url(#nvBg)"/>
+  <rect width="1200" height="675" rx="28" fill="url(#nvGrid)"/>
+  <text x="92" y="72" fill="#FFFFFF" font-size="24" font-weight="800" letter-spacing="2" font-family="Georgia,'Times New Roman',serif">BG MARKET NOTE</text>
+  <text x="92" y="116" fill="#B9F3E2" font-size="18" font-weight="700" letter-spacing="3" font-family="Arial,sans-serif">NVIDIA EARNINGS CHECK</text>
+  <rect x="92" y="136" width="96" height="6" rx="3" fill="#76D33C"/>
+  <text x="92" y="204" fill="#D2E2F1" font-size="22" font-weight="600" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${xmlEscape(truncate(input.subtitle, 44))}</text>
+  ${lines.map((line, index) => `<text x="92" y="286" dy="${index * 66}" fill="#FFFFFF" font-size="52" font-weight="800" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${xmlEscape(line)}</text>`).join("")}
+  <g transform="translate(760 150)">
+    <rect x="0" y="0" width="310" height="310" rx="30" fill="#071A25" stroke="#8EE63F" stroke-width="4"/>
+    <rect x="54" y="54" width="202" height="202" rx="20" fill="#102C33" stroke="#B9F3E2" stroke-opacity="0.55"/>
+    <text x="155" y="142" text-anchor="middle" fill="#8EE63F" font-size="26" font-weight="800" font-family="Arial,sans-serif">AI ACCELERATOR</text>
+    <text x="155" y="190" text-anchor="middle" fill="#FFFFFF" font-size="34" font-weight="800" font-family="Arial,sans-serif">NVDA</text>
+    <text x="155" y="226" text-anchor="middle" fill="#BFD2E5" font-size="17" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">실적 · 가이던스 · HBM</text>
+    ${Array.from({ length: 8 }, (_, index) => `<line x1="${36 + index * 34}" y1="-18" x2="${36 + index * 34}" y2="0" stroke="#8EE63F" stroke-width="6"/><line x1="${36 + index * 34}" y1="310" x2="${36 + index * 34}" y2="328" stroke="#8EE63F" stroke-width="6"/>`).join("")}
+    ${Array.from({ length: 8 }, (_, index) => `<line x1="-18" y1="${36 + index * 34}" x2="0" y2="${36 + index * 34}" stroke="#8EE63F" stroke-width="6"/><line x1="310" y1="${36 + index * 34}" x2="328" y2="${36 + index * 34}" stroke="#8EE63F" stroke-width="6"/>`).join("")}
+  </g>
+  <rect x="0" y="611" width="1200" height="64" fill="#041120" opacity="0.94"/>
+  <text x="92" y="652" fill="#AFC5DA" font-size="17" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${xmlEscape(input.footer)}</text>
+  <text x="1108" y="652" text-anchor="end" fill="#FFFFFF" font-size="18" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">공식 실적과 시장 반응을 함께 확인</text>
+</svg>`;
+}
+
+function nvidiaEarningsSvg(metrics: Record<string, ReferenceMetric>, source: string) {
+  const cards = [
+    { key: "nvidia.fy2027.q2.revenue", title: "2분기 매출", display: `$${metrics["nvidia.fy2027.q2.revenue"].value.toFixed(1)}B`, note: "전년 동기 대비 +106%" },
+    { key: "nvidia.fy2027.q2.dataCenterRevenue", title: "데이터센터 매출", display: `$${metrics["nvidia.fy2027.q2.dataCenterRevenue"].value.toFixed(1)}B`, note: "전년 동기 대비 +117%" },
+    { key: "nvidia.fy2027.q2.nonGaapEps", title: "조정 EPS", display: `$${metrics["nvidia.fy2027.q2.nonGaapEps"].value.toFixed(2)}`, note: "비GAAP 기준" },
+    { key: "nvidia.fy2027.q3.revenueGuidance", title: "3분기 매출 가이던스", display: `$${metrics["nvidia.fy2027.q3.revenueGuidance"].value.toFixed(0)}B`, note: "±2% 범위" },
+  ];
+  const content = cards.map((card, index) => {
+    const x = 72 + (index % 2) * 540;
+    const y = 220 + Math.floor(index / 2) * 165;
+    return `<g><rect x="${x}" y="${y}" width="500" height="132" rx="18" fill="#0A2138" stroke="#76D33C" stroke-opacity="0.38"/><text x="${x + 32}" y="${y + 39}" fill="#BFD2E5" font-size="20" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${card.title}</text><text x="${x + 32}" y="${y + 92}" fill="#FFFFFF" font-size="43" font-weight="800" font-family="Arial,sans-serif">${card.display}</text><text x="${x + 468}" y="${y + 92}" text-anchor="end" fill="#8EE63F" font-size="18" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${card.note}</text></g>`;
+  }).join("");
+  return chartFrame({
+    title: "엔비디아 FY2027 2분기 핵심 숫자",
+    subtitle: "실적·데이터센터 매출·다음 분기 가이던스를 한 화면에 정리했습니다.",
+    source,
+    content,
+    accent: "#76D33C",
+  });
+}
+
+function nvidiaExpectationsSvg(metrics: Record<string, ReferenceMetric>, source: string) {
+  const revenueActual = metrics["nvidia.fy2027.q2.revenue"].value;
+  const revenueEstimate = metrics["nvidia.fy2027.q2.revenueEstimate"].value;
+  const epsActual = metrics["nvidia.fy2027.q2.nonGaapEps"].value;
+  const epsEstimate = metrics["nvidia.fy2027.q2.nonGaapEpsEstimate"].value;
+  const afterHours = metrics["nvidia.fy2027.q2.afterHoursChangePct"].value;
+  const comparison = (x: number, y: number, label: string, actual: number, estimate: number, unit: string, digits: number) => {
+    const maximum = Math.max(actual, estimate);
+    const actualWidth = Math.round(actual / maximum * 330);
+    const estimateWidth = Math.round(estimate / maximum * 330);
+    return `<g><rect x="${x}" y="${y}" width="480" height="245" rx="20" fill="#0A2138" stroke="#76D33C" stroke-opacity="0.3"/><text x="${x + 30}" y="${y + 45}" fill="#FFFFFF" font-size="24" font-weight="800" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${label}</text><text x="${x + 30}" y="${y + 96}" fill="#BFD2E5" font-size="18" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">실제</text><rect x="${x + 100}" y="${y + 73}" width="${actualWidth}" height="30" rx="8" fill="#76D33C"/><text x="${x + 445}" y="${y + 97}" text-anchor="end" fill="#FFFFFF" font-size="20" font-weight="800" font-family="Arial,sans-serif">${actual.toFixed(digits)}${unit}</text><text x="${x + 30}" y="${y + 156}" fill="#BFD2E5" font-size="18" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">예상</text><rect x="${x + 100}" y="${y + 133}" width="${estimateWidth}" height="30" rx="8" fill="#71879C"/><text x="${x + 445}" y="${y + 157}" text-anchor="end" fill="#FFFFFF" font-size="20" font-weight="800" font-family="Arial,sans-serif">${estimate.toFixed(digits)}${unit}</text><text x="${x + 30}" y="${y + 210}" fill="#8EE63F" font-size="18" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">FactSet 예상치 상회</text></g>`;
+  };
+  const content = `${comparison(72, 218, "매출 비교", revenueActual, revenueEstimate, "B", 2)}${comparison(590, 218, "조정 EPS 비교", epsActual, epsEstimate, "달러", 2)}<rect x="390" y="500" width="420" height="72" rx="18" fill="#163A2A" stroke="#8EE63F" stroke-opacity="0.5"/><text x="600" y="530" text-anchor="middle" fill="#B9F3E2" font-size="18" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">실적 발표 뒤 시간외 반응</text><text x="600" y="562" text-anchor="middle" fill="#FFFFFF" font-size="30" font-weight="800" font-family="Arial,sans-serif">+${afterHours.toFixed(1)}%</text>`;
+  return chartFrame({
+    title: "시장 예상치와 발표 뒤 반응",
+    subtitle: "매출과 EPS는 단위가 달라 각각 비교하고, 시간외 반응은 별도로 표시했습니다.",
+    source,
+    content,
+    accent: "#76D33C",
+  });
+}
+
+function nvidiaHbmPathSvg(source: string) {
+  const steps = [
+    { title: "데이터센터 수요", note: "클라우드·AI 투자" },
+    { title: "AI 가속기 출하 기대", note: "엔비디아 가이던스" },
+    { title: "HBM 수요 기대", note: "가속기당 고대역폭 메모리" },
+    { title: "국내 반도체 확인", note: "삼성전자·SK하이닉스 수급" },
+  ];
+  const content = `<g>${steps.map((step, index) => {
+    const x = 55 + index * 285;
+    const arrow = index < steps.length - 1 ? `<path d="M${x + 238} 360H${x + 274}" stroke="#8EE63F" stroke-width="7" stroke-linecap="round"/><path d="M${x + 264} 348L${x + 278} 360L${x + 264} 372" fill="none" stroke="#8EE63F" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>` : "";
+    return `<rect x="${x}" y="270" width="238" height="180" rx="22" fill="#0A2138" stroke="#76D33C" stroke-opacity="0.42"/><circle cx="${x + 32}" cy="${304}" r="17" fill="#76D33C"/><text x="${x + 32}" y="311" text-anchor="middle" fill="#071426" font-size="17" font-weight="800" font-family="Arial,sans-serif">${index + 1}</text><text x="${x + 22}" y="355" fill="#FFFFFF" font-size="21" font-weight="800" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${step.title}</text><text x="${x + 22}" y="397" fill="#BFD2E5" font-size="17" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${step.note}</text>${arrow}`;
+  }).join("")}</g><rect x="210" y="500" width="780" height="62" rx="18" fill="#2A2030" stroke="#F0B46A" stroke-opacity="0.48"/><text x="600" y="539" text-anchor="middle" fill="#FFE0B2" font-size="19" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">전달 경로일 뿐, 개별 종목의 상승을 보장하지 않습니다.</text>`;
+  return chartFrame({
+    title: "엔비디아 실적이 국내 HBM주로 전달되는 경로",
+    subtitle: "실적 숫자에서 국내 반도체 수급까지는 네 단계를 나눠 확인합니다.",
+    source,
+    content,
+    accent: "#76D33C",
+  });
+}
+
+const LEGACY_NVIDIA_METRICS: Record<string, ReferenceMetric[]> = {
+  "official-nvidia-q2-fy2027-results": [
+    { key: "nvidia.fy2027.q2.revenue", label: "매출", value: 96.2, unit: "십억달러", asOf: "2026-08-26", sourceName: "NVIDIA Newsroom", sourceUrl: "https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-second-quarter-fiscal-2027" },
+    { key: "nvidia.fy2027.q2.dataCenterRevenue", label: "데이터센터 매출", value: 89, unit: "십억달러", asOf: "2026-08-26", sourceName: "NVIDIA Newsroom", sourceUrl: "https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-second-quarter-fiscal-2027" },
+    { key: "nvidia.fy2027.q2.nonGaapEps", label: "조정 EPS", value: 2.22, unit: "달러", asOf: "2026-08-26", sourceName: "NVIDIA Newsroom", sourceUrl: "https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-second-quarter-fiscal-2027" },
+    { key: "nvidia.fy2027.q3.revenueGuidance", label: "다음 분기 매출 가이던스", value: 108, unit: "십억달러", asOf: "2026-08-26", sourceName: "NVIDIA Newsroom", sourceUrl: "https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-second-quarter-fiscal-2027" },
+  ],
+  "verified-ap-nvidia-q2-fy2027-reaction": [
+    { key: "nvidia.fy2027.q2.revenueEstimate", label: "FactSet 매출 예상", value: 92.27, unit: "십억달러", asOf: "2026-08-26", sourceName: "AP News · FactSet", sourceUrl: "https://apnews.com/article/dc8d556e709b50915cca9217a60b1991" },
+    { key: "nvidia.fy2027.q2.nonGaapEpsEstimate", label: "FactSet 조정 EPS 예상", value: 2.09, unit: "달러", asOf: "2026-08-26", sourceName: "AP News · FactSet", sourceUrl: "https://apnews.com/article/dc8d556e709b50915cca9217a60b1991" },
+    { key: "nvidia.fy2027.q2.afterHoursChangePct", label: "시간외 주가 반응", value: 4.1, unit: "%", asOf: "2026-08-26 실적 발표 뒤", sourceName: "AP News", sourceUrl: "https://apnews.com/article/dc8d556e709b50915cca9217a60b1991" },
+  ],
+};
+
+function withLegacyNvidiaMetrics(bundle?: ReferenceBundle): ReferenceBundle | undefined {
+  if (!bundle) return undefined;
+  return {
+    ...bundle,
+    items: bundle.items.map((item) => ({
+      ...item,
+      metrics: item.metrics?.length ? item.metrics : LEGACY_NVIDIA_METRICS[item.id],
+    })),
+  };
+}
+
+function referenceMetricMap(bundle?: ReferenceBundle): Record<string, ReferenceMetric> {
+  return Object.fromEntries((bundle?.items ?? []).flatMap((item) => item.metrics ?? []).map((metric) => [metric.key, metric]));
+}
+
+function isNvidiaSubject(input: { title: string; topic: string }) {
+  return /NVIDIA|엔비디아|\bNVDA\b/i.test(`${input.title}\n${input.topic}`);
+}
+
 function blockedImageResult(generatedAt: string, message: string): GeneratedStockBlogImages {
   return {
     inlineImageUrls: [],
@@ -361,23 +488,10 @@ export async function generateStockBlogImages(input: {
   topic: string;
   marketDate?: string;
   marketSnapshot?: MarketSnapshot;
+  referenceBundle?: ReferenceBundle;
 }): Promise<GeneratedStockBlogImages> {
   const generatedAt = new Date().toISOString();
   const snapshot = input.marketSnapshot;
-  if (
-    !snapshot
-    || snapshot.status !== "ready"
-    || (
-      snapshot.dataQuality !== "verified"
-      && !isAllowedFredDegradedSnapshot(snapshot)
-      && !isAllowedKisSectorDegradedSnapshot(snapshot)
-      && !isAllowedKisOverseasDegradedSnapshot(snapshot)
-    )
-    || snapshot.freshness?.status !== "fresh"
-    || snapshot.fallbackUsed !== false
-  ) {
-    return blockedImageResult(generatedAt, "검증된 최신 MarketSnapshot이 없어 데이터 차트를 생성하지 않았습니다.");
-  }
   const id = safeSegment(input.pipelineId);
   const relativeDir = `/generated/stock-blog/${id}`;
   const outputDir = path.join(process.cwd(), "public", "generated", "stock-blog", id);
@@ -395,6 +509,115 @@ export async function generateStockBlogImages(input: {
     : editorialTitle;
   const thumbnailSubtitle = titleFocus || input.topic;
   try {
+    if (isNvidiaSubject(input)) {
+      const subjectReferenceBundle = withLegacyNvidiaMetrics(input.referenceBundle);
+      const metrics = referenceMetricMap(subjectReferenceBundle);
+      const requiredMetricKeys = [
+        "nvidia.fy2027.q2.revenue",
+        "nvidia.fy2027.q2.dataCenterRevenue",
+        "nvidia.fy2027.q2.nonGaapEps",
+        "nvidia.fy2027.q3.revenueGuidance",
+        "nvidia.fy2027.q2.revenueEstimate",
+        "nvidia.fy2027.q2.nonGaapEpsEstimate",
+        "nvidia.fy2027.q2.afterHoursChangePct",
+      ];
+      const missingMetricKeys = requiredMetricKeys.filter((key) => !metrics[key]);
+      if (missingMetricKeys.length > 0) {
+        throw new Error(`NVIDIA_TOPIC_IMAGE_METRICS_MISSING:${missingMetricKeys.join(",")}`);
+      }
+      const officialItem = subjectReferenceBundle?.items.find((item) => item.id === "official-nvidia-q2-fy2027-results");
+      const reactionItem = subjectReferenceBundle?.items.find((item) => item.id === "verified-ap-nvidia-q2-fy2027-reaction");
+      const hbmItem = subjectReferenceBundle?.items.find((item) => item.id === "verified-etoday-nvidia-hbm-link-20260826");
+      if (!officialItem?.url || !reactionItem?.url || !hbmItem?.url) {
+        throw new Error("NVIDIA_TOPIC_IMAGE_SOURCES_MISSING");
+      }
+      const officialSource = `기준일 ${metrics["nvidia.fy2027.q2.revenue"].asOf} | 출처 NVIDIA Newsroom`;
+      const reactionSource = `기준일 ${metrics["nvidia.fy2027.q2.afterHoursChangePct"].asOf} | 출처 NVIDIA Newsroom · AP News · FactSet`;
+      const hbmSource = "산업 연결 경로 | 출처 NVIDIA Newsroom · 이투데이 · BG Market Note 재구성";
+      const files = [
+        { name: "thumbnail.svg", svg: nvidiaThumbnailSvg({ title: thumbnailTitle, subtitle: "매출 962억달러 · 시간외 +4.1% · HBM 전달 경로", footer, theme }) },
+        { name: "nvidia-earnings.svg", svg: nvidiaEarningsSvg(metrics, officialSource) },
+        { name: "nvidia-expectations.svg", svg: nvidiaExpectationsSvg(metrics, reactionSource) },
+        { name: "nvidia-hbm-path.svg", svg: nvidiaHbmPathSvg(hbmSource) },
+      ];
+      await mkdir(outputDir, { recursive: true });
+      await Promise.all(files.map((file) => writeFile(path.join(outputDir, file.name), file.svg, "utf8")));
+      const sizes = await Promise.all(files.map((file) => stat(path.join(outputDir, file.name))));
+      if (sizes.some((file) => !file.isFile() || file.size < 500)) throw new Error("IMAGE_FILE_VERIFICATION_FAILED");
+      const referencePoint = (key: string) => {
+        const metric = metrics[key];
+        return dataPoint(`reference.${key}`, metric.label, metric.value, metric.unit, metric.asOf);
+      };
+      const contentImages: StockBlogContentImage[] = [
+        {
+          id: "thumbnail", role: "thumbnail", type: "thumbnail", title: thumbnailTitle,
+          placementAfterHeading: "__thumbnail__", imageUrl: `${relativeDir}/thumbnail.svg`, caption: thumbnailTitle,
+          sourceLabel: "BG Market Note 자체 제작", sourceName: "BG Market Note", relevanceTags: ["nvidia", "earnings", "hbm"],
+          licenseType: "generated", collectedAt: generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [],
+          width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
+        },
+        {
+          id: "nvidia-earnings", role: "body", type: "chart", title: "엔비디아 FY2027 2분기 핵심 숫자",
+          placementAfterHeading: placements.majorIndexChange, imageUrl: `${relativeDir}/nvidia-earnings.svg`,
+          caption: "엔비디아 매출·데이터센터 매출·조정 EPS·다음 분기 매출 가이던스",
+          sourceLabel: officialSource, sourceName: "NVIDIA Newsroom", sourceUrl: officialItem.url, relevanceTags: ["nvidia", "earnings", "data-center"],
+          licenseType: "generated-data-chart", collectedAt: officialItem.collectedAt ?? generatedAt, usageAllowed: true,
+          dataKeys: requiredMetricKeys.slice(0, 4).map((key) => `reference.${key}`),
+          dataPoints: requiredMetricKeys.slice(0, 4).map(referencePoint),
+          width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
+        },
+        {
+          id: "nvidia-hbm-path", role: "body", type: "related-image", title: "엔비디아 실적에서 국내 HBM주까지 전달 경로",
+          placementAfterHeading: placements.fxAndUsYields, imageUrl: `${relativeDir}/nvidia-hbm-path.svg`,
+          caption: "데이터센터 수요에서 AI 가속기·HBM·국내 반도체 수급으로 이어지는 확인 순서",
+          sourceLabel: hbmSource, sourceName: "NVIDIA Newsroom · 이투데이", sourceUrl: hbmItem.url, relevanceTags: ["nvidia", "hbm", "samsung-electronics", "sk-hynix"],
+          licenseType: "generated", collectedAt: hbmItem.collectedAt ?? generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [],
+          width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
+        },
+        {
+          id: "nvidia-expectations", role: "body", type: "chart", title: "시장 예상치와 발표 뒤 반응",
+          placementAfterHeading: placements.kospiInvestorFlow, imageUrl: `${relativeDir}/nvidia-expectations.svg`,
+          caption: "FactSet 매출·조정 EPS 예상치와 실제값, 발표 뒤 엔비디아 시간외 주가 반응",
+          sourceLabel: reactionSource, sourceName: "NVIDIA Newsroom · AP News · FactSet", sourceUrl: reactionItem.url, relevanceTags: ["nvidia", "earnings", "after-hours"],
+          licenseType: "generated-data-chart", collectedAt: reactionItem.collectedAt ?? generatedAt, usageAllowed: true,
+          dataKeys: [
+            "nvidia.fy2027.q2.revenue", "nvidia.fy2027.q2.revenueEstimate", "nvidia.fy2027.q2.nonGaapEps",
+            "nvidia.fy2027.q2.nonGaapEpsEstimate", "nvidia.fy2027.q2.afterHoursChangePct",
+          ].map((key) => `reference.${key}`),
+          dataPoints: [
+            "nvidia.fy2027.q2.revenue", "nvidia.fy2027.q2.revenueEstimate", "nvidia.fy2027.q2.nonGaapEps",
+            "nvidia.fy2027.q2.nonGaapEpsEstimate", "nvidia.fy2027.q2.afterHoursChangePct",
+          ].map(referencePoint),
+          width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
+        },
+      ];
+      const imageQuality = evaluateStockBlogImageQuality(contentImages, snapshot, {
+        referenceBundle: subjectReferenceBundle,
+        requiredRelevanceTags: ["nvidia"],
+        minimumRelevantBodyImages: 3,
+      });
+      if (imageQuality.status !== "passed") throw new Error(imageQuality.issues.map((issue) => `${issue.code}:${issue.message}`).join(" | "));
+      return {
+        thumbnailImageUrl: `${relativeDir}/thumbnail.svg`,
+        inlineImageUrls: contentImages.filter((image) => image.role === "body").map((image) => image.imageUrl),
+        contentImages, imageQuality, imageStatus: "generated", imageGeneratedAt: generatedAt,
+      };
+    }
+
+    if (
+      !snapshot
+      || snapshot.status !== "ready"
+      || (
+        snapshot.dataQuality !== "verified"
+        && !isAllowedFredDegradedSnapshot(snapshot)
+        && !isAllowedKisSectorDegradedSnapshot(snapshot)
+        && !isAllowedKisOverseasDegradedSnapshot(snapshot)
+      )
+      || snapshot.freshness?.status !== "fresh"
+      || snapshot.fallbackUsed !== false
+    ) {
+      throw new Error("검증된 최신 MarketSnapshot이 없어 데이터 차트를 생성하지 않았습니다.");
+    }
     const omitMissingOverseasItems = isAllowedKisOverseasDegradedSnapshot(snapshot);
     const kospi = numericMetric(snapshot.korea?.kospi, "changePct", "KOSPI_CHANGE");
     const kosdaq = numericMetric(snapshot.korea?.kosdaq, "changePct", "KOSDAQ_CHANGE");

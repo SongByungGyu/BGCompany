@@ -548,6 +548,12 @@ async function buildInvestmentStudyPipelineInput(
       market: "US",
       symbols: ["NVDA"],
       reliability: "official",
+      metrics: [
+        { key: "nvidia.fy2027.q2.revenue", label: "매출", value: 96.2, unit: "십억달러", asOf: "2026-08-26", sourceName: "NVIDIA Newsroom", sourceUrl: "https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-second-quarter-fiscal-2027" },
+        { key: "nvidia.fy2027.q2.dataCenterRevenue", label: "데이터센터 매출", value: 89, unit: "십억달러", asOf: "2026-08-26", sourceName: "NVIDIA Newsroom", sourceUrl: "https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-second-quarter-fiscal-2027" },
+        { key: "nvidia.fy2027.q2.nonGaapEps", label: "조정 EPS", value: 2.22, unit: "달러", asOf: "2026-08-26", sourceName: "NVIDIA Newsroom", sourceUrl: "https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-second-quarter-fiscal-2027" },
+        { key: "nvidia.fy2027.q3.revenueGuidance", label: "다음 분기 매출 가이던스", value: 108, unit: "십억달러", asOf: "2026-08-26", sourceName: "NVIDIA Newsroom", sourceUrl: "https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-second-quarter-fiscal-2027" },
+      ],
     }]
     : [];
   const verifiedReactionItems: ReferenceItem[] = resultScan?.events.some((event) => (
@@ -574,6 +580,11 @@ async function buildInvestmentStudyPipelineInput(
         market: "US",
         symbols: ["NVDA"],
         reliability: "major_media",
+        metrics: [
+          { key: "nvidia.fy2027.q2.revenueEstimate", label: "FactSet 매출 예상", value: 92.27, unit: "십억달러", asOf: "2026-08-26", sourceName: "AP News · FactSet", sourceUrl: "https://apnews.com/article/dc8d556e709b50915cca9217a60b1991" },
+          { key: "nvidia.fy2027.q2.nonGaapEpsEstimate", label: "FactSet 조정 EPS 예상", value: 2.09, unit: "달러", asOf: "2026-08-26", sourceName: "AP News · FactSet", sourceUrl: "https://apnews.com/article/dc8d556e709b50915cca9217a60b1991" },
+          { key: "nvidia.fy2027.q2.afterHoursChangePct", label: "시간외 주가 반응", value: 4.1, unit: "%", asOf: "2026-08-26 실적 발표 뒤", sourceName: "AP News", sourceUrl: "https://apnews.com/article/dc8d556e709b50915cca9217a60b1991" },
+        ],
       },
       {
         id: "verified-newdaily-nvidia-korea-reaction-20260827",
