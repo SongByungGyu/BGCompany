@@ -179,7 +179,7 @@ export function evaluateStockBlogSchedulerRetry(
   }
 
   const delayMs = input.status === "running"
-    ? Math.max(input.retryDelayMinutes, 30) * 60 * 1000
+    ? Math.max(input.retryDelayMinutes, 15) * 60 * 1000
     : input.retryDelayMinutes * 60 * 1000;
   // Scheduler ticks run on exact 10-minute boundaries, while the previous
   // attempt timestamp is written after collection finishes. Allow a small

@@ -24,6 +24,11 @@ export type LargeCapDisclosureScanResult = {
 
 type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
+function requestTimeoutMs() {
+  const parsed = Number(process.env.STOCK_BLOG_OFFICIAL_DISCLOSURE_TIMEOUT_MS ?? "10000");
+  return Math.max(3_000, Math.min(Number.isFinite(parsed) ? parsed : 10_000, 30_000));
+}
+
 const DEFAULT_KR_LARGE_CAP_NAMES = [
   "삼성전자", "SK하이닉스", "LG에너지솔루션", "삼성바이오로직스", "현대차",
   "기아", "셀트리온", "KB금융", "NAVER", "한화에어로스페이스", "HD현대중공업",
@@ -82,7 +87,9 @@ async function scanOpenDart(input: {
     sort_mth: "desc",
   });
   try {
-    const response = await input.fetchImpl(`https://opendart.fss.or.kr/api/list.json?${params.toString()}`);
+    const response = await input.fetchImpl(`https://opendart.fss.or.kr/api/list.json?${params.toString()}`, {
+      signal: AbortSignal.timeout(requestTimeoutMs()),
+    });
     if (!response.ok) throw new Error(`OpenDART HTTP ${response.status}`);
     const payload = await response.json() as {
       status?: string;
@@ -134,7 +141,10 @@ async function scanSecEdgar(input: { now: Date; lookbackHours: number; fetchImpl
     Accept: "application/json",
   };
   try {
-    const tickerResponse = await input.fetchImpl("https://www.sec.gov/files/company_tickers.json", { headers });
+    const tickerResponse = await input.fetchImpl("https://www.sec.gov/files/company_tickers.json", {
+      headers,
+      signal: AbortSignal.timeout(requestTimeoutMs()),
+    });
     if (!tickerResponse.ok) throw new Error(`SEC ticker HTTP ${tickerResponse.status}`);
     const tickerPayload = await tickerResponse.json() as Record<string, SecTickerEntry>;
     const wanted = new Set(configuredList(process.env.STOCK_BLOG_US_LARGE_CAP_SYMBOLS, DEFAULT_US_LARGE_CAP_SYMBOLS).map((symbol) => symbol.toUpperCase()));
@@ -142,7 +152,10 @@ async function scanSecEdgar(input: { now: Date; lookbackHours: number; fetchImpl
     const fetchCompany = async (entry: SecTickerEntry) => {
       const cik = String(entry.cik_str ?? "").padStart(10, "0");
       if (!/^\d{10}$/.test(cik)) return [] as LargeCapDisclosureEvent[];
-      const response = await input.fetchImpl(`https://data.sec.gov/submissions/CIK${cik}.json`, { headers });
+      const response = await input.fetchImpl(`https://data.sec.gov/submissions/CIK${cik}.json`, {
+        headers,
+        signal: AbortSignal.timeout(requestTimeoutMs()),
+      });
       if (!response.ok) throw new Error(`SEC submissions ${entry.ticker ?? cik} HTTP ${response.status}`);
       const payload = await response.json() as { name?: string; filings?: { recent?: SecRecentFilings } };
       const recent = payload.filings?.recent;

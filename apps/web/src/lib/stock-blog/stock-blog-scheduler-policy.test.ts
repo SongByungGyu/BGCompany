@@ -331,12 +331,12 @@ test("Hermes 용량 대기는 시도 횟수를 소진하지 않고 다시 실행
   assert.deepEqual(decision, { allowed: true, attempt: 3 });
 });
 
-test("중단된 running 실행은 30분 뒤 같은 시도로 복구한다", () => {
+test("중단된 running 실행은 15분 뒤 같은 시도로 복구한다", () => {
   const waiting = evaluateStockBlogSchedulerRetry({
     exists: true,
     status: "running",
     previousAttempt: 2,
-    elapsedMs: 20 * 60 * 1000,
+    elapsedMs: 10 * 60 * 1000,
     autoPublish: true,
     autoPublishRetryLimit: 2,
     maxRetries: 3,
@@ -346,7 +346,7 @@ test("중단된 running 실행은 30분 뒤 같은 시도로 복구한다", () =
     exists: true,
     status: "running",
     previousAttempt: 2,
-    elapsedMs: 30 * 60 * 1000,
+    elapsedMs: 15 * 60 * 1000,
     autoPublish: true,
     autoPublishRetryLimit: 2,
     maxRetries: 3,
