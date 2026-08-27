@@ -85,7 +85,8 @@ test("선정된 실적 주제는 일반 투자공부 검색보다 회사·종목
     prioritizeInputQueries: true,
   });
 
-  assert.match(queries[0], /엔비디아 실적 발표/);
-  assert.match(queries[1], /엔비디아 공식 실적/);
-  assert.ok(queries.indexOf("이번 주 미국 CPI PPI FOMC 고용지표 발표시간") > 1);
+  assert.equal(queries[0], "엔비디아 실적 발표, 시간외 주가는 왜 올랐을까");
+  assert.equal(queries[1], "엔비디아 실적 발표 엔비디아 시간외 주가");
+  assert.equal(queries[2], "엔비디아 실적 발표 삼성전자 SK하이닉스");
+  assert.ok(queries.indexOf("이번 주 미국 CPI PPI FOMC 고용지표 발표시간") > 2);
 });

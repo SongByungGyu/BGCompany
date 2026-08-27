@@ -550,16 +550,86 @@ async function buildInvestmentStudyPipelineInput(
       reliability: "official",
     }]
     : [];
+  const verifiedReactionItems: ReferenceItem[] = resultScan?.events.some((event) => (
+    event.symbol === "NVDA" && event.eventType === "earnings" && event.filedAt === "2026-08-26"
+  ))
+    ? [
+      {
+        id: "verified-ap-nvidia-q2-fy2027-reaction",
+        sourceType: "news",
+        provider: "verified-web",
+        title: "Strong AI chip demand fuels Nvidia's Q2 results well beyond Wall Street's expectations",
+        url: "https://apnews.com/article/dc8d556e709b50915cca9217a60b1991",
+        originalUrl: "https://apnews.com/article/dc8d556e709b50915cca9217a60b1991",
+        publisher: "AP News",
+        sourceName: "AP News",
+        publishedAt: "2026-08-26T20:40:45Z",
+        collectedAt: new Date().toISOString(),
+        summary: "AP는 FactSet 기준 조정 EPS 예상 2.09달러와 매출 예상 922.7억달러를 실제 조정 EPS 2.22달러·매출 962.2억달러와 비교했고, 실적 발표 뒤 엔비디아가 시간외 거래에서 4.1% 상승했다고 보도했습니다.",
+        keywords: ["엔비디아 실적", "시간외 4.1%", "시장 예상치", "데이터센터"],
+        relevanceScore: 1,
+        usageNote: "시간외 반응과 시장 예상치 비교는 이 기사에 확인된 수치만 사용",
+        copyrightPolicy: "기사의 사실과 수치만 자체 문장으로 요약하고 원문 링크를 표시",
+        contentType: "INVESTMENT_STUDY",
+        market: "US",
+        symbols: ["NVDA"],
+        reliability: "major_media",
+      },
+      {
+        id: "verified-newdaily-nvidia-korea-reaction-20260827",
+        sourceType: "news",
+        provider: "verified-web",
+        title: "엔비디아가 잠재운 'AI 고점론' … 코스피 7000선 재돌파 코앞",
+        url: "https://biz.newdaily.co.kr/site/data/html/2026/08/27/2026082700041.html",
+        originalUrl: "https://biz.newdaily.co.kr/site/data/html/2026/08/27/2026082700041.html",
+        publisher: "뉴데일리경제",
+        sourceName: "뉴데일리경제",
+        publishedAt: "2026-08-27T09:27:00+09:00",
+        collectedAt: new Date().toISOString(),
+        summary: "27일 장중 엔비디아 실적과 시간외 4%대 강세 뒤 삼성전자와 SK하이닉스가 동반 상승했고, 반도체 업종과 코스피가 강세를 보였다고 보도했습니다. 국내 반도체 반응은 당일 장중 시각 기준으로만 사용합니다.",
+        keywords: ["엔비디아 실적", "삼성전자", "SK하이닉스", "코스피", "반도체"],
+        relevanceScore: 1,
+        usageNote: "국내 반도체주와 코스피 반응은 기사 입력 시각을 함께 밝혀 사용",
+        copyrightPolicy: "기사의 사실과 수치만 자체 문장으로 요약하고 원문 링크를 표시",
+        contentType: "INVESTMENT_STUDY",
+        market: "KR",
+        symbols: ["NVDA", "005930", "000660"],
+        reliability: "major_media",
+      },
+      {
+        id: "verified-etoday-nvidia-hbm-link-20260826",
+        sourceType: "news",
+        provider: "verified-web",
+        title: "엔비디아 실적 앞두고 삼성·SK 촉각…‘메모리 호황’ 이어질까",
+        url: "https://m.etoday.co.kr/news/view/2618457",
+        originalUrl: "https://m.etoday.co.kr/news/view/2618457",
+        publisher: "이투데이",
+        sourceName: "이투데이",
+        publishedAt: "2026-08-26T16:16:00+09:00",
+        collectedAt: new Date().toISOString(),
+        summary: "엔비디아 데이터센터와 차세대 AI 가속기 수요가 HBM4 수요 전망을 거쳐 삼성전자·SK하이닉스 공급 기대와 연결되는 경로를 설명한 사전 기사입니다. 실제 실적 뒤 주가 반응과 전망을 구분해 사용합니다.",
+        keywords: ["엔비디아", "HBM4", "삼성전자", "SK하이닉스", "메모리"],
+        relevanceScore: 0.98,
+        usageNote: "데이터센터 수요에서 HBM 공급사로 이어지는 산업 연결 경로에 한해 사용",
+        copyrightPolicy: "기사의 사실과 산업 연결 설명만 자체 문장으로 요약하고 원문 링크를 표시",
+        contentType: "INVESTMENT_STUDY",
+        market: "GLOBAL",
+        symbols: ["NVDA", "005930", "000660"],
+        reliability: "major_media",
+      },
+    ]
+    : [];
   const officialResultItems = [...verifiedReleaseItems, ...filingResultItems];
-  const referenceBundle: ReferenceBundle = officialResultItems.length > 0
+  const verifiedResultItems = [...officialResultItems, ...verifiedReactionItems];
+  const referenceBundle: ReferenceBundle = verifiedResultItems.length > 0
     ? {
       ...baseReferenceBundle,
       items: [
-        ...officialResultItems,
-        ...baseReferenceBundle.items.filter((item) => !officialResultItems.some((official) => official.url === item.url)),
+        ...verifiedResultItems,
+        ...baseReferenceBundle.items.filter((item) => !verifiedResultItems.some((verified) => verified.url === item.url)),
       ],
       keyThemes: Array.from(new Set([
-        ...officialResultItems.flatMap((item) => item.keywords ?? []),
+        ...verifiedResultItems.flatMap((item) => item.keywords ?? []),
         ...baseReferenceBundle.keyThemes,
       ])),
       sourcePolicy: `${baseReferenceBundle.sourcePolicy} 실적 수치는 SEC·OpenDART 공식 제출을 우선 확인합니다.`,
@@ -583,21 +653,21 @@ async function buildInvestmentStudyPipelineInput(
     })
     : referenceBundle;
   const selectionText = `${selection.title}\n${selection.topic}\n${selection.keywords.join(" ")}`.toLowerCase();
-  const selectedOfficialItems = definition.investmentStudyAngle === "result_or_practical" && selection.score >= 5
-    ? officialResultItems
-    : officialResultItems.filter((item) => (
+  const selectedResultItems = definition.investmentStudyAngle === "result_or_practical" && selection.score >= 5
+    ? verifiedResultItems
+    : verifiedResultItems.filter((item) => (
       (item.keywords ?? []).some((keyword) => selectionText.includes(keyword.toLowerCase()))
       || (item.symbols ?? []).some((symbol) => selectionText.includes(symbol.toLowerCase()))
     ));
-  const selectedReferenceBundle: ReferenceBundle = selectedOfficialItems.length > 0
+  const selectedReferenceBundle: ReferenceBundle = selectedResultItems.length > 0
     ? {
       ...refinedReferenceBundle,
       items: [
-        ...selectedOfficialItems,
-        ...refinedReferenceBundle.items.filter((item) => !selectedOfficialItems.some((official) => official.url === item.url)),
+        ...selectedResultItems,
+        ...refinedReferenceBundle.items.filter((item) => !selectedResultItems.some((selected) => selected.url === item.url)),
       ],
       keyThemes: Array.from(new Set([
-        ...selectedOfficialItems.flatMap((item) => item.keywords ?? []),
+        ...selectedResultItems.flatMap((item) => item.keywords ?? []),
         ...refinedReferenceBundle.keyThemes,
       ])),
       sourcePolicy: `${refinedReferenceBundle.sourcePolicy} 실적 수치는 SEC·OpenDART 공식 제출을 우선 확인합니다.`,

@@ -48,12 +48,20 @@ const templateQueries: Record<StockReferenceBriefingTemplate, string[]> = {
 
 export function buildReferenceQueries(input: ReferenceSearchInput): string[] {
   const base = templateQueries[input.contentType] ?? templateQueries.KOREA_DAILY_PREVIEW;
-  const keywordQuery = (input.keywords ?? []).slice(0, 4).join(" ").trim();
+  const keywords = (input.keywords ?? []).slice(0, 4);
+  const keywordQuery = keywords.join(" ").trim();
   const topicQuery = [input.topic, input.title].filter(Boolean).join(" ");
-  const inputQueries = [
-    keywordQuery ? `${input.title} ${keywordQuery}` : topicQuery,
-    topicQuery,
-  ];
+  const inputQueries = input.prioritizeInputQueries
+    ? [
+      input.title,
+      keywords.slice(0, 2).join(" "),
+      [keywords[0], ...keywords.slice(2, 4)].filter(Boolean).join(" "),
+      input.topic,
+    ]
+    : [
+      keywordQuery ? `${input.title} ${keywordQuery}` : topicQuery,
+      topicQuery,
+    ];
   const candidates = input.prioritizeInputQueries
     ? [...inputQueries, ...base]
     : [...base, ...inputQueries];
