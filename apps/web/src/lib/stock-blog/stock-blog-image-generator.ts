@@ -334,7 +334,8 @@ function ratesAndFxSvg(input: {
 }
 
 function nvidiaThumbnailSvg(input: { title: string; subtitle: string; footer: string; theme: ImageTheme }) {
-  const lines = splitTitle(input.title, 19);
+  const separatedLines = input.title.split(/\s*\|\s*/).filter(Boolean);
+  const lines = separatedLines.length === 2 ? separatedLines : splitTitle(input.title, 14);
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675">
   <defs>
