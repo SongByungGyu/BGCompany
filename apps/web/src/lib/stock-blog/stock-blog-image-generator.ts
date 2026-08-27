@@ -534,8 +534,9 @@ export async function generateStockBlogImages(input: {
       const officialSource = `기준일 ${metrics["nvidia.fy2027.q2.revenue"].asOf} | 출처 NVIDIA Newsroom`;
       const reactionSource = `기준일 ${metrics["nvidia.fy2027.q2.afterHoursChangePct"].asOf} | 출처 NVIDIA Newsroom · AP News · FactSet`;
       const hbmSource = "산업 연결 경로 | 출처 NVIDIA Newsroom · 이투데이 · BG Market Note 재구성";
+      const nvidiaThumbnailTitle = "엔비디아 실적 발표 | 매출·시간외 주가·HBM";
       const files = [
-        { name: "thumbnail.svg", svg: nvidiaThumbnailSvg({ title: thumbnailTitle, subtitle: "매출 962억달러 · 시간외 +4.1% · HBM 전달 경로", footer, theme }) },
+        { name: "thumbnail.svg", svg: nvidiaThumbnailSvg({ title: nvidiaThumbnailTitle, subtitle: "매출 962억달러 · 시간외 +4.1% · HBM 전달 경로", footer, theme }) },
         { name: "nvidia-earnings.svg", svg: nvidiaEarningsSvg(metrics, officialSource) },
         { name: "nvidia-expectations.svg", svg: nvidiaExpectationsSvg(metrics, reactionSource) },
         { name: "nvidia-hbm-path.svg", svg: nvidiaHbmPathSvg(hbmSource) },
@@ -550,8 +551,8 @@ export async function generateStockBlogImages(input: {
       };
       const contentImages: StockBlogContentImage[] = [
         {
-          id: "thumbnail", role: "thumbnail", type: "thumbnail", title: thumbnailTitle,
-          placementAfterHeading: "__thumbnail__", imageUrl: `${relativeDir}/thumbnail.svg`, caption: thumbnailTitle,
+          id: "thumbnail", role: "thumbnail", type: "thumbnail", title: nvidiaThumbnailTitle,
+          placementAfterHeading: "__thumbnail__", imageUrl: `${relativeDir}/thumbnail.svg`, caption: nvidiaThumbnailTitle,
           sourceLabel: "BG Market Note 자체 제작", sourceName: "BG Market Note", relevanceTags: ["nvidia", "earnings", "hbm"],
           licenseType: "generated", collectedAt: generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [],
           width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
