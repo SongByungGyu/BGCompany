@@ -50,9 +50,12 @@ export function buildReferenceQueries(input: ReferenceSearchInput): string[] {
   const base = templateQueries[input.contentType] ?? templateQueries.KOREA_DAILY_PREVIEW;
   const keywordQuery = (input.keywords ?? []).slice(0, 4).join(" ").trim();
   const topicQuery = [input.topic, input.title].filter(Boolean).join(" ");
-  return Array.from(new Set([
-    ...base,
+  const inputQueries = [
+    keywordQuery ? `${input.title} ${keywordQuery}` : topicQuery,
     topicQuery,
-    keywordQuery ? `${topicQuery} ${keywordQuery}` : topicQuery,
-  ].map((query) => query.trim()).filter(Boolean))).slice(0, 6);
+  ];
+  const candidates = input.prioritizeInputQueries
+    ? [...inputQueries, ...base]
+    : [...base, ...inputQueries];
+  return Array.from(new Set(candidates.map((query) => query.trim()).filter(Boolean))).slice(0, 6);
 }

@@ -197,6 +197,7 @@ export type ReferenceSearchInput = {
   market: "KR" | "US" | "GLOBAL";
   keywords?: string[];
   maxResults?: number;
+  prioritizeInputQueries?: boolean;
 };
 
 export type ReferenceAdapter = {

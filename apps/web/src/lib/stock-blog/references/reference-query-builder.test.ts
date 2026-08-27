@@ -73,3 +73,19 @@ test("투자 공부와 대형주 공시·실적은 각자의 검색 의도로 �
   assert.ok(disclosure.some((query) => query.includes("DART")));
   assert.ok(disclosure.some((query) => query.includes("SEC")));
 });
+
+test("선정된 실적 주제는 일반 투자공부 검색보다 회사·종목 검색을 먼저 실행한다", () => {
+  const queries = buildReferenceQueries({
+    contentType: "INVESTMENT_STUDY",
+    channel: "blog",
+    market: "GLOBAL",
+    topic: "엔비디아 공식 실적과 국내 반도체주 영향",
+    title: "엔비디아 실적 발표, 시간외 주가는 왜 올랐을까",
+    keywords: ["엔비디아 실적 발표", "엔비디아 시간외 주가", "삼성전자", "SK하이닉스"],
+    prioritizeInputQueries: true,
+  });
+
+  assert.match(queries[0], /엔비디아 실적 발표/);
+  assert.match(queries[1], /엔비디아 공식 실적/);
+  assert.ok(queries.indexOf("이번 주 미국 CPI PPI FOMC 고용지표 발표시간") > 1);
+});
