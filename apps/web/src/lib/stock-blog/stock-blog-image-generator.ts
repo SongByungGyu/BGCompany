@@ -333,6 +333,103 @@ function ratesAndFxSvg(input: {
   return chartFrame({ title: "환율과 미국 국채금리 현황", subtitle: "서로 다른 단위는 분리된 영역으로 표시했습니다.", source: input.source, content, accent: "#9B8CFF" });
 }
 
+function yenThumbnailSvg(input: { title: string; subtitle: string; footer: string }) {
+  const lines = splitTitle(input.title, 15);
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675">
+  <defs>
+    <linearGradient id="yenBg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#061426"/><stop offset="0.58" stop-color="#0B3144"/><stop offset="1" stop-color="#123B39"/></linearGradient>
+    <pattern id="yenGrid" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0V36" fill="none" stroke="#64DDB3" stroke-opacity="0.08"/></pattern>
+  </defs>
+  <rect width="1200" height="675" rx="28" fill="url(#yenBg)"/>
+  <rect width="1200" height="675" rx="28" fill="url(#yenGrid)"/>
+  <text x="92" y="72" fill="#FFFFFF" font-size="24" font-weight="800" letter-spacing="2" font-family="Georgia,'Times New Roman',serif">BG MARKET NOTE</text>
+  <text x="92" y="116" fill="#B9F3E2" font-size="18" font-weight="700" letter-spacing="3" font-family="Arial,sans-serif">YEN EXCHANGE STUDY</text>
+  <rect x="92" y="136" width="96" height="6" rx="3" fill="#56D7B0"/>
+  <text x="92" y="204" fill="#D2E2F1" font-size="22" font-weight="600" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${xmlEscape(input.subtitle)}</text>
+  ${lines.map((line, index) => `<text x="92" y="300" dy="${index * 66}" fill="#FFFFFF" font-size="52" font-weight="800" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${xmlEscape(line)}</text>`).join("")}
+  <g transform="translate(790 160)">
+    <circle cx="150" cy="150" r="142" fill="#071D2C" stroke="#56D7B0" stroke-width="4"/>
+    <circle cx="150" cy="150" r="112" fill="#0F3A3B" stroke="#B9F3E2" stroke-opacity="0.45"/>
+    <text x="150" y="150" text-anchor="middle" dominant-baseline="middle" fill="#FFFFFF" font-size="120" font-weight="800" font-family="Arial,sans-serif">¥</text>
+    <text x="150" y="235" text-anchor="middle" fill="#B9F3E2" font-size="22" font-weight="700" font-family="Arial,sans-serif">100 JPY</text>
+  </g>
+  <rect x="0" y="611" width="1200" height="64" fill="#041120" opacity="0.94"/>
+  <text x="92" y="652" fill="#AFC5DA" font-size="17" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${xmlEscape(input.footer)}</text>
+  <text x="1108" y="652" text-anchor="end" fill="#FFFFFF" font-size="18" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">100엔 기준부터 실제 환전가까지</text>
+</svg>`;
+}
+
+function yenSnapshotSvg(metrics: Record<string, ReferenceMetric>, source: string) {
+  const cards = [
+    { title: "원·엔 계산값", display: `${metrics["jpy.jpykrw100"].value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}원`, note: "100엔 기준" },
+    { title: "달러·엔", display: metrics["jpy.usdjpy"].value.toFixed(2), note: "1달러당 엔" },
+    { title: "일본은행 정책금리", display: `${metrics["jpy.bojPolicyRate"].value.toFixed(2)}%`, note: "무담보 익일물" },
+  ];
+  const content = cards.map((card, index) => {
+    const x = 72 + index * 352;
+    return `<g><rect x="${x}" y="235" width="320" height="260" rx="22" fill="#0A2138" stroke="#56D7B0" stroke-opacity="0.38"/><text x="${x + 28}" y="286" fill="#BFD2E5" font-size="20" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${card.title}</text><text x="${x + 28}" y="380" fill="#FFFFFF" font-size="46" font-weight="800" font-family="Arial,'Noto Sans KR',sans-serif">${card.display}</text><text x="${x + 28}" y="442" fill="#B9F3E2" font-size="18" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${card.note}</text></g>`;
+  }).join("");
+  return chartFrame({
+    title: "엔화 환율을 볼 때 필요한 세 숫자",
+    subtitle: "단위가 다른 환율과 금리는 각각 분리해 표시했습니다.",
+    source,
+    content,
+    accent: "#56D7B0",
+  });
+}
+
+function yenFormulaSvg(metrics: Record<string, ReferenceMetric>, source: string) {
+  const usdKrw = metrics["jpy.usdkrw"].value;
+  const usdJpy = metrics["jpy.usdjpy"].value;
+  const jpyKrw100 = metrics["jpy.jpykrw100"].value;
+  const content = `<g>
+    <rect x="72" y="235" width="260" height="215" rx="22" fill="#0A2138" stroke="#56D7B0" stroke-opacity="0.38"/>
+    <text x="202" y="288" text-anchor="middle" fill="#BFD2E5" font-size="19" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">원·달러</text>
+    <text x="202" y="365" text-anchor="middle" fill="#FFFFFF" font-size="43" font-weight="800" font-family="Arial,sans-serif">${usdKrw.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}</text>
+    <text x="202" y="410" text-anchor="middle" fill="#B9F3E2" font-size="18" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">원 ÷</text>
+    <rect x="470" y="235" width="260" height="215" rx="22" fill="#0A2138" stroke="#56D7B0" stroke-opacity="0.38"/>
+    <text x="600" y="288" text-anchor="middle" fill="#BFD2E5" font-size="19" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">달러·엔</text>
+    <text x="600" y="365" text-anchor="middle" fill="#FFFFFF" font-size="43" font-weight="800" font-family="Arial,sans-serif">${usdJpy.toFixed(2)}</text>
+    <text x="600" y="410" text-anchor="middle" fill="#B9F3E2" font-size="18" font-family="Arial,sans-serif">× 100 =</text>
+    <rect x="868" y="235" width="260" height="215" rx="22" fill="#123B39" stroke="#B9F3E2" stroke-opacity="0.62"/>
+    <text x="998" y="288" text-anchor="middle" fill="#BFD2E5" font-size="19" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">원·100엔</text>
+    <text x="998" y="365" text-anchor="middle" fill="#FFFFFF" font-size="43" font-weight="800" font-family="Arial,sans-serif">${jpyKrw100.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}</text>
+    <text x="998" y="410" text-anchor="middle" fill="#B9F3E2" font-size="18" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">원</text>
+    <path d="M345 343H448" stroke="#56D7B0" stroke-width="7" stroke-linecap="round"/><path d="M743 343H846" stroke="#56D7B0" stroke-width="7" stroke-linecap="round"/>
+    <rect x="250" y="500" width="700" height="64" rx="18" fill="#2A2030" stroke="#F0B46A" stroke-opacity="0.48"/>
+    <text x="600" y="540" text-anchor="middle" fill="#FFE0B2" font-size="19" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">은행의 실제 환전가는 현찰 스프레드와 환율 우대에 따라 달라집니다.</text>
+  </g>`;
+  return chartFrame({
+    title: "왜 엔화 환율은 100엔 기준일까?",
+    subtitle: "원·달러와 달러·엔을 이용한 재정환율 계산 예시입니다.",
+    source,
+    content,
+    accent: "#56D7B0",
+  });
+}
+
+function yenChecklistSvg(source: string) {
+  const steps = [
+    { title: "달러·엔", note: "엔화 자체의 강약" },
+    { title: "원·달러", note: "원화의 강약" },
+    { title: "일본은행", note: "정책금리·회의" },
+    { title: "은행 환전가", note: "스프레드·우대" },
+  ];
+  const content = `<g>${steps.map((step, index) => {
+    const x = 55 + index * 285;
+    const arrow = index < steps.length - 1 ? `<path d="M${x + 238} 360H${x + 274}" stroke="#56D7B0" stroke-width="7" stroke-linecap="round"/><path d="M${x + 264} 348L${x + 278} 360L${x + 264} 372" fill="none" stroke="#56D7B0" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>` : "";
+    return `<rect x="${x}" y="270" width="238" height="180" rx="22" fill="#0A2138" stroke="#56D7B0" stroke-opacity="0.42"/><circle cx="${x + 32}" cy="304" r="17" fill="#56D7B0"/><text x="${x + 32}" y="311" text-anchor="middle" fill="#071426" font-size="17" font-weight="800" font-family="Arial,sans-serif">${index + 1}</text><text x="${x + 22}" y="355" fill="#FFFFFF" font-size="21" font-weight="800" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${step.title}</text><text x="${x + 22}" y="397" fill="#BFD2E5" font-size="17" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${step.note}</text>${arrow}`;
+  }).join("")}</g><rect x="210" y="500" width="780" height="62" rx="18" fill="#163A2A" stroke="#56D7B0" stroke-opacity="0.48"/><text x="600" y="539" text-anchor="middle" fill="#B9F3E2" font-size="19" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">매매기준율과 내가 실제로 사는 가격은 같은 숫자가 아닙니다.</text>`;
+  return chartFrame({
+    title: "엔화 환전 전 확인할 네 가지",
+    subtitle: "환율 방향과 실제 결제 비용을 나눠서 확인합니다.",
+    source,
+    content,
+    accent: "#56D7B0",
+  });
+}
+
 function nvidiaThumbnailSvg(input: { title: string; subtitle: string; footer: string; theme: ImageTheme }) {
   const separatedLines = input.title.split(/\s*\|\s*/).filter(Boolean);
   const lines = separatedLines.length === 2 ? separatedLines : splitTitle(input.title, 14);
@@ -461,6 +558,10 @@ function isNvidiaSubject(input: { title: string; topic: string }) {
   return /NVIDIA|엔비디아|\bNVDA\b/i.test(`${input.title}\n${input.topic}`);
 }
 
+function isYenSubject(input: { title: string; topic: string }) {
+  return /엔화|100엔|원[·ㆍ/ -]?엔|\bJPY\b|USD\s*\/\s*JPY/i.test(`${input.title}\n${input.topic}`);
+}
+
 function blockedImageResult(generatedAt: string, message: string): GeneratedStockBlogImages {
   return {
     inlineImageUrls: [],
@@ -510,6 +611,84 @@ export async function generateStockBlogImages(input: {
     : editorialTitle;
   const thumbnailSubtitle = titleFocus || input.topic;
   try {
+    if (isYenSubject(input)) {
+      const metrics = referenceMetricMap(input.referenceBundle);
+      const requiredMetricKeys = ["jpy.usdkrw", "jpy.usdjpy", "jpy.jpykrw100", "jpy.bojPolicyRate"];
+      const missingMetricKeys = requiredMetricKeys.filter((key) => !metrics[key]);
+      if (missingMetricKeys.length > 0) {
+        throw new Error(`YEN_TOPIC_IMAGE_METRICS_MISSING:${missingMetricKeys.join(",")}`);
+      }
+      if (requiredMetricKeys.some((key) => !metrics[key].sourceUrl)) {
+        throw new Error("YEN_TOPIC_IMAGE_SOURCES_MISSING");
+      }
+      const referencePoint = (key: string) => {
+        const metric = metrics[key];
+        return dataPoint(`reference.${key}`, metric.label, metric.value, metric.unit, metric.asOf);
+      };
+      const snapshotSource = `기준일 ${metrics["jpy.usdjpy"].asOf.slice(0, 10)} · ${metrics["jpy.usdkrw"].asOf.slice(0, 10)} | 출처 일본은행 · 한국투자증권 Open API`;
+      const formulaSource = "산식 한국은행 | 입력값 일본은행·한국투자증권 | BG Market Note 계산";
+      const checklistSource = "출처 한국은행 환율교육 · 일본은행 금융정책 자료";
+      const yenThumbnailTitle = "엔화 환율, 지금 환전해도 될까?";
+      const files = [
+        { name: "thumbnail.svg", svg: yenThumbnailSvg({ title: yenThumbnailTitle, subtitle: "100엔 기준 · 일본은행 금리 · 실제 환전가", footer }) },
+        { name: "yen-market-snapshot.svg", svg: yenSnapshotSvg(metrics, snapshotSource) },
+        { name: "yen-quote-formula.svg", svg: yenFormulaSvg(metrics, formulaSource) },
+        { name: "yen-exchange-checklist.svg", svg: yenChecklistSvg(checklistSource) },
+      ];
+      await mkdir(outputDir, { recursive: true });
+      await Promise.all(files.map((file) => writeFile(path.join(outputDir, file.name), file.svg, "utf8")));
+      const sizes = await Promise.all(files.map((file) => stat(path.join(outputDir, file.name))));
+      if (sizes.some((file) => !file.isFile() || file.size < 500)) throw new Error("IMAGE_FILE_VERIFICATION_FAILED");
+      const contentImages: StockBlogContentImage[] = [
+        {
+          id: "thumbnail", role: "thumbnail", type: "thumbnail", title: yenThumbnailTitle,
+          placementAfterHeading: "__thumbnail__", imageUrl: `${relativeDir}/thumbnail.svg`, caption: yenThumbnailTitle,
+          sourceLabel: "BG Market Note 자체 제작", sourceName: "BG Market Note", relevanceTags: ["yen", "jpy", "exchange-rate"],
+          licenseType: "generated", collectedAt: generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [],
+          width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
+        },
+        {
+          id: "yen-market-snapshot", role: "body", type: "chart", title: "엔화 환율을 볼 때 필요한 세 숫자",
+          placementAfterHeading: placements.majorIndexChange, imageUrl: `${relativeDir}/yen-market-snapshot.svg`,
+          caption: "원·100엔 계산값, 달러·엔 환율, 일본은행 정책금리를 단위별로 구분",
+          sourceLabel: snapshotSource, sourceName: "일본은행 · 한국투자증권 Open API", sourceUrl: metrics["jpy.usdjpy"].sourceUrl,
+          relevanceTags: ["yen", "jpy", "exchange-rate"], licenseType: "generated-data-chart", collectedAt: generatedAt, usageAllowed: true,
+          dataKeys: ["jpy.jpykrw100", "jpy.usdjpy", "jpy.bojPolicyRate"].map((key) => `reference.${key}`),
+          dataPoints: ["jpy.jpykrw100", "jpy.usdjpy", "jpy.bojPolicyRate"].map(referencePoint),
+          width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
+        },
+        {
+          id: "yen-quote-formula", role: "body", type: "chart", title: "원·100엔 재정환율 계산법",
+          placementAfterHeading: placements.kospiInvestorFlow, imageUrl: `${relativeDir}/yen-quote-formula.svg`,
+          caption: "원·달러 ÷ 달러·엔 × 100으로 원·100엔 환율을 계산하는 예시",
+          sourceLabel: formulaSource, sourceName: "한국은행 · 일본은행 · 한국투자증권 Open API", sourceUrl: metrics["jpy.jpykrw100"].sourceUrl,
+          relevanceTags: ["yen", "jpy", "exchange-rate"], licenseType: "generated-data-chart", collectedAt: generatedAt, usageAllowed: true,
+          dataKeys: ["jpy.usdkrw", "jpy.usdjpy", "jpy.jpykrw100"].map((key) => `reference.${key}`),
+          dataPoints: ["jpy.usdkrw", "jpy.usdjpy", "jpy.jpykrw100"].map(referencePoint),
+          width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
+        },
+        {
+          id: "yen-exchange-checklist", role: "body", type: "related-image", title: "엔화 환전 전 확인할 네 가지",
+          placementAfterHeading: placements.fxAndUsYields, imageUrl: `${relativeDir}/yen-exchange-checklist.svg`,
+          caption: "달러·엔, 원·달러, 일본은행, 은행 환전가를 순서대로 확인",
+          sourceLabel: checklistSource, sourceName: "한국은행 · 일본은행", sourceUrl: metrics["jpy.bojPolicyRate"].sourceUrl,
+          relevanceTags: ["yen", "jpy", "exchange-rate"], licenseType: "generated", collectedAt: generatedAt, usageAllowed: true,
+          dataKeys: [], dataPoints: [], width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
+        },
+      ];
+      const imageQuality = evaluateStockBlogImageQuality(contentImages, snapshot, {
+        referenceBundle: input.referenceBundle,
+        requiredRelevanceTags: ["yen"],
+        minimumRelevantBodyImages: 3,
+      });
+      if (imageQuality.status !== "passed") throw new Error(imageQuality.issues.map((issue) => `${issue.code}:${issue.message}`).join(" | "));
+      return {
+        thumbnailImageUrl: `${relativeDir}/thumbnail.svg`,
+        inlineImageUrls: contentImages.filter((image) => image.role === "body").map((image) => image.imageUrl),
+        contentImages, imageQuality, imageStatus: "generated", imageGeneratedAt: generatedAt,
+      };
+    }
+
     if (isNvidiaSubject(input)) {
       const subjectReferenceBundle = withLegacyNvidiaMetrics(input.referenceBundle);
       const metrics = referenceMetricMap(subjectReferenceBundle);

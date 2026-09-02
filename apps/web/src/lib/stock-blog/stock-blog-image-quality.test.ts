@@ -152,6 +152,21 @@ test("엔비디아 글에 일반 시장 그래프만 있으면 주제 불일치�
   assert.ok(result.issues.some((issue) => issue.code === "image_not_relevant"));
 });
 
+test("엔화 글에 일반 지수·수급 그래프만 있으면 주제 불일치로 차단한다", () => {
+  const result = evaluateStockBlogImageQuality([
+    image("thumbnail", "thumbnail", "thumbnail"),
+    image("major-index-change", "body", "chart"),
+    image("kospi-investor-flow", "body", "chart"),
+    image("fx-and-us-yields", "body", "chart"),
+  ], snapshot, {
+    requiredRelevanceTags: ["yen"],
+    minimumRelevantBodyImages: 3,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.ok(result.issues.some((issue) => issue.code === "image_not_relevant"));
+});
+
 test("공식 ReferenceBundle 수치와 주제가 일치하는 실적 차트는 통과한다", () => {
   const bundle: ReferenceBundle = {
     provider: "web", mode: "real", status: "ready", contentType: "INVESTMENT_STUDY",
