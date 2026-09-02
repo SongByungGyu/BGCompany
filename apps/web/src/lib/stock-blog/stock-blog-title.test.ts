@@ -67,6 +67,22 @@ test("경제 일정 검색형 제목은 포괄적인 투자 공부 문구를 붙
   }), "미국 CPI 발표시간, 예상보다 높으면 나스닥은 왜 흔들릴까｜8월 18일 기준");
 });
 
+test("청년미래적금 검색형 제목은 중간을 말줄임표로 자르지 않는다", () => {
+  assert.equal(buildStockBlogEditorialTitle({
+    template: "INVESTMENT_STUDY",
+    marketDate: "2026-09-02",
+    sourceTitle: "청년미래적금 9월 추가 모집 언제? 현행 6%·12%와 15% 상향안",
+  }), "청년미래적금 9월 추가 모집 언제? 현행 6%·12%와 15% 상향안｜9월 2일 기준");
+});
+
+test("투자 공부 대제목은 새 검색 주제마다 고정 접두어 없이 유지한다", () => {
+  assert.equal(buildStockBlogEditorialTitle({
+    template: "INVESTMENT_STUDY",
+    marketDate: "2026-09-03",
+    sourceTitle: "배당소득 분리과세가 바뀌면 어떤 숫자부터 봐야 할까",
+  }), "배당소득 분리과세가 바뀌면 어떤 숫자부터 봐야 할까｜9월 3일 기준");
+});
+
 test("유상증자 질문형 제목은 포괄적인 주식 기초 제목으로 바꾸지 않는다", () => {
   assert.equal(buildStockBlogEditorialTitle({
     template: "INVESTMENT_STUDY",
