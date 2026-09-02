@@ -157,11 +157,11 @@ function scheduleImportance(event: string, market?: string) {
     return "노동 수요의 둔화 여부에 따라 미국 금리와 성장주 투자심리가 달라질 수 있습니다.";
   }
   if (/unemployment|employment|payroll/.test(normalized)) {
-    return "고용 흐름이 경기 기대와 달러, 미국 국채금리에 미치는 반응을 확인할 필요가 있습니다.";
+    return "고용 흐름이 경기 기대와 달러, 미국 국채금리에 어떤 영향을 주는지 봅니다.";
   }
   if (market === "KR") return `${event} 이후 국내 경기 기대와 원·달러 환율, 외국인 수급의 반응을 함께 봐야 합니다.`;
   if (market === "US") return `${event} 이후 미국 국채금리와 달러, 성장주 투자심리의 반응을 함께 확인해야 합니다.`;
-  return `${event} 이후 글로벌 금리·환율과 위험선호가 어떻게 반응하는지 확인할 필요가 있습니다.`;
+  return `${event} 뒤 글로벌 금리·환율과 위험선호가 어떻게 움직이는지 봅니다.`;
 }
 
 function renderScheduleBody(schedule: VerifiedSchedule) {

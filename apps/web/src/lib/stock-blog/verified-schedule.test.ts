@@ -94,6 +94,25 @@ test("같은 이름의 일정이어도 검증값에 없는 날짜는 차단한�
   assert.match(applied.validation.issues.join("\n"), /2026-08-03.*2026-08-01, 2026-08-02/);
 });
 
+test("BOJ 같은 글로벌 일정 설명에 편집 금지 문구를 다시 넣지 않는다", () => {
+  const applied = applyVerifiedSchedule(writerResult([
+    { heading: "주요 일정", body: "2026-09-17 Bank of Japan Monetary Policy Meeting을 봅니다." },
+  ]), snapshot({
+    marketDate: "2026-09-02",
+    upcoming: [{
+      date: "2026-09-17",
+      event: "Bank of Japan Monetary Policy Meeting",
+      market: "JP",
+      url: "https://www.boj.or.jp/en/mopo/mpmsche_minu/",
+    }],
+  }));
+
+  const fullDraft = String(applied.result.fullDraft);
+  assert.equal(applied.validation.ok, true);
+  assert.match(fullDraft, /Bank of Japan Monetary Policy Meeting 뒤 글로벌 금리·환율과 위험선호가 어떻게 움직이는지 봅니다/);
+  assert.doesNotMatch(fullDraft, /확인할 필요가 있습니다/);
+});
+
 test("검증 일정의 원문 URL이 없으면 차단한다", () => {
   const applied = applyVerifiedSchedule(writerResult([
     { heading: "데이터 기준", body: "시장 데이터의 기준일은 2026-07-19입니다." },
