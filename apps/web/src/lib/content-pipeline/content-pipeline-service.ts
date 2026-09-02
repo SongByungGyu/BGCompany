@@ -35,6 +35,7 @@ import {
 } from "@/lib/stock-blog/stock-blog-editorial-benchmark";
 import {
   buildStockBlogQaRevisionFeedback,
+  selectLatestSuccessfulWriterQaAttempt,
   shouldRetryStockBlogQa,
   STOCK_BLOG_MAX_HERMES_RUNS,
   STOCK_BLOG_MAX_QA_ATTEMPTS,
@@ -1766,6 +1767,12 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     writer = withMarketDataDisclosure(scheduleCheckedWriter, data.referenceBundle);
     qa = await executeQa(data, planner, marketing, writer);
     writerQaAttempts.push({ attempt: revisionAttempt, writer, qa });
+  }
+
+  const latestSuccessfulWriterQaAttempt = selectLatestSuccessfulWriterQaAttempt(writerQaAttempts);
+  if (latestSuccessfulWriterQaAttempt) {
+    writer = latestSuccessfulWriterQaAttempt.writer;
+    qa = latestSuccessfulWriterQaAttempt.qa;
   }
 
   const revisionHistory = writerQaAttempts.map((item) => ({

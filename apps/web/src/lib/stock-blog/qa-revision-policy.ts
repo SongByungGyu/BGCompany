@@ -13,6 +13,21 @@ export const STOCK_BLOG_MAX_BODY_LENGTH = 3200;
 
 type QaRevisionResult = Record<string, unknown>;
 
+type AgentRunStatusResult = {
+  agentRunStatus: string;
+};
+
+export function selectLatestSuccessfulWriterQaAttempt<T extends {
+  writer: AgentRunStatusResult;
+  qa: AgentRunStatusResult;
+}>(attempts: readonly T[]): T | undefined {
+  for (let index = attempts.length - 1; index >= 0; index -= 1) {
+    const attempt = attempts[index];
+    if (attempt.writer.agentRunStatus === "succeeded" && attempt.qa.agentRunStatus === "succeeded") return attempt;
+  }
+  return undefined;
+}
+
 function stringList(value: unknown) {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)

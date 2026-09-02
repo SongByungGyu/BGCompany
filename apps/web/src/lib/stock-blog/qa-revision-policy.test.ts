@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildStockBlogQaRevisionFeedback,
+  selectLatestSuccessfulWriterQaAttempt,
   shouldRetryStockBlogQa,
   STOCK_BLOG_MAX_HERMES_RUNS,
   STOCK_BLOG_MAX_QA_ATTEMPTS,
@@ -90,4 +91,26 @@ test("tells the writer the exact reduction needed for an overlong study draft", 
   assert.equal(feedback.currentBodyLength, 3841);
   assert.equal(feedback.targetBodyRange, "2300~2900자");
   assert.equal(feedback.requiredReductionChars, 941);
+});
+
+test("preserves the latest successful writer and QA pair when a later revision fails", () => {
+  const selected = selectLatestSuccessfulWriterQaAttempt([
+    {
+      attempt: 1,
+      writer: { agentRunStatus: "succeeded", result: { fullDraft: "first" } },
+      qa: { agentRunStatus: "succeeded", result: { qaScore: 91 } },
+    },
+    {
+      attempt: 2,
+      writer: { agentRunStatus: "succeeded", result: { fullDraft: "second" } },
+      qa: { agentRunStatus: "succeeded", result: { qaScore: 96 } },
+    },
+    {
+      attempt: 3,
+      writer: { agentRunStatus: "failed", result: {} },
+      qa: { agentRunStatus: "failed", result: {} },
+    },
+  ]);
+
+  assert.equal(selected?.attempt, 2);
 });
