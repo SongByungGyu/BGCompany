@@ -4,7 +4,7 @@ import { mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { StockBriefingTemplate } from "@/features/content-pipeline/content-pipeline-types";
 import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
-import type { MarketSnapshot, MarketSnapshotMetric, ReferenceBundle, ReferenceMetric } from "@/lib/stock-blog/references/reference-types";
+import type { MarketSnapshot, MarketSnapshotMetric, ReferenceBundle, ReferenceFact, ReferenceMetric } from "@/lib/stock-blog/references/reference-types";
 import { isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import { isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
 import { isAllowedKisOverseasDegradedSnapshot } from "@/lib/stock-blog/references/kis-overseas-degraded-policy";
@@ -430,6 +430,58 @@ function yenChecklistSvg(source: string) {
   });
 }
 
+function youthSavingsThumbnailSvg(footer: string) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675">
+  <defs><linearGradient id="ysBg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#061426"/><stop offset="0.58" stop-color="#0B3144"/><stop offset="1" stop-color="#123B39"/></linearGradient><pattern id="ysGrid" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0V36" fill="none" stroke="#64DDB3" stroke-opacity="0.08"/></pattern></defs>
+  <rect width="1200" height="675" rx="28" fill="url(#ysBg)"/><rect width="1200" height="675" rx="28" fill="url(#ysGrid)"/>
+  <text x="92" y="72" fill="#FFFFFF" font-size="24" font-weight="800" letter-spacing="2" font-family="Georgia,'Times New Roman',serif">BG MARKET NOTE</text>
+  <text x="92" y="116" fill="#B9F3E2" font-size="18" font-weight="700" letter-spacing="3" font-family="Arial,sans-serif">YOUTH SAVINGS GUIDE</text><rect x="92" y="136" width="96" height="6" rx="3" fill="#56D7B0"/>
+  <text x="92" y="212" fill="#D2E2F1" font-size="22" font-weight="600" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">추가 모집 일정 · 현재 조건 · 미확정 변경안</text>
+  <text x="92" y="310" fill="#FFFFFF" font-size="56" font-weight="800" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">청년미래적금</text><text x="92" y="382" fill="#FFFFFF" font-size="48" font-weight="800" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">지금 신청할 수 있을까?</text>
+  <g transform="translate(810 164)"><rect width="270" height="300" rx="30" fill="#071D2C" stroke="#56D7B0" stroke-width="4"/><rect x="42" y="54" width="186" height="112" rx="18" fill="#123B39" stroke="#B9F3E2" stroke-opacity="0.55"/><text x="135" y="105" text-anchor="middle" fill="#B9F3E2" font-size="21" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">월 최대</text><text x="135" y="148" text-anchor="middle" fill="#FFFFFF" font-size="36" font-weight="800" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">50만원</text><circle cx="86" cy="226" r="38" fill="#56D7B0"/><text x="86" y="237" text-anchor="middle" fill="#071426" font-size="28" font-weight="800" font-family="Arial,sans-serif">6%</text><circle cx="184" cy="226" r="38" fill="#B9F3E2"/><text x="184" y="237" text-anchor="middle" fill="#071426" font-size="24" font-weight="800" font-family="Arial,sans-serif">12%</text></g>
+  <rect x="0" y="611" width="1200" height="64" fill="#041120" opacity="0.94"/><text x="92" y="652" fill="#AFC5DA" font-size="17" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${xmlEscape(footer)}</text><text x="1108" y="652" text-anchor="end" fill="#FFFFFF" font-size="18" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">확정 내용과 검토 중 일정을 구분해 정리</text>
+</svg>`;
+}
+
+function youthSavingsTimelineSvg(facts: Record<string, ReferenceFact>, source: string) {
+  const steps = [
+    ["1차 신청", facts["youthFutureSavings.initialApplicationPeriod"].value, "접수 종료", "#56D7B0"],
+    ["계좌 개설", facts["youthFutureSavings.initialAccountOpeningPeriod"].value, "개설 종료", "#56D7B0"],
+    ["추가 가입", facts["youthFutureSavings.additionalRecruitmentStatus"].value, "구체 일정 미공고", "#F0B46A"],
+  ];
+  const cards = steps.map(([title, value, note, color], index) => {
+    const x = 72 + index * 352;
+    const arrow = index < 2 ? `<path d="M${x + 320} 356H${x + 342}" stroke="#6F95B6" stroke-width="6" stroke-linecap="round"/><path d="M${x + 333} 345L${x + 345} 356L${x + 333} 367" fill="none" stroke="#6F95B6" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>` : "";
+    return `<rect x="${x}" y="240" width="320" height="230" rx="22" fill="#0A2138" stroke="${color}" stroke-opacity="0.55"/><text x="${x + 28}" y="292" fill="#BFD2E5" font-size="20" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${title}</text><text x="${x + 28}" y="365" fill="#FFFFFF" font-size="28" font-weight="800" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${xmlEscape(value)}</text><text x="${x + 28}" y="420" fill="${color}" font-size="19" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${note}</text>${arrow}`;
+  }).join("");
+  const content = `<g>${cards}</g><rect x="238" y="508" width="724" height="64" rx="18" fill="#2A2030" stroke="#F0B46A" stroke-opacity="0.5"/><text x="600" y="548" text-anchor="middle" fill="#FFE0B2" font-size="20" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">현재 신규 신청 가능 상태: ${xmlEscape(facts["youthFutureSavings.applicationOpenNow"].value)}</text>`;
+  return chartFrame({ title: "청년미래적금 모집 일정, 어디까지 왔을까?", subtitle: "끝난 일정과 아직 확정되지 않은 추가 모집을 나눠 표시했습니다.", source, content, accent: "#56D7B0" });
+}
+
+function youthSavingsStructureSvg(metrics: Record<string, ReferenceMetric>, source: string) {
+  const monthly = metrics["youthFutureSavings.monthlyDepositMaxKrw"].value / 10_000;
+  const months = metrics["youthFutureSavings.termMonths"].value;
+  const generalPct = metrics["youthFutureSavings.generalMatchPct"].value;
+  const preferentialPct = metrics["youthFutureSavings.preferentialMatchPct"].value;
+  const generalMax = metrics["youthFutureSavings.generalMonthlyContributionMaxKrw"].value / 10_000;
+  const preferentialMax = metrics["youthFutureSavings.preferentialMonthlyContributionMaxKrw"].value / 10_000;
+  const content = `<g><rect x="72" y="220" width="1056" height="92" rx="20" fill="#102D46" stroke="#56D7B0" stroke-opacity="0.42"/><text x="112" y="276" fill="#BFD2E5" font-size="21" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">납입 한도</text><text x="338" y="277" fill="#FFFFFF" font-size="31" font-weight="800" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">월 최대 ${monthly}만원</text><text x="710" y="276" fill="#BFD2E5" font-size="21" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">만기</text><text x="860" y="277" fill="#FFFFFF" font-size="31" font-weight="800" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${months}개월</text><rect x="72" y="344" width="500" height="205" rx="22" fill="#0A2138" stroke="#56D7B0" stroke-opacity="0.48"/><text x="108" y="399" fill="#B9F3E2" font-size="23" font-weight="800" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">일반형</text><text x="108" y="475" fill="#FFFFFF" font-size="50" font-weight="800" font-family="Arial,sans-serif">${generalPct}%</text><text x="238" y="470" fill="#BFD2E5" font-size="21" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">정부기여</text><text x="108" y="523" fill="#BFD2E5" font-size="20" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">월 최대 ${generalMax}만원</text><rect x="628" y="344" width="500" height="205" rx="22" fill="#123B39" stroke="#B9F3E2" stroke-opacity="0.58"/><text x="664" y="399" fill="#B9F3E2" font-size="23" font-weight="800" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">우대형</text><text x="664" y="475" fill="#FFFFFF" font-size="50" font-weight="800" font-family="Arial,sans-serif">${preferentialPct}%</text><text x="822" y="470" fill="#BFD2E5" font-size="21" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">정부기여</text><text x="664" y="523" fill="#BFD2E5" font-size="20" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">월 최대 ${preferentialMax}만원</text></g>`;
+  return chartFrame({ title: "현재 확정된 청년미래적금 구조", subtitle: "2026년 가입 기준 6%·12% 구조입니다. 2027 예산안은 아직 확정 전입니다.", source, content, accent: "#56D7B0" });
+}
+
+function youthSavingsChecklistSvg(metrics: Record<string, ReferenceMetric>, facts: Record<string, ReferenceFact>, source: string) {
+  const rows = [
+    `나이: 만 ${metrics["youthFutureSavings.ageMin"].value}~${metrics["youthFutureSavings.ageMax"].value}세`,
+    `병역: 최대 ${metrics["youthFutureSavings.militaryAgeExclusionMaxYears"].value}년 연령 계산에서 제외`,
+    `총급여: ${metrics["youthFutureSavings.grossIncomeMaxKrw"].value / 10_000}만원 이하`,
+    `가구소득: 일반 ${metrics["youthFutureSavings.householdMedianGeneralPct"].value}% · 우대 ${metrics["youthFutureSavings.householdMedianPreferentialPct"].value}%`,
+    `청년도약계좌 중복: ${facts["youthFutureSavings.youthLeapOverlapAllowed"].value}`,
+  ];
+  const content = `<g>${rows.map((row, index) => `<rect x="120" y="${220 + index * 68}" width="960" height="52" rx="14" fill="${index % 2 === 0 ? "#0A2138" : "#102D46"}" stroke="#56D7B0" stroke-opacity="0.24"/><circle cx="151" cy="${246 + index * 68}" r="13" fill="#56D7B0"/><path d="M145 ${246 + index * 68}l5 5 9-11" fill="none" stroke="#071426" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><text x="184" y="${253 + index * 68}" fill="#FFFFFF" font-size="21" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${xmlEscape(row)}</text>`).join("")}</g>`;
+  return chartFrame({ title: "신청 전에 확인할 현재 기준", subtitle: "개인소득·가구소득·중복 가입 조건은 새 공고에서 다시 확인해야 합니다.", source, content, accent: "#56D7B0" });
+}
+
 function nvidiaThumbnailSvg(input: { title: string; subtitle: string; footer: string; theme: ImageTheme }) {
   const separatedLines = input.title.split(/\s*\|\s*/).filter(Boolean);
   const lines = separatedLines.length === 2 ? separatedLines : splitTitle(input.title, 14);
@@ -554,8 +606,74 @@ function referenceMetricMap(bundle?: ReferenceBundle): Record<string, ReferenceM
   return Object.fromEntries((bundle?.items ?? []).flatMap((item) => item.metrics ?? []).map((metric) => [metric.key, metric]));
 }
 
+function isOfficialYouthSavingsUrl(value: string) {
+  try {
+    const hostname = new URL(value).hostname.toLowerCase();
+    return hostname === "fsc.go.kr" || hostname.endsWith(".fsc.go.kr") || hostname === "kinfa.or.kr" || hostname.endsWith(".kinfa.or.kr");
+  } catch {
+    return false;
+  }
+}
+
+function verifiedYouthSavingsData(bundle?: ReferenceBundle) {
+  const metrics: Record<string, ReferenceMetric> = {};
+  const facts: Record<string, ReferenceFact> = {};
+  for (const item of bundle?.items ?? []) {
+    if (item.reliability !== "official" || !item.url || !isOfficialYouthSavingsUrl(item.url)) continue;
+    for (const metric of item.metrics ?? []) {
+      if (metric.sourceUrl && isOfficialYouthSavingsUrl(metric.sourceUrl)) metrics[metric.key] = metric;
+    }
+    for (const fact of item.facts ?? []) {
+      if (isOfficialYouthSavingsUrl(fact.sourceUrl)) facts[fact.key] = fact;
+    }
+  }
+  const expectedMetrics: Record<string, number> = {
+    "youthFutureSavings.monthlyDepositMaxKrw": 500_000,
+    "youthFutureSavings.termMonths": 36,
+    "youthFutureSavings.generalMatchPct": 6,
+    "youthFutureSavings.preferentialMatchPct": 12,
+    "youthFutureSavings.generalMonthlyContributionMaxKrw": 30_000,
+    "youthFutureSavings.preferentialMonthlyContributionMaxKrw": 60_000,
+    "youthFutureSavings.ageMin": 19,
+    "youthFutureSavings.ageMax": 34,
+    "youthFutureSavings.militaryAgeExclusionMaxYears": 6,
+    "youthFutureSavings.grossIncomeMaxKrw": 75_000_000,
+    "youthFutureSavings.householdMedianGeneralPct": 200,
+    "youthFutureSavings.householdMedianPreferentialPct": 150,
+  };
+  const expectedFacts: Record<string, string> = {
+    "youthFutureSavings.initialApplicationPeriod": "6월 22일~7월 3일",
+    "youthFutureSavings.initialAccountOpeningPeriod": "7월 27일~8월 7일",
+    "youthFutureSavings.additionalRecruitmentStatus": "검토 중",
+    "youthFutureSavings.applicationOpenNow": "아니요",
+    "youthFutureSavings.youthLeapOverlapAllowed": "불가",
+    "youthFutureSavings.budgetProposalStatus": "국회 심의 전",
+  };
+  const missing = [
+    ...Object.keys(expectedMetrics).filter((key) => !metrics[key]),
+    ...Object.keys(expectedFacts).filter((key) => !facts[key]),
+  ];
+  if (missing.length > 0) throw new Error(`YOUTH_SAVINGS_REFERENCES_MISSING:${missing.join(",")}`);
+  const mismatched = [
+    ...Object.entries(expectedMetrics).filter(([key, value]) => metrics[key].value !== value).map(([key]) => key),
+    ...Object.entries(expectedFacts).filter(([key, value]) => facts[key].value !== value).map(([key]) => key),
+  ];
+  if (mismatched.length > 0) throw new Error(`YOUTH_SAVINGS_REFERENCES_MISMATCH:${mismatched.join(",")}`);
+  if (Object.values(metrics).some((metric) => !Number.isFinite(metric.value) || !metric.unit || !metric.asOf || !metric.sourceName || !metric.sourceUrl)) {
+    throw new Error("YOUTH_SAVINGS_METRICS_UNVERIFIED");
+  }
+  if (Object.values(facts).some((fact) => !fact.value || !fact.asOf || !fact.sourceName || !fact.sourceUrl)) {
+    throw new Error("YOUTH_SAVINGS_FACTS_UNVERIFIED");
+  }
+  return { metrics, facts };
+}
+
 function isNvidiaSubject(input: { title: string; topic: string }) {
   return /NVIDIA|엔비디아|\bNVDA\b/i.test(`${input.title}\n${input.topic}`);
+}
+
+function isYouthFutureSavingsSubject(input: { title: string; topic: string }) {
+  return /청년미래적금/.test(`${input.title}\n${input.topic}`);
 }
 
 function isYenSubject(input: { title: string; topic: string }) {
@@ -611,6 +729,76 @@ export async function generateStockBlogImages(input: {
     : editorialTitle;
   const thumbnailSubtitle = titleFocus || input.topic;
   try {
+    if (isYouthFutureSavingsSubject(input)) {
+      if (input.template !== "INVESTMENT_STUDY") throw new Error("YOUTH_SAVINGS_TEMPLATE_INVALID");
+      const { metrics, facts } = verifiedYouthSavingsData(input.referenceBundle);
+      const timelineSource = "기준 2026.08.11 | 출처 금융위원회 · 서민금융진흥원";
+      const structureSource = "2026년 가입 기준 | 출처 금융위원회 · 서민금융진흥원";
+      const checklistSource = "현재 가입 기준 | 출처 금융위원회 · 서민금융진흥원";
+      const files = [
+        { name: "thumbnail.svg", svg: youthSavingsThumbnailSvg(footer) },
+        { name: "youth-savings-timeline.svg", svg: youthSavingsTimelineSvg(facts, timelineSource) },
+        { name: "youth-savings-structure.svg", svg: youthSavingsStructureSvg(metrics, structureSource) },
+        { name: "youth-savings-checklist.svg", svg: youthSavingsChecklistSvg(metrics, facts, checklistSource) },
+      ];
+      await mkdir(outputDir, { recursive: true });
+      await Promise.all(files.map((file) => writeFile(path.join(outputDir, file.name), file.svg, "utf8")));
+      const sizes = await Promise.all(files.map((file) => stat(path.join(outputDir, file.name))));
+      if (sizes.some((file) => !file.isFile() || file.size < 500)) throw new Error("IMAGE_FILE_VERIFICATION_FAILED");
+      const metricPoint = (key: string) => dataPoint(`reference.${key}`, metrics[key].label, metrics[key].value, metrics[key].unit, metrics[key].asOf);
+      const structureKeys = [
+        "youthFutureSavings.monthlyDepositMaxKrw",
+        "youthFutureSavings.termMonths",
+        "youthFutureSavings.generalMatchPct",
+        "youthFutureSavings.preferentialMatchPct",
+        "youthFutureSavings.generalMonthlyContributionMaxKrw",
+        "youthFutureSavings.preferentialMonthlyContributionMaxKrw",
+      ];
+      const officialProductUrl = metrics["youthFutureSavings.monthlyDepositMaxKrw"].sourceUrl;
+      const contentImages: StockBlogContentImage[] = [
+        {
+          id: "thumbnail", role: "thumbnail", type: "thumbnail", title: "청년미래적금 지금 신청할 수 있을까?",
+          placementAfterHeading: "__thumbnail__", imageUrl: `${relativeDir}/thumbnail.svg`, caption: "청년미래적금 추가 모집 일정과 현재 조건",
+          sourceLabel: "BG Market Note 자체 제작", sourceName: "BG Market Note", relevanceTags: ["youth-savings", "policy-savings"],
+          licenseType: "generated", collectedAt: generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [],
+          width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
+        },
+        {
+          id: "youth-savings-timeline", role: "body", type: "related-image", title: "청년미래적금 모집 일정",
+          placementAfterHeading: placements.majorIndexChange, imageUrl: `${relativeDir}/youth-savings-timeline.svg`, caption: "종료된 1차 일정과 검토 중인 추가 가입 일정 구분",
+          sourceLabel: timelineSource, sourceName: "금융위원회 · 서민금융진흥원", sourceUrl: facts["youthFutureSavings.additionalRecruitmentStatus"].sourceUrl,
+          relevanceTags: ["youth-savings", "recruitment"], licenseType: "generated", collectedAt: generatedAt, usageAllowed: true,
+          dataKeys: [], dataPoints: [], width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
+        },
+        {
+          id: "youth-savings-structure", role: "body", type: "chart", title: "현재 확정된 청년미래적금 구조",
+          placementAfterHeading: placements.kospiInvestorFlow, imageUrl: `${relativeDir}/youth-savings-structure.svg`, caption: "월 납입 한도와 일반형·우대형 정부기여 구조",
+          sourceLabel: structureSource, sourceName: "금융위원회 · 서민금융진흥원", sourceUrl: officialProductUrl,
+          relevanceTags: ["youth-savings", "contribution"], licenseType: "generated-data-chart", collectedAt: generatedAt, usageAllowed: true,
+          dataKeys: structureKeys.map((key) => `reference.${key}`), dataPoints: structureKeys.map(metricPoint), width: 1200, height: 675,
+          fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
+        },
+        {
+          id: "youth-savings-checklist", role: "body", type: "related-image", title: "신청 전 확인할 현재 기준",
+          placementAfterHeading: placements.fxAndUsYields, imageUrl: `${relativeDir}/youth-savings-checklist.svg`, caption: "나이·소득·가구소득·중복 가입 조건 체크리스트",
+          sourceLabel: checklistSource, sourceName: "금융위원회 · 서민금융진흥원", sourceUrl: officialProductUrl,
+          relevanceTags: ["youth-savings", "eligibility"], licenseType: "generated", collectedAt: generatedAt, usageAllowed: true,
+          dataKeys: [], dataPoints: [], width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
+        },
+      ];
+      const imageQuality = evaluateStockBlogImageQuality(contentImages, snapshot, {
+        referenceBundle: input.referenceBundle,
+        requiredRelevanceTags: ["youth-savings"],
+        minimumRelevantBodyImages: 3,
+      });
+      if (imageQuality.status !== "passed") throw new Error(imageQuality.issues.map((issue) => `${issue.code}:${issue.message}`).join(" | "));
+      return {
+        thumbnailImageUrl: `${relativeDir}/thumbnail.svg`,
+        inlineImageUrls: contentImages.filter((image) => image.role === "body").map((image) => image.imageUrl),
+        contentImages, imageQuality, imageStatus: "generated", imageGeneratedAt: generatedAt,
+      };
+    }
+
     if (isYenSubject(input)) {
       const metrics = referenceMetricMap(input.referenceBundle);
       const requiredMetricKeys = ["jpy.usdkrw", "jpy.usdjpy", "jpy.jpykrw100", "jpy.bojPolicyRate"];

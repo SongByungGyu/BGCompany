@@ -1658,7 +1658,7 @@ export async function regenerateContentPipelineImages(pipelineId: string) {
   const pipeline = runFromEvent(event);
   if (!pipeline) throw new Error("CONTENT_PIPELINE_PAYLOAD_INVALID");
   const bundle = pipeline.referenceBundle;
-  if (!bundle?.marketSnapshot) throw new Error("MARKET_SNAPSHOT_REQUIRED_FOR_IMAGES");
+  if (!bundle) throw new Error("REFERENCE_BUNDLE_REQUIRED_FOR_IMAGES");
   const generatedImages = await generateStockBlogImages({
     pipelineId,
     template: bundle.contentType,

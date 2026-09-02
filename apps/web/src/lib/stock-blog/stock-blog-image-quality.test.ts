@@ -199,3 +199,53 @@ test("공식 ReferenceBundle 수치와 주제가 일치하는 실적 차트는 �
 
   assert.equal(result.status, "passed");
 });
+
+test("청년미래적금 글에 일반 시장 그래프만 있으면 주제 불일치로 차단한다", () => {
+  const result = evaluateStockBlogImageQuality([
+    image("thumbnail", "thumbnail", "thumbnail"),
+    image("major-index-change", "body", "chart"),
+    image("kospi-investor-flow", "body", "chart"),
+    image("fx-and-us-yields", "body", "chart"),
+  ], snapshot, {
+    requiredRelevanceTags: ["youth-savings"],
+    minimumRelevantBodyImages: 3,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.ok(result.issues.some((issue) => issue.code === "image_not_relevant"));
+});
+
+test("청년미래적금 공식 수치와 이미지 값이 다르면 자동 발행을 차단한다", () => {
+  const bundle: ReferenceBundle = {
+    provider: "web", mode: "real", status: "ready", contentType: "INVESTMENT_STUDY",
+    generatedAt: "2026-09-02T00:00:00Z", marketDate: "2026-09-02", market: "KR", queries: [],
+    items: [{
+      id: "official-youth-savings", sourceType: "manual", provider: "kinfa", title: "청년미래적금 상품 안내",
+      url: "https://fill4young.kinfa.or.kr/yfs/main", reliability: "official",
+      metrics: [{ key: "youthFutureSavings.generalMatchPct", label: "일반형 기여금", value: 6, unit: "%", asOf: "2026-09-02", sourceName: "서민금융진흥원", sourceUrl: "https://fill4young.kinfa.or.kr/yfs/main" }],
+    }],
+    keyThemes: [], repeatedKeywords: [], differentiationPoints: [], cautionNotes: [], sourcePolicy: "official", missingItems: [],
+  };
+  const referenceChart = (id: string, value: number) => ({
+    ...image(id, "body", "chart"),
+    relevanceTags: ["youth-savings"],
+    dataKeys: ["reference.youthFutureSavings.generalMatchPct"],
+    dataPoints: [{ key: "reference.youthFutureSavings.generalMatchPct", label: "일반형 기여금", value, unit: "%", asOf: "2026-09-02" }],
+  });
+  const thumbnail = image("thumbnail", "thumbnail", "thumbnail");
+  thumbnail.relevanceTags = ["youth-savings"];
+
+  const result = evaluateStockBlogImageQuality([
+    thumbnail,
+    referenceChart("youth-savings-structure", 12),
+    referenceChart("youth-savings-timeline", 6),
+    referenceChart("youth-savings-checklist", 6),
+  ], undefined, {
+    referenceBundle: bundle,
+    requiredRelevanceTags: ["youth-savings"],
+    minimumRelevantBodyImages: 3,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.ok(result.issues.some((issue) => issue.code === "image_data_mismatch"));
+});

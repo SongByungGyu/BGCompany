@@ -19,6 +19,15 @@ export type ReferenceMetric = {
   sourceUrl?: string;
 };
 
+export type ReferenceFact = {
+  key: string;
+  label: string;
+  value: string;
+  asOf: string;
+  sourceName: string;
+  sourceUrl: string;
+};
+
 export type ReferenceItem = {
   id: string;
   sourceType: ReferenceSourceType;
@@ -41,6 +50,7 @@ export type ReferenceItem = {
   symbols?: string[];
   reliability?: "official" | "major_media" | "aggregator" | "manual" | "mock";
   metrics?: ReferenceMetric[];
+  facts?: ReferenceFact[];
 };
 
 export type CompetitorBlogReference = {
