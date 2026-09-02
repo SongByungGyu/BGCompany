@@ -621,6 +621,13 @@ export async function generateStockBlogImages(input: {
       if (requiredMetricKeys.some((key) => !metrics[key].sourceUrl)) {
         throw new Error("YEN_TOPIC_IMAGE_SOURCES_MISSING");
       }
+      if (requiredMetricKeys.some((key) => !Number.isFinite(metrics[key].value))) {
+        throw new Error("YEN_TOPIC_IMAGE_METRICS_INVALID");
+      }
+      const calculatedJpyKrw100 = Number((metrics["jpy.usdkrw"].value / metrics["jpy.usdjpy"].value * 100).toFixed(2));
+      if (!Number.isFinite(calculatedJpyKrw100) || Math.abs(calculatedJpyKrw100 - metrics["jpy.jpykrw100"].value) > 0.01) {
+        throw new Error("YEN_CROSS_RATE_MISMATCH");
+      }
       const referencePoint = (key: string) => {
         const metric = metrics[key];
         return dataPoint(`reference.${key}`, metric.label, metric.value, metric.unit, metric.asOf);
