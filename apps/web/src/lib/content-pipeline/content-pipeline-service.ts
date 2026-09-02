@@ -362,6 +362,7 @@ async function enrichContentPipelineInput(input: ContentPipelineInput): Promise<
     contentType,
     market: inferReferenceMarket(contentType),
     keywords: buildReferenceKeywords(input),
+    prioritizeInputQueries: contentType === "INVESTMENT_STUDY",
   });
   const blogImagePrompts = input.blogImagePrompts ?? buildBlogImagePrompts(referenceBundle);
   const currentGuidelines = selectSafeEditorialBenchmarkGuidelines(referenceBundle.competitorAnalysis);
