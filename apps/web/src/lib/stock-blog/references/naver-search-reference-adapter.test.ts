@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { ReferenceItem } from "./reference-types";
-import { isRelevantNextWeekNews, selectDiverseNextWeekNews } from "./naver-search-reference-adapter";
+import {
+  isCompleteNewsTitle,
+  isRelevantNextWeekNews,
+  selectCompleteNewsReferences,
+  selectDiverseNextWeekNews,
+} from "./naver-search-reference-adapter";
 
 function item(title: string, publisher: string, summary: string): ReferenceItem {
   return {
@@ -41,4 +46,26 @@ test("관련 기사 선택 시 발행처를 먼저 다양하게 구성하고 부
 
   assert.equal(selected.length, 3);
   assert.equal(new Set(selected.map((entry) => entry.publisher)).size, 3);
+});
+
+test("검색 결과 제목이 끝에서 잘린 경우만 불완전 제목으로 판정한다", () => {
+  assert.equal(isCompleteNewsTitle("금리장인가...AI 투자심리가 변수"), true);
+  assert.equal(isCompleteNewsTitle("환율 1,360원 아래로 [마켓..."), false);
+  assert.equal(isCompleteNewsTitle("코스피 반등 가능성…"), false);
+  assert.equal(isCompleteNewsTitle("코스피 반등 가능성 &hellip;"), false);
+  assert.equal(isCompleteNewsTitle(""), false);
+});
+
+test("잘린 제목은 제외하고 뒤의 정상 기사로 채운다", () => {
+  const references = [
+    item("첫 기사...", "a.example.com", "코스피"),
+    item("두 번째 기사…", "b.example.com", "환율"),
+    item("세 번째 정상 기사", "c.example.com", "금리"),
+    item("네 번째 정상 기사", "d.example.com", "나스닥"),
+  ];
+  const selected = selectCompleteNewsReferences(references, 2);
+  assert.deepEqual(selected.map((entry) => entry.title), [
+    "세 번째 정상 기사",
+    "네 번째 정상 기사",
+  ]);
 });

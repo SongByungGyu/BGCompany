@@ -36,6 +36,21 @@ class JsonParserTests(unittest.TestCase):
         self.assertEqual(status, "fallback_text")
 
 
+class UpstreamErrorDetectionTests(unittest.TestCase):
+    def test_credit_exhaustion_stdout_is_detected_even_with_exit_zero(self) -> None:
+        stdout = "API call failed after 3 retries: You have no credits remaining. Add credits to continue using the API."
+        self.assertTrue(bridge.looks_like_upstream_error(stdout))
+
+    def test_insufficient_quota_error_code_is_detected(self) -> None:
+        self.assertTrue(bridge.looks_like_upstream_error("insufficient_quota: billing limit reached"))
+        self.assertTrue(bridge.looks_like_upstream_error('{"error":{"code":"insufficient_quota"}}'))
+
+    def test_normal_article_text_is_not_an_upstream_error(self) -> None:
+        self.assertFalse(bridge.looks_like_upstream_error("금리와 환율을 함께 확인합니다."))
+        self.assertFalse(bridge.looks_like_upstream_error('{"fullDraft":"An issuer reported insufficient credit demand."}'))
+        self.assertFalse(bridge.looks_like_upstream_error('{"fullDraft":"You have no credits remaining. Add credits to continue."}'))
+
+
 class NormalizeSuccessTests(unittest.TestCase):
     def test_content_planner_schema(self) -> None:
         stdout = json.dumps({

@@ -41,6 +41,8 @@ SECRET_PATTERNS = [
 UPSTREAM_ERROR_PATTERNS = [
     re.compile(r"(?:^|\n)\s*HTTP\s+[45]\d{2}\s*:", re.IGNORECASE),
     re.compile(r"(?:^|\n)\s*(?:API\s+error|Error)\s*:", re.IGNORECASE),
+    re.compile(r"(?:^|\n)\s*API\s+call\s+failed\b[^\n]{0,1000}\bno\s+credits?\s+remaining\b", re.IGNORECASE),
+    re.compile(r"(?:^|\n)\s*(?:error(?:\s+code|_code)?\s*[:=]\s*)?insufficient_quota\b", re.IGNORECASE),
 ]
 
 semaphore = threading.BoundedSemaphore(MAX_CONCURRENCY)
@@ -118,10 +120,6 @@ def mask_secrets(value: str) -> str:
     return masked
 
 
-def looks_like_upstream_error(stdout: str) -> bool:
-    return any(pattern.search(stdout) for pattern in UPSTREAM_ERROR_PATTERNS)
-
-
 def truncate_bytes(text: str, limit: int) -> tuple[str, bool]:
     encoded = text.encode("utf-8", errors="replace")
     if len(encoded) <= limit:
@@ -185,6 +183,25 @@ def parse_jsonish_stdout(stdout: str) -> tuple[dict[str, Any] | None, str]:
         except json.JSONDecodeError:
             pass
     return None, "fallback_text"
+
+
+def has_structured_upstream_error(record: dict[str, Any]) -> bool:
+    for key, value in record.items():
+        normalized_key = key.lower().replace("-", "_")
+        if normalized_key in {"code", "type", "error_code"} and isinstance(value, str):
+            if value.lower().replace("-", "_").strip() == "insufficient_quota":
+                return True
+        if normalized_key in {"error", "cause", "detail"} and isinstance(value, dict):
+            if has_structured_upstream_error(value):
+                return True
+    return False
+
+
+def looks_like_upstream_error(stdout: str) -> bool:
+    parsed, parse_status = parse_jsonish_stdout(stdout)
+    if parsed is not None and parse_status != "fallback_text":
+        return has_structured_upstream_error(parsed)
+    return any(pattern.search(stdout) for pattern in UPSTREAM_ERROR_PATTERNS)
 
 def pick_string(record: dict[str, Any], *keys: str) -> str | None:
     for key in keys:
@@ -643,6 +660,7 @@ def build_content_writer_prompt(payload: dict[str, Any]) -> str:
 - 같은 문장을 반복하지 않고, 같은 어미와 "관찰됐습니다", "확인했습니다", "전망입니다"를 연속 사용하지 않는다.
 - 숫자 뒤의 한국어 조사와 띄어쓰기를 최종 교정한다. 예를 들어 "6,516.27으로"가 아니라 "6,516.27로"처럼 쓴다.
 - "함께 확인한 기사"는 정확히 다음 형식으로 작성한다: 번호. 기사 제목 – 언론사, 발행일 다음 줄에 원문 링크. 실제 활용한 기사 3개만 둔다.
+- "함께 확인한 기사"의 제목은 ReferenceBundle item.title을 생략·축약·띄어쓰기 변경 없이 그대로 쓴다. 제목이 말줄임표로 끝나는 불완전 자료는 선택하지 않는다.
 - usedSeoKeywords는 같은 뜻을 반복하지 않는 구체 검색어 5~8개만 쓴다.
 {editorial_structure_policy}
 {schedule_policy}
@@ -784,6 +802,7 @@ def build_qa_audit_prompt(payload: dict[str, Any]) -> str:
 - 글이 최근 움직임 → 근거에 기반한 이유 → 이어질 시장 영향 → 투자자 확인사항의 흐름으로 자연스럽게 이어지는지 확인한다.
 - 공개 본문이 공백 포함 {body_min:,}~{body_max:,}자, section heading 6개 이상, 내용 있는 문단 10개 이상, 줄바꿈 15개 이상, "- " 불릿 5개 이상인지 확인한다.
 - "함께 확인한 기사"에 실제 활용한 신뢰 가능한 기사 정확히 3개와 서로 다른 원문 링크 3개만 있고, 링크가 본문 중간·일정·시장 데이터 문단에 노출되지 않았는지 확인한다.
+- "함께 확인한 기사"의 제목을 ReferenceBundle item.title과 직접 대조한다. 세 제목이 각각 정확히 일치하고 말줄임표로 끝나지 않으면 제목 정확성에 대해 추가 확인을 요구하거나 감점하지 않는다.
 - API 주소, JSON 필드명, asOf, 데이터 수집·내부 분석 과정, AI 설정, 이미지 설명 문구, 기계적인 "시장 영향" 항목명이 노출되면 필수 수정으로 판정한다.
 - 수급 단위가 불확실하거나 비정상적인 값은 숫자 대신 방향성으로 설명했는지, 확인되지 않은 일정·수치·기사를 만들지 않았는지 검사한다.
 - market snapshot provider가 kis-fred이고 degradedMode가 fred_unavailable이 아니면 "한국투자증권·FRED 최근 거래일 자료 기준"을 정확한 출처 표기로 인정한다. referenceBundle provider가 naver-search라는 이유로 시장 데이터 출처를 네이버만으로 판단하지 않는다. degradedMode가 fred_unavailable일 때만 FRED 표기를 필수 수정으로 본다.

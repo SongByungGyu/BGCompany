@@ -27,6 +27,7 @@ const NEXT_WEEK_NEWS_CORE_PATTERN = /증시|주식시장|코스피|코스닥|S&P
 const NEXT_WEEK_NEWS_DRIVER_PATTERN = /다음\s*주|전망|금리|국채|환율|외국인|기관|수급|경제\s*지표|ECB|연준|변동성/i;
 const NEXT_WEEK_NEWS_EXCLUDED_TITLE_PATTERN = /뉴스브리핑|코인|가상자산|암호화폐|비트코인|BONK|금시세|금값|금가격/i;
 const NEXT_WEEK_NEWS_EXCLUDED_PUBLISHERS = new Set(["tokenpost.kr"]);
+const TRUNCATED_NEWS_TITLE_PATTERN = /(?:\.{3,}|…|&hellip;|&#8230;|&#x2026;)\s*$/i;
 
 export function isRelevantNextWeekNews(item: Pick<ReferenceItem, "title" | "summary" | "publisher" | "publishedAt">, nowMs = Date.now()) {
   const title = stripHtml(item.title || "");
@@ -76,6 +77,19 @@ function parseNaverDate(value?: string) {
   if (/^\d{8}$/.test(value)) return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T00:00:00.000Z`;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+}
+
+export function isCompleteNewsTitle(value?: string) {
+  const raw = value?.trim() ?? "";
+  if (!raw || TRUNCATED_NEWS_TITLE_PATTERN.test(raw)) return false;
+  const normalized = stripHtml(raw);
+  return normalized.length > 0 && !/(?:\.{3,}|…)\s*$/.test(normalized);
+}
+
+export function selectCompleteNewsReferences(items: ReferenceItem[], limit: number) {
+  return items
+    .filter((item) => isCompleteNewsTitle(item.title))
+    .slice(0, limit);
 }
 
 async function searchNaver<T>(kind: "news" | "blog", query: string, clientId: string, clientSecret: string, display: number) {
@@ -141,7 +155,7 @@ export const naverSearchReferenceAdapter: ReferenceAdapter = {
           id: `naver-news-${query}-${index}`,
           sourceType: "news",
           provider: "naver-search",
-          title: item.title ?? query,
+          title: item.title ?? "",
           url,
           originalUrl,
           publisher: sourceName,
@@ -158,9 +172,10 @@ export const naverSearchReferenceAdapter: ReferenceAdapter = {
       }
     }
     const deduped = dedupeReferenceItems(items);
+    const completeItems = selectCompleteNewsReferences(deduped, deduped.length);
     const dedupedItems = input.contentType === "NEXT_WEEK_MARKET_PREVIEW"
-      ? selectDiverseNextWeekNews(deduped, maxResults)
-      : deduped.slice(0, maxResults);
+      ? selectDiverseNextWeekNews(completeItems, maxResults)
+      : completeItems.slice(0, maxResults);
 
     const competitorBlogReferences: CompetitorBlogReference[] = [];
     if (process.env.COMPETITOR_BLOG_SEARCH_ENABLED === "true") {
@@ -201,7 +216,7 @@ export const naverSearchReferenceAdapter: ReferenceAdapter = {
     const marketSnapshot = await collectMarketSnapshot(input);
     const summary = summarizeReferenceItems(dedupedItems);
     const missingItems: string[] = [];
-    if (dedupedItems.length < 5) missingItems.push("실제 뉴스 참고자료 5개");
+    if (dedupedItems.length < 5) missingItems.push("말줄임표 없는 완전한 제목의 실제 뉴스 참고자료 5개");
     if (analyzedCompetitors.length < 3) missingItems.push("경쟁 블로그 참고자료 3개");
     const usableMarketSnapshot = (
       marketSnapshot.status === "ready" && marketSnapshot.dataQuality === "verified"
