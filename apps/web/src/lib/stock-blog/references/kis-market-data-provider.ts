@@ -400,6 +400,17 @@ function sectorNames(output: unknown) {
   };
 }
 
+export function calculateKisOverseasDailyChangePct(
+  latestValue: number,
+  previousValue: number | undefined,
+  summaryChangePct: number | undefined,
+) {
+  const calculatedChangePct = previousValue !== undefined && previousValue !== 0
+    ? ((latestValue - previousValue) / previousValue) * 100
+    : undefined;
+  return calculatedChangePct ?? summaryChangePct;
+}
+
 function overseasMetric(label: string, body: Record<string, unknown>, collectedAt: string, endpoint: string) {
   const summary = asRecords(body.output1)[0];
   const rows = asRecords(body.output2);
@@ -408,7 +419,7 @@ function overseasMetric(label: string, body: Record<string, unknown>, collectedA
   const value = asNumber(latest.ovrs_nmix_prpr);
   if (value === undefined) return undefined;
   const previous = asNumber(rows[1]?.ovrs_nmix_prpr);
-  const changePct = asNumber(summary?.prdy_ctrt) ?? (previous ? ((value - previous) / previous) * 100 : undefined);
+  const changePct = calculateKisOverseasDailyChangePct(value, previous, asNumber(summary?.prdy_ctrt));
   const rawDate = typeof latest.stck_bsop_date === "string" ? latest.stck_bsop_date : undefined;
   const asOf = parseDateTime(rawDate) ?? collectedAt;
   const dataSource = source(label, asOf, collectedAt, endpoint);

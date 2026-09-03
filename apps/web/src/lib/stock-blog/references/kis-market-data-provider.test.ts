@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  calculateKisOverseasDailyChangePct,
   getKisMarketFreshnessMinutes,
   parseKisKoreaMarketCalendar,
   rememberKisKoreaMarketSession,
@@ -98,4 +99,16 @@ test("월요일 오전에는 주말 행을 건너뛰고 금요일 확정값을 �
   ], "20260824");
 
   assert.equal(row?.stck_bsop_date, "20260821");
+});
+
+test("해외지수는 두 일봉이 있으면 부정확한 요약 등락률보다 종가로 다시 계산한다", () => {
+  const changePct = calculateKisOverseasDailyChangePct(53061.95, 52766.88, -0.25);
+
+  assert.ok(changePct !== undefined);
+  assert.ok(Math.abs(changePct - 0.5591954650341269) < 0.000001);
+  assert.equal(Number(changePct.toFixed(2)), 0.56);
+});
+
+test("해외지수 일봉이 한 개뿐이면 KIS 요약 등락률을 보조값으로 쓴다", () => {
+  assert.equal(calculateKisOverseasDailyChangePct(53061.95, undefined, 0.42), 0.42);
 });

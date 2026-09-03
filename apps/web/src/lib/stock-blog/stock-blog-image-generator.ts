@@ -53,7 +53,7 @@ const THEMES: Record<StockBriefingTemplate, ImageTheme> = {
   },
   KOREA_MARKET_CLOSE_US_PREVIEW: {
     eyebrow: "KOREA CLOSE · US PREVIEW",
-    marketLabel: "KOSPI · NASDAQ · S&P 500",
+    marketLabel: "S&P 500 · NASDAQ · US 10Y",
     accent: "#D9AB50",
     secondary: "#FFE5A8",
     skyline: "#173653",
@@ -87,6 +87,10 @@ const THEMES: Record<StockBriefingTemplate, ImageTheme> = {
     skyline: "#173653",
   },
 };
+
+export function getStockBlogImageThemeMarketLabels(template: StockBriefingTemplate) {
+  return THEMES[template].marketLabel.split(" · ");
+}
 
 function xmlEscape(value: string) {
   return value
@@ -679,6 +683,38 @@ export function isUsMarketStudySubject(input: { title: string; topic: string }) 
     .test(`${input.title}\n${input.topic}`);
 }
 
+export function usesUsFocusedGenericImages(input: {
+  template: StockBriefingTemplate;
+  title: string;
+  topic: string;
+}) {
+  return input.template === "KOREA_MARKET_CLOSE_US_PREVIEW"
+    || (input.template === "INVESTMENT_STUDY" && isUsMarketStudySubject(input));
+}
+
+export function getGenericMarketImagePolicy(input: {
+  template: StockBriefingTemplate;
+  title: string;
+  topic: string;
+}) {
+  const usFocused = usesUsFocusedGenericImages(input);
+  return {
+    includeDomesticIndices: !usFocused,
+    includeInvestorFlowChart: !usFocused,
+    omitUnsubstantiatedFlatUsIndices: usFocused,
+  };
+}
+
+export function selectGenericOverseasIndexChanges<T extends { value: number }>(
+  input: { template: StockBriefingTemplate; title: string; topic: string },
+  metrics: readonly T[],
+) {
+  const policy = getGenericMarketImagePolicy(input);
+  return policy.omitUnsubstantiatedFlatUsIndices
+    ? metrics.filter((metric) => metric.value !== 0)
+    : [...metrics];
+}
+
 function isYouthFutureSavingsSubject(input: { title: string; topic: string }) {
   return /청년미래적금/.test(`${input.title}\n${input.topic}`);
 }
@@ -1002,7 +1038,8 @@ export async function generateStockBlogImages(input: {
       throw new Error("검증된 최신 MarketSnapshot이 없어 데이터 차트를 생성하지 않았습니다.");
     }
     const omitMissingOverseasItems = isAllowedKisOverseasDegradedSnapshot(snapshot);
-    const isUsMarketStudy = input.template === "INVESTMENT_STUDY" && isUsMarketStudySubject(input);
+    const genericImagePolicy = getGenericMarketImagePolicy(input);
+    const useUsFocusedGenericImages = !genericImagePolicy.includeDomesticIndices;
     const kospi = numericMetric(snapshot.korea?.kospi, "changePct", "KOSPI_CHANGE");
     const kosdaq = numericMetric(snapshot.korea?.kosdaq, "changePct", "KOSDAQ_CHANGE");
     const sp500 = snapshot.us?.sp500 ? numericMetric(snapshot.us.sp500, "changePct", "SP500_CHANGE") : undefined;
@@ -1010,7 +1047,10 @@ export async function generateStockBlogImages(input: {
     const dow = snapshot.us?.dow ? numericMetric(snapshot.us.dow, "changePct", "DOW_CHANGE") : undefined;
     const fx = snapshot.us?.fx ? numericMetric(snapshot.us.fx, "value", "USDKRW_VALUE") : undefined;
     const fxChange = snapshot.us?.fx ? numericMetric(snapshot.us.fx, "changePct", "USDKRW_CHANGE") : undefined;
-    if (!omitMissingOverseasItems && (!sp500 || !nasdaq || !dow || !fx || !fxChange)) {
+    if (
+      !omitMissingOverseasItems
+      && (!sp500 || !nasdaq || (!useUsFocusedGenericImages && !dow) || !fx || !fxChange)
+    ) {
       throw new Error("IMAGE_DATA_MISSING_OVERSEAS_CORE");
     }
     const twoYear = numericMetric(snapshot.macro?.us2Year, "value", "US2Y_VALUE");
@@ -1030,7 +1070,7 @@ export async function generateStockBlogImages(input: {
         return undefined;
       }
     }).filter((flow): flow is VerifiedInvestorFlow => Boolean(flow));
-    const includeInvestorFlowChart = !isUsMarketStudy
+    const includeInvestorFlowChart = genericImagePolicy.includeInvestorFlowChart
       && kospiFlows.length === 3
       && hasMeaningfulInvestorFlowValues(kospiFlows.map((flow) => flow.value))
       && kospiFlows.every((flow) => flow.metric.unit === "백만원")
@@ -1048,31 +1088,42 @@ export async function generateStockBlogImages(input: {
       : undefined;
 
     await mkdir(outputDir, { recursive: true });
-    const overseasIndexMetrics = [sp500, nasdaq, dow].filter((metric): metric is VerifiedNumericMetric => Boolean(metric));
+    const overseasIndexMetrics = selectGenericOverseasIndexChanges(
+      input,
+      [sp500, nasdaq, dow].filter((metric): metric is VerifiedNumericMetric => Boolean(metric)),
+    );
+    const displayedSp500 = sp500 && overseasIndexMetrics.includes(sp500) ? sp500 : undefined;
+    const displayedNasdaq = nasdaq && overseasIndexMetrics.includes(nasdaq) ? nasdaq : undefined;
+    const displayedDow = dow && overseasIndexMetrics.includes(dow) ? dow : undefined;
     const hasOverseasIndexMetrics = overseasIndexMetrics.length > 0;
-    if (isUsMarketStudy && !hasOverseasIndexMetrics) throw new Error("IMAGE_DATA_MISSING_US_INDEX");
+    if (useUsFocusedGenericImages && !hasOverseasIndexMetrics) throw new Error("IMAGE_DATA_MISSING_US_INDEX");
+    const overseasIndexLabels = [
+      ...(displayedSp500 ? ["S&P 500"] : []),
+      ...(displayedNasdaq ? ["나스닥"] : []),
+      ...(displayedDow ? ["다우"] : []),
+    ];
     const domesticSessionLabel = input.template === "KOREA_DAILY_PREVIEW" ? "직전 거래일" : "최근 거래일";
-    const indexTitle = isUsMarketStudy
+    const indexTitle = useUsFocusedGenericImages
       ? "미국 주요 지수 등락 비교"
       : hasOverseasIndexMetrics ? "한국·미국 주요 지수 등락 비교" : "한국 주요 지수 등락 비교";
-    const indexCaption = isUsMarketStudy
-      ? "최근 거래일 기준 S&P 500·나스닥·다우 등락률 비교"
+    const indexCaption = useUsFocusedGenericImages
+      ? `최근 거래일 기준 ${overseasIndexLabels.join("·")} 등락률 비교`
       : hasOverseasIndexMetrics
       ? `${domesticSessionLabel} 기준 한국과 미국 주요 지수 등락률 비교`
       : `${domesticSessionLabel} 기준 코스피와 코스닥 등락률 비교`;
-    const indexSource = isUsMarketStudy
+    const indexSource = useUsFocusedGenericImages
       ? `기준일 ${dateLabel(overseasIndexMetrics[0].metric.asOf!)} | 출처 한국투자증권 Open API`
       : hasOverseasIndexMetrics
       ? `기준일 ${dateLabel(kospi.metric.asOf!)}(한국) · ${dateLabel(overseasIndexMetrics[0].metric.asOf!)}(미국) | 출처 한국투자증권 Open API`
       : `기준일 ${dateLabel(kospi.metric.asOf!)} | 출처 한국투자증권 Open API`;
     const indexRows = [
-      ...(!isUsMarketStudy ? [
+      ...(!useUsFocusedGenericImages ? [
         { label: "KOSPI", value: kospi.value, display: `${signed(kospi.value)}%` },
         { label: "KOSDAQ", value: kosdaq.value, display: `${signed(kosdaq.value)}%` },
       ] : []),
-      ...(sp500 ? [{ label: "S&P 500", value: sp500.value, display: `${signed(sp500.value)}%` }] : []),
-      ...(nasdaq ? [{ label: "NASDAQ", value: nasdaq.value, display: `${signed(nasdaq.value)}%` }] : []),
-      ...(dow ? [{ label: "Dow Jones", value: dow.value, display: `${signed(dow.value)}%` }] : []),
+      ...(displayedSp500 ? [{ label: "S&P 500", value: displayedSp500.value, display: `${signed(displayedSp500.value)}%` }] : []),
+      ...(displayedNasdaq ? [{ label: "NASDAQ", value: displayedNasdaq.value, display: `${signed(displayedNasdaq.value)}%` }] : []),
+      ...(displayedDow ? [{ label: "Dow Jones", value: displayedDow.value, display: `${signed(displayedDow.value)}%` }] : []),
     ];
     const flowSource = formattedInvestorFlows
       ? `기준일 ${dateLabel(kospiFlows[0].metric.asOf!)} | 단위 ${formattedInvestorFlows.unit} | 출처 한국투자증권 Open API`
@@ -1089,7 +1140,7 @@ export async function generateStockBlogImages(input: {
         name: "major-index-change.svg",
         svg: horizontalComparisonSvg({
           title: indexTitle,
-          subtitle: isUsMarketStudy
+          subtitle: useUsFocusedGenericImages
             ? "확인된 미국 최근 거래일 등락률만 같은 단위로 비교했습니다."
             : hasOverseasIndexMetrics
             ? `확인된 각 시장의 ${domesticSessionLabel} 등락률만 같은 단위로 비교했습니다.`
@@ -1158,24 +1209,24 @@ export async function generateStockBlogImages(input: {
         caption: indexCaption,
         sourceLabel: indexSource,
         sourceName: "한국투자증권 Open API",
-        sourceUrl: isUsMarketStudy ? overseasIndexMetrics[0].metric.url : kospi.metric.url,
+        sourceUrl: useUsFocusedGenericImages ? overseasIndexMetrics[0].metric.url : kospi.metric.url,
         licenseType: "generated-data-chart",
         collectedAt: snapshot.collectedAt,
         usageAllowed: true,
         dataKeys: [
-          ...(!isUsMarketStudy ? ["korea.kospi.changePct", "korea.kosdaq.changePct"] : []),
-          ...(sp500 ? ["us.sp500.changePct"] : []),
-          ...(nasdaq ? ["us.nasdaq.changePct"] : []),
-          ...(dow ? ["us.dow.changePct"] : []),
+          ...(!useUsFocusedGenericImages ? ["korea.kospi.changePct", "korea.kosdaq.changePct"] : []),
+          ...(displayedSp500 ? ["us.sp500.changePct"] : []),
+          ...(displayedNasdaq ? ["us.nasdaq.changePct"] : []),
+          ...(displayedDow ? ["us.dow.changePct"] : []),
         ],
         dataPoints: [
-          ...(!isUsMarketStudy ? [
+          ...(!useUsFocusedGenericImages ? [
             dataPoint("korea.kospi.changePct", "KOSPI", kospi.value, "%", kospi.metric.asOf!),
             dataPoint("korea.kosdaq.changePct", "KOSDAQ", kosdaq.value, "%", kosdaq.metric.asOf!),
           ] : []),
-          ...(sp500 ? [dataPoint("us.sp500.changePct", "S&P 500", sp500.value, "%", sp500.metric.asOf!)] : []),
-          ...(nasdaq ? [dataPoint("us.nasdaq.changePct", "NASDAQ", nasdaq.value, "%", nasdaq.metric.asOf!)] : []),
-          ...(dow ? [dataPoint("us.dow.changePct", "Dow Jones", dow.value, "%", dow.metric.asOf!)] : []),
+          ...(displayedSp500 ? [dataPoint("us.sp500.changePct", "S&P 500", displayedSp500.value, "%", displayedSp500.metric.asOf!)] : []),
+          ...(displayedNasdaq ? [dataPoint("us.nasdaq.changePct", "NASDAQ", displayedNasdaq.value, "%", displayedNasdaq.metric.asOf!)] : []),
+          ...(displayedDow ? [dataPoint("us.dow.changePct", "Dow Jones", displayedDow.value, "%", displayedDow.metric.asOf!)] : []),
         ],
         width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
       },
