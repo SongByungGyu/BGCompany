@@ -14,6 +14,7 @@ import {
   selectNaverArticleUrls,
   selectNaverEmphasisParagraphs,
   selectNaverSectionHeadings,
+  waitForVerificationClear,
 } from "./naver-writer.js";
 
 test("본문 이미지 설명과 출처를 네이버 기본 캡션 한 문단으로 합친다", () => {
@@ -168,4 +169,67 @@ test("임시저장 목록의 말줄임 표시 전 제목 접두어로 저장 성
   assert.equal(savedDraftTitleMatchToken(title), "7/19 다음 주 증시 전망 2026년 7월 20~24일");
   assert.equal(hasSavedDraftTitle(listText, title), true);
   assert.equal(hasSavedDraftTitle("임시저장 글\n다른 제목", title), false);
+});
+
+test("네이버 로그인이 풀리면 두 번 연속 확인 후 자동으로 재개한다", async () => {
+  let now = 0;
+  let inspections = 0;
+  const blockedStates = [true, false, false];
+  const resumed = await waitForVerificationClear({
+    inspectBlocked: async () => blockedStates[inspections++] ?? false,
+    wait: async (milliseconds) => { now += milliseconds; },
+    now: () => now,
+    timeoutMs: 10_000,
+    pollMs: 1_000,
+  });
+
+  assert.equal(resumed, true);
+  assert.equal(inspections, 3);
+});
+
+test("일시적으로 로그인 문구가 사라져도 한 번만으로 재개하지 않는다", async () => {
+  let now = 0;
+  let inspections = 0;
+  const blockedStates = [false, true, false, false];
+  const resumed = await waitForVerificationClear({
+    inspectBlocked: async () => blockedStates[inspections++] ?? false,
+    wait: async (milliseconds) => { now += milliseconds; },
+    now: () => now,
+    timeoutMs: 10_000,
+    pollMs: 1_000,
+  });
+
+  assert.equal(resumed, true);
+  assert.equal(inspections, 4);
+});
+
+test("인증 대기 중 heartbeat를 보내고 제한 시간이 지나면 안전하게 끝낸다", async () => {
+  let now = 0;
+  let heartbeats = 0;
+  const resumed = await waitForVerificationClear({
+    inspectBlocked: async () => true,
+    wait: async (milliseconds) => { now += milliseconds; },
+    heartbeat: async () => { heartbeats += 1; },
+    now: () => now,
+    timeoutMs: 3_500,
+    pollMs: 500,
+    heartbeatMs: 1_000,
+  });
+
+  assert.equal(resumed, false);
+  assert.equal(heartbeats, 3);
+  assert.equal(now, 3_500);
+});
+
+test("인증 창이 닫히면 추가 대기 없이 안전하게 끝낸다", async () => {
+  let waited = false;
+  const resumed = await waitForVerificationClear({
+    inspectBlocked: async () => true,
+    wait: async () => { waited = true; },
+    isClosed: () => true,
+    timeoutMs: 10_000,
+  });
+
+  assert.equal(resumed, false);
+  assert.equal(waited, false);
 });

@@ -134,22 +134,70 @@ async function launchPersistentBrowserContext(
   }
 }
 
-async function waitForManualNaverVerification(status: WriterResult["status"], url: string) {
+export async function waitForVerificationClear(input: {
+  inspectBlocked: () => Promise<boolean>;
+  wait: (milliseconds: number) => Promise<void>;
+  isClosed?: () => boolean;
+  heartbeat?: () => Promise<void>;
+  now?: () => number;
+  timeoutMs: number;
+  pollMs?: number;
+  heartbeatMs?: number;
+}) {
+  const now = input.now ?? Date.now;
+  const pollMs = Math.max(250, input.pollMs ?? 2_000);
+  const heartbeatMs = Math.max(pollMs, input.heartbeatMs ?? 30_000);
+  const deadline = now() + Math.max(pollMs, input.timeoutMs);
+  let lastHeartbeatAt = now();
+  let consecutiveClearChecks = 0;
+
+  while (now() < deadline) {
+    if (input.isClosed?.()) return false;
+    await input.wait(Math.min(pollMs, Math.max(1, deadline - now())));
+    if (input.isClosed?.()) return false;
+
+    const blocked = await input.inspectBlocked();
+    consecutiveClearChecks = blocked ? 0 : consecutiveClearChecks + 1;
+    if (consecutiveClearChecks >= 2) return true;
+
+    if (input.heartbeat && now() - lastHeartbeatAt >= heartbeatMs) {
+      await input.heartbeat();
+      lastHeartbeatAt = now();
+    }
+  }
+  return false;
+}
+
+function naverVerificationWaitTimeoutMs() {
+  const parsed = Number.parseInt(process.env.NAVER_VERIFICATION_WAIT_TIMEOUT_MS ?? "900000", 10);
+  if (!Number.isFinite(parsed)) return 900_000;
+  return Math.min(1_800_000, Math.max(30_000, parsed));
+}
+
+async function waitForManualNaverVerification(
+  status: WriterResult["status"],
+  page: import("playwright").Page,
+  reportProgress?: WriterContext["reportProgress"],
+) {
   if (process.env.NAVER_WAIT_FOR_SECURITY === "false") return false;
-  if (!stdin.isTTY) return false;
 
   console.log(`[naver-agent] ${status}: Naver login/security verification is required.`);
-  console.log(`[naver-agent] Open browser URL: ${url}`);
-  console.log("[naver-agent] Complete Naver login/security check in the opened browser, then press Enter here to retry.");
-  console.log("[naver-agent] Type 'skip' and press Enter to stop waiting.");
+  console.log(`[naver-agent] Open browser URL: ${page.url()}`);
+  console.log("[naver-agent] Complete Naver login/security check in the opened browser. The agent will resume automatically.");
 
-  const rl = createInterface({ input: stdin, output: stdout });
-  try {
-    const answer = await rl.question("[naver-agent] Press Enter after Naver verification> ");
-    return answer.trim().toLowerCase() !== "skip";
-  } finally {
-    rl.close();
-  }
+  const resumed = await waitForVerificationClear({
+    inspectBlocked: async () => Boolean(await detectBlockedStatus(page)),
+    wait: (milliseconds) => page.waitForTimeout(milliseconds),
+    isClosed: () => page.isClosed(),
+    heartbeat: reportProgress ? async () => {
+      await reportProgress({ status: "in_progress", externalUrl: page.url() }).catch((error) => {
+        console.warn(`[naver-agent] verification heartbeat failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    } : undefined,
+    timeoutMs: naverVerificationWaitTimeoutMs(),
+  });
+  console.log(`[naver-agent] Naver verification wait ${resumed ? "completed" : "timed out"}.`);
+  return resumed;
 }
 
 async function detectBlockedStatus(page: { url: () => string; locator: (selector: string) => { innerText: (options?: { timeout?: number }) => Promise<string> } }) {
@@ -1259,7 +1307,7 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
     await page.goto(writeUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
     let blockedStatus = await detectBlockedStatus(page);
     if (blockedStatus) {
-      const shouldRetry = await waitForManualNaverVerification(blockedStatus, page.url());
+      const shouldRetry = await waitForManualNaverVerification(blockedStatus, page, context.reportProgress);
       if (shouldRetry) {
         await page.goto(writeUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
         blockedStatus = await detectBlockedStatus(page);
