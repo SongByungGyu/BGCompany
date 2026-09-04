@@ -357,6 +357,12 @@ function asStringArray(value: unknown) {
   return items.length > 0 ? items : undefined;
 }
 
+export function asExplicitRequiredRevisions(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  if (!value.every((item) => typeof item === "string" && item.trim().length > 0)) return undefined;
+  return value as string[];
+}
+
 function asWriterSections(value: unknown) {
   if (!Array.isArray(value)) return undefined;
   const sections = value
@@ -1420,7 +1426,7 @@ function runFromEvent(event: {
       qualityNotes: asStringArray(qaResult.qualityNotes),
       riskNotes: asStringArray(qaResult.riskNotes),
       typoAndStyleNotes: asStringArray(qaResult.typoAndStyleNotes),
-      requiredRevisions: asStringArray(qaResult.requiredRevisions),
+      requiredRevisions: asExplicitRequiredRevisions(qaResult.requiredRevisions),
       optionalSuggestions: asStringArray(qaResult.optionalSuggestions),
       publishReadiness: qaResult.publishReadiness === "ready" || qaResult.publishReadiness === "needs_revision" || qaResult.publishReadiness === "blocked" ? qaResult.publishReadiness : undefined,
       qaScore: asNumber(qaResult.qaScore),
