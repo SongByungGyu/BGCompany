@@ -28,6 +28,22 @@ export type StockBlogPhaseBudgetDecision = {
   reason?: string;
 };
 
+export function resolveStockBlogRecoveryPublishTime(input: {
+  standardPublishTime: string;
+  manualRecovery: boolean;
+  marketDate: string;
+  currentMarketDate: string;
+  currentTime: string;
+  originalPublishAtMs: number;
+  nowMs: number;
+  lateTtlMinutes: number;
+}) {
+  const expired = input.nowMs > input.originalPublishAtMs + (input.lateTtlMinutes * 60_000);
+  return input.manualRecovery && input.marketDate === input.currentMarketDate && expired
+    ? input.currentTime
+    : input.standardPublishTime;
+}
+
 export type StockBlogRetryPhase = "reference_preflight" | "content_generation" | "draft_assembly";
 
 export type StockBlogRetryV2Lease = {

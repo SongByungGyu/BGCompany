@@ -12,12 +12,40 @@ import {
   parseStockBlogRetryV2,
   reopenStockBlogRetryV2ContentGeneration,
   requestStockBlogRetryV2ReferenceRefresh,
+  resolveStockBlogRecoveryPublishTime,
   settleStockBlogRetryV2Claim,
   STOCK_BLOG_RETRY_PHASE_LIMITS,
   STOCK_BLOG_RETRY_PHASE_LEASE_MS,
   shouldClearRecoverablePipelineCircuitBreaker,
   shouldClearReferencePreflightCircuitBreaker,
 } from "./stock-blog-scheduler-policy.ts";
+
+test("같은 날 발행창이 지난 수동 복구는 현재 시각으로 다시 예약한다", () => {
+  const originalPublishAtMs = Date.parse("2026-09-04T08:00:00.000Z");
+  assert.equal(resolveStockBlogRecoveryPublishTime({
+    standardPublishTime: "17:00",
+    manualRecovery: true,
+    marketDate: "2026-09-04",
+    currentMarketDate: "2026-09-04",
+    currentTime: "19:20",
+    originalPublishAtMs,
+    nowMs: Date.parse("2026-09-04T10:20:00.000Z"),
+    lateTtlMinutes: 120,
+  }), "19:20");
+});
+
+test("정규 실행과 지난 날짜 복구는 원래 발행 시각을 유지한다", () => {
+  const base = {
+    standardPublishTime: "17:00",
+    currentMarketDate: "2026-09-04",
+    currentTime: "19:20",
+    originalPublishAtMs: Date.parse("2026-09-03T08:00:00.000Z"),
+    nowMs: Date.parse("2026-09-04T10:20:00.000Z"),
+    lateTtlMinutes: 120,
+  };
+  assert.equal(resolveStockBlogRecoveryPublishTime({ ...base, manualRecovery: false, marketDate: "2026-09-04" }), "17:00");
+  assert.equal(resolveStockBlogRecoveryPublishTime({ ...base, manualRecovery: true, marketDate: "2026-09-03" }), "17:00");
+});
 
 test("기존 retryV2에 참고자료 갱신 필드가 없어도 false로 호환한다", () => {
   const parsed = parseStockBlogRetryV2({

@@ -8,6 +8,7 @@ import {
 import type { ContentPipelineInput } from "@/lib/content-pipeline/content-pipeline-input";
 import { HermesDailyLimitExceededError, getHermesUsageSummary } from "@/lib/hermes/hermes-usage";
 import { createNaverDraftJobFromPipeline, getPublishCircuitBreaker } from "@/lib/naver-drafts/naver-draft-jobs";
+import { getNaverDraftLateTtlMinutes } from "@/lib/naver-drafts/naver-draft-schedule-policy";
 import type { ContentPipelineRun, StockBlogQualityGateResult } from "@/features/content-pipeline/content-pipeline-types";
 import { evaluateStockBlogPublishQuality, evaluateStockBlogReferences } from "@/lib/stock-blog/quality-gate";
 import { collectStockBlogReferences } from "@/lib/stock-blog/references/reference-adapter";
@@ -29,6 +30,7 @@ import {
   isStockReferencePreflightFailure,
   parseStockBlogRetryV2,
   reopenStockBlogRetryV2ContentGeneration,
+  resolveStockBlogRecoveryPublishTime,
   requestStockBlogRetryV2ReferenceRefresh,
   settleStockBlogRetryV2Claim,
   STOCK_BLOG_RETRY_PHASE_LIMITS,
@@ -1308,7 +1310,28 @@ async function runOneSchedule(
   const marketDate = `${scheduledParts.year}-${pad(scheduledParts.month)}-${pad(scheduledParts.day)}`;
   const key = scheduleKey(definition, marketDate);
   const id = schedulerEventId(key);
-  const publishTime = definition.publishTime ?? definition.scheduledTime;
+  const standardPublishTime = definition.publishTime ?? definition.scheduledTime;
+  const currentParts = getZonedParts(now, config.timezone);
+  const currentMarketDate = `${currentParts.year}-${pad(currentParts.month)}-${pad(currentParts.day)}`;
+  const { hour: publishHour, minute: publishMinute } = parseTime(standardPublishTime);
+  const originalPublishAt = zonedDateTimeToUtc(
+    scheduledParts.year,
+    scheduledParts.month,
+    scheduledParts.day,
+    publishHour,
+    publishMinute,
+    config.timezone,
+  );
+  const publishTime = resolveStockBlogRecoveryPublishTime({
+    standardPublishTime,
+    manualRecovery: options.manualRecovery === true,
+    marketDate,
+    currentMarketDate,
+    currentTime: `${pad(currentParts.hour)}:${pad(currentParts.minute)}`,
+    originalPublishAtMs: originalPublishAt.getTime(),
+    nowMs: now.getTime(),
+    lateTtlMinutes: getNaverDraftLateTtlMinutes(),
+  });
   let publishKey = buildStockBlogLogicalPublishKey(definition.scheduleId, marketDate);
   const publishKeyAliases = buildStockBlogLegacyPublishKeyAliases({
     contentType,
