@@ -15,7 +15,7 @@ if (-not (Test-Path -LiteralPath $runtimeAudit)) { throw "runtime audit not foun
 
 function Get-DotEnvValue {
   param([string]$Path, [string]$Name)
-  foreach ($line in Get-Content -LiteralPath $Path -ErrorAction Stop) {
+  foreach ($line in Get-Content -LiteralPath $Path -Encoding UTF8 -ErrorAction Stop) {
     if ($line -match "^\s*$([regex]::Escape($Name))\s*=\s*(?<value>.*)\s*$") {
       return $Matches.value.Trim().Trim('"').Trim("'")
     }

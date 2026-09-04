@@ -20,9 +20,21 @@ function Get-RuntimeTreeFiles {
   }
   return $result
 }
+
+function Get-OrdinalSortedUniquePaths {
+  param([object[]]$Values)
+  $unique = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+  foreach ($value in @($Values)) {
+    if ($null -ne $value) { [void]$unique.Add([string]$value) }
+  }
+  $sorted = [string[]]@($unique)
+  [Array]::Sort($sorted, [StringComparer]::Ordinal)
+  return $sorted
+}
+
 $packageJsonPath = Join-Path $resolvedAgentRoot "package.json"
 if (-not (Test-Path -LiteralPath $packageJsonPath)) { throw "package.json not found: $packageJsonPath" }
-$packageJson = Get-Content -LiteralPath $packageJsonPath -Raw | ConvertFrom-Json
+$packageJson = Get-Content -LiteralPath $packageJsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $startCommand = [string]$packageJson.scripts.start
 
 if ($startCommand -match '(?:^|\s)tsx(?:\.cmd)?\s+src[/\\]index\.ts(?:\s|$)') {
@@ -57,7 +69,7 @@ if ($runtimeMode -eq "source") {
 } else {
   $relativeFiles += @(Get-RuntimeTreeFiles -Directory (Join-Path $resolvedAgentRoot "dist") -RelativeDirectory "dist" -Mode "dist")
 }
-$relativeFiles = @($relativeFiles | Sort-Object -Unique)
+$relativeFiles = [string[]]@(Get-OrdinalSortedUniquePaths -Values $relativeFiles)
 
 $files = foreach ($relativePath in $relativeFiles) {
   $fullPath = Join-Path $resolvedAgentRoot $relativePath.Replace("/", "\")

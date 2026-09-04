@@ -19,13 +19,25 @@ function Get-RuntimeTreeFiles {
   }
   return $result
 }
+
+function Get-OrdinalSortedUniquePaths {
+  param([object[]]$Values)
+  $unique = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+  foreach ($value in @($Values)) {
+    if ($null -ne $value) { [void]$unique.Add([string]$value) }
+  }
+  $sorted = [string[]]@($unique)
+  [Array]::Sort($sorted, [StringComparer]::Ordinal)
+  return $sorted
+}
+
 $packageJsonPath = Join-Path $resolvedAgentRoot "package.json"
 $manifestPath = Join-Path $resolvedAgentRoot "runtime-manifest.json"
 if (-not (Test-Path -LiteralPath $packageJsonPath)) { throw "package.json not found: $packageJsonPath" }
 if (-not (Test-Path -LiteralPath $manifestPath)) { throw "Reviewed runtime manifest not found: $manifestPath" }
 
-$packageJson = Get-Content -LiteralPath $packageJsonPath -Raw | ConvertFrom-Json
-$manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+$packageJson = Get-Content -LiteralPath $packageJsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
+$manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $startCommand = [string]$packageJson.scripts.start
 if ($startCommand -match '(?:^|\s)tsx(?:\.cmd)?\s+src[/\\]index\.ts(?:\s|$)') {
   $runtimeMode = "source"
@@ -65,8 +77,8 @@ if ($runtimeMode -eq "source") {
 } else {
   $relativeFiles += @(Get-RuntimeTreeFiles -Directory (Join-Path $resolvedAgentRoot "dist") -RelativeDirectory "dist" -Mode "dist")
 }
-$relativeFiles = @($relativeFiles | Sort-Object -Unique)
-$manifestFiles = @($manifest.files | ForEach-Object { [string]$_.path } | Sort-Object -Unique)
+$relativeFiles = [string[]]@(Get-OrdinalSortedUniquePaths -Values $relativeFiles)
+$manifestFiles = [string[]]@(Get-OrdinalSortedUniquePaths -Values @($manifest.files | ForEach-Object { [string]$_.path }))
 $missingFromManifest = @($relativeFiles | Where-Object { $_ -notin $manifestFiles })
 $missingFromRuntime = @($manifestFiles | Where-Object { $_ -notin $relativeFiles })
 if ($missingFromManifest.Count -gt 0 -or $missingFromRuntime.Count -gt 0) {

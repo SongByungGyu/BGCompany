@@ -60,6 +60,21 @@ test("Windows runtime drift audit verifies the complete manifest and exact Node 
   assert.match(script, /Runtime aggregate SHA mismatch/);
 });
 
+test("Windows manifest identity is stable across PowerShell 5 and 7", () => {
+  const writer = readWindowsScript("write-runtime-manifest.ps1");
+  const audit = readWindowsScript("audit-runtime-drift.ps1");
+  const installer = readWindowsScript("install-reviewed-agent.ps1");
+  const supervisor = readWindowsScript("start-agent.ps1");
+
+  for (const script of [writer, audit]) {
+    assert.match(script, /Get-OrdinalSortedUniquePaths/);
+    assert.match(script, /\[StringComparer\]::Ordinal/);
+    assert.match(script, /Get-Content[^\n]+-Encoding UTF8/);
+  }
+  assert.match(installer, /Get-Content[^\n]+-Encoding UTF8/);
+  assert.match(supervisor, /Get-Content[^\n]+-Encoding UTF8/);
+});
+
 test("reviewed installer quiesces, verifies the database, captures exact processes, and fully rolls back", () => {
   const script = readWindowsScript("install-reviewed-agent.ps1");
   assert.match(script, /\[Parameter\(Mandatory = \$true\)\]\[string\]\$InstallRoot/);

@@ -41,7 +41,7 @@ $sourceIdentity = & $sourceAudit -AgentRoot $resolvedSource
 
 function Get-DotEnvValue {
   param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Name)
-  foreach ($line in Get-Content -LiteralPath $Path -ErrorAction Stop) {
+  foreach ($line in Get-Content -LiteralPath $Path -Encoding UTF8 -ErrorAction Stop) {
     if ($line -match "^\s*$([regex]::Escape($Name))\s*=\s*(?<value>.*)\s*$") {
       return $Matches.value.Trim().Trim('"').Trim("'")
     }
@@ -72,7 +72,7 @@ function Read-JsonRecord {
   param([Parameter(Mandatory = $true)][string]$Path)
   if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
   try {
-    return Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+    return Get-Content -LiteralPath $Path -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
   } catch {
     throw "Invalid JSON record: $Path"
   }
