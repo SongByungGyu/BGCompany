@@ -57,8 +57,11 @@ if ((Test-Path -LiteralPath $installFull) -and
 
 $sourceAudit = Join-Path $resolvedSource "windows\audit-runtime-drift.ps1"
 $sourceAcl = Join-Path $resolvedSource "windows\protect-env-acl.ps1"
+$sourceProcessDirectory = Join-Path $resolvedSource "windows\process-current-directory.ps1"
 if (-not (Test-Path -LiteralPath $sourceAudit -PathType Leaf)) { throw "Runtime audit not found in source package." }
 if (-not (Test-Path -LiteralPath $sourceAcl -PathType Leaf)) { throw "Runtime ACL script not found in source package." }
+if (-not (Test-Path -LiteralPath $sourceProcessDirectory -PathType Leaf)) { throw "Process directory helper not found in source package." }
+. $sourceProcessDirectory
 $sourceIdentity = & $sourceAudit -AgentRoot $resolvedSource
 
 function Get-DotEnvValue {
@@ -294,6 +297,62 @@ function Get-CapturedAgentProcesses {
   return @($captured)
 }
 
+function Get-CapturedAgentAuxiliaryProcesses {
+  param([Parameter(Mandatory = $true)][string]$ExpectedRoot)
+  $processes = @(Get-CimInstance Win32_Process)
+  $loginSetupAbsolute = Join-Path $ExpectedRoot "dist\naver-login-setup.js"
+  $profileRoot = Join-Path $ExpectedRoot ".naver-profile"
+  $seedProcesses = @($processes | Where-Object {
+    $commandLine = [string]$_.CommandLine
+    $processName = [string]$_.Name
+    $isLoginSetup = $commandLine -match '(?:^|[\\/\s''"])dist[\\/]naver-login-setup\.js(?:[''"\s]|$)'
+    $hasAbsoluteLoginPath = $commandLine.IndexOf($loginSetupAbsolute, [StringComparison]::OrdinalIgnoreCase) -ge 0
+    $hasExpectedWorkingDirectory = $false
+    if ($isLoginSetup -and -not $hasAbsoluteLoginPath) {
+      $workingDirectory = (Get-ProcessCurrentDirectory -ProcessId ([int]$_.ProcessId)).TrimEnd("\")
+      $hasExpectedWorkingDirectory = $workingDirectory -and
+        $workingDirectory.Equals($ExpectedRoot, [StringComparison]::OrdinalIgnoreCase)
+    }
+    $isOwnedProfileBrowser = $processName -match '^(?:chrome|msedge|chromium)\.exe$' -and
+      $commandLine.IndexOf($profileRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+      $commandLine -match '(?i)--user-data-dir(?:=|\s)'
+    ($isLoginSetup -and ($hasAbsoluteLoginPath -or $hasExpectedWorkingDirectory)) -or $isOwnedProfileBrowser
+  })
+  if ($seedProcesses.Count -eq 0) { return @() }
+
+  $selected = [Collections.Generic.HashSet[int]]::new()
+  foreach ($process in $seedProcesses) { [void]$selected.Add([int]$process.ProcessId) }
+  do {
+    $added = $false
+    foreach ($process in $processes) {
+      if ($selected.Contains([int]$process.ParentProcessId) -and $selected.Add([int]$process.ProcessId)) {
+        $added = $true
+      }
+    }
+  } while ($added)
+
+  $captured = foreach ($processId in @($selected)) {
+    $process = $processes | Where-Object { [int]$_.ProcessId -eq $processId } | Select-Object -First 1
+    if (-not $process) { continue }
+    [pscustomobject]@{
+      ProcessId = [int]$process.ProcessId
+      ParentProcessId = [int]$process.ParentProcessId
+      CreationStamp = Get-ProcessCreationStamp -Process $process
+      CommandLine = [string]$process.CommandLine
+    }
+  }
+  return @($captured)
+}
+
+function Merge-CapturedProcessInstances {
+  param([Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Processes)
+  $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+  return @($Processes | Where-Object {
+    $key = "$([int]$_.ProcessId)|$([string]$_.CreationStamp)"
+    $seen.Add($key)
+  })
+}
+
 function Test-SameProcessInstance {
   param([Parameter(Mandatory = $true)][object]$Captured)
   $current = Get-CimInstance Win32_Process -Filter "ProcessId = $([int]$Captured.ProcessId)" -ErrorAction SilentlyContinue
@@ -368,6 +427,14 @@ function Assert-NoRootAgentProcess {
   })
   if ($remaining.Count -gt 0) {
     throw "Agent processes remain for $Root; refusing to move the runtime directory."
+  }
+}
+
+function Assert-NoOwnedAgentAuxiliaryProcess {
+  param([Parameter(Mandatory = $true)][string]$Root)
+  $remaining = @(Get-CapturedAgentAuxiliaryProcesses -ExpectedRoot $Root)
+  if ($remaining.Count -gt 0) {
+    throw "Agent-owned login or browser processes remain for $Root; refusing to move the runtime directory."
   }
 }
 
@@ -505,10 +572,12 @@ try {
 
   [void](Assert-RemoteRuntimeIdle -EnvFile $configurationEnv)
   if ($existing) {
-    $captured = @(Get-CapturedAgentProcesses -ExpectedRoot $installFull -Port $port -ExpectedBuild $oldBuild -AllowVerifiedLegacy:$ConfirmLegacyNoPublishing)
-    if ($captured.Count -gt 0 -and -not $taskWasRunning) {
+    $managedCaptured = @(Get-CapturedAgentProcesses -ExpectedRoot $installFull -Port $port -ExpectedBuild $oldBuild -AllowVerifiedLegacy:$ConfirmLegacyNoPublishing)
+    if ($managedCaptured.Count -gt 0 -and -not $taskWasRunning) {
       throw "A live agent appeared outside the running managed task during preflight; it was not stopped."
     }
+    $auxiliaryCaptured = @(Get-CapturedAgentAuxiliaryProcesses -ExpectedRoot $installFull)
+    $captured = @(Merge-CapturedProcessInstances -Processes @($managedCaptured + $auxiliaryCaptured))
   }
 
   $suffix = [Guid]::NewGuid().ToString("N")
@@ -537,7 +606,10 @@ try {
     $taskStopped = $true
   }
   Stop-CapturedAgentProcesses -Captured $captured
-  if ($existing) { Assert-NoRootAgentProcess -Root $installFull }
+  if ($existing) {
+    Assert-NoRootAgentProcess -Root $installFull
+    Assert-NoOwnedAgentAuxiliaryProcess -Root $installFull
+  }
   [void](Assert-RemoteRuntimeIdle -EnvFile $configurationEnv)
 
   if ($existing) {
@@ -685,8 +757,11 @@ try {
         -ExpectedEntry (Join-Path $installFull ([string]$sourceIdentity.Entry).Replace("/", "\")) `
         -AllowVerifiedLegacy `
         -IgnoreForeignListener)
+      $newAuxiliaryCaptured = @(Get-CapturedAgentAuxiliaryProcesses -ExpectedRoot $installFull)
+      $newCaptured = @(Merge-CapturedProcessInstances -Processes @($newCaptured + $newAuxiliaryCaptured))
       Stop-CapturedAgentProcesses -Captured $newCaptured
       Assert-NoRootAgentProcess -Root $installFull
+      Assert-NoOwnedAgentAuxiliaryProcess -Root $installFull
       Move-RuntimeDirectoryWithRetry -Source $installFull -Destination $failed
       $activeInstalled = $false
     }

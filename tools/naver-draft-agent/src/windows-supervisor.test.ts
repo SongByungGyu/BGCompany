@@ -77,6 +77,7 @@ test("Windows manifest identity is stable across PowerShell 5 and 7", () => {
 
 test("reviewed installer quiesces, verifies the database, captures exact processes, and fully rolls back", () => {
   const script = readWindowsScript("install-reviewed-agent.ps1");
+  const processDirectory = readWindowsScript("process-current-directory.ps1");
   assert.match(script, /\[Parameter\(Mandatory = \$true\)\]\[string\]\$InstallRoot/);
   assert.match(script, /runtime-status/);
   assert.match(script, /publishingCount -ne 0/);
@@ -87,6 +88,15 @@ test("reviewed installer quiesces, verifies the database, captures exact process
   assert.match(script, /\[AllowEmptyCollection\(\)\]\[object\[\]\]\$Captured/);
   assert.match(script, /Assert-FreshIdentityRecord/);
   assert.match(script, /Get-CimInstance Win32_Process/);
+  assert.match(script, /Get-CapturedAgentAuxiliaryProcesses/);
+  assert.match(script, /naver-login-setup\.js/);
+  assert.match(script, /--user-data-dir/);
+  assert.match(script, /Get-ProcessCurrentDirectory/);
+  assert.match(script, /Merge-CapturedProcessInstances/);
+  assert.match(script, /Assert-NoOwnedAgentAuxiliaryProcess/);
+  assert.match(processDirectory, /ProcessCurrentDirectoryReader/);
+  assert.match(processDirectory, /NtQueryInformationProcess/);
+  assert.match(processDirectory, /ReadProcessMemory/);
   assert.match(script, /Move-RuntimeDirectoryWithRetry/);
   assert.match(script, /Timed out moving runtime directory/);
   assert.match(script, /ParentProcessId/);
@@ -103,9 +113,14 @@ test("reviewed installer quiesces, verifies the database, captures exact process
   assert.match(script, /Unsafe staging cleanup target/);
   assert.match(script, /ACL-protected recoverable backup retained/);
   assert.ok(
-    script.indexOf("$captured = @(Get-CapturedAgentProcesses") <
+    script.indexOf("$managedCaptured = @(Get-CapturedAgentProcesses") <
       script.indexOf("Stop-ScheduledTask -TaskName $TaskName -ErrorAction Stop"),
     "exact process instances must be captured before the task is stopped",
+  );
+  assert.ok(
+    script.indexOf("$auxiliaryCaptured = @(Get-CapturedAgentAuxiliaryProcesses") <
+      script.indexOf("Stop-ScheduledTask -TaskName $TaskName -ErrorAction Stop"),
+    "agent-owned login/profile processes must be captured before the task is stopped",
   );
   assert.match(script, /A live agent is not owned by the running managed task/);
   assert.match(script, /A live agent appeared outside the running managed task during preflight/);

@@ -61,6 +61,8 @@ npm run login:setup
 
 This mode uses the existing `NAVER_BROWSER_PROFILE_DIR`, opens a visible sandboxed Chrome window, and waits for the user to finish the login and security steps manually. It does not poll the BG Company API, inspect or claim draft jobs, fill editor fields, click draft-save, or publish. It never prints or uploads browser cookies or storage. After reaching the BG Market Note write or management screen, return to the terminal and press Enter. The command closes the browser normally and prints only `NAVER_SESSION_STATUS=...`.
 
+Run this command directly from the agent terminal. Do not wrap it in a persistent `powershell -NoExit` launcher. The reviewed installer detects and closes a leftover agent-owned login setup shell or dedicated-profile browser only after the server confirms that no Naver job is publishing.
+
 Stop the normal agent and every Chrome process using the same profile before setup. Never delete `.naver-profile` to resolve a profile lock.
 
 
