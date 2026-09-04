@@ -103,6 +103,32 @@ function Read-JsonRecord {
   }
 }
 
+function ConvertTo-UtcTimestamp {
+  param(
+    [Parameter(Mandatory = $true)][object]$Value,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  if ($Value -is [DateTimeOffset]) {
+    return ([DateTimeOffset]$Value).ToUniversalTime()
+  }
+  if ($Value -is [DateTime]) {
+    $dateValue = [DateTime]$Value
+    if ($dateValue.Kind -eq [DateTimeKind]::Unspecified) {
+      throw "$Label timestamp has no timezone."
+    }
+    return [DateTimeOffset]::new($dateValue).ToUniversalTime()
+  }
+  $textValue = ([string]$Value).Trim()
+  if ($textValue -notmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?(?:Z|[+-]\d{2}:\d{2})$') {
+    throw "$Label timestamp is not an ISO 8601 value with a timezone."
+  }
+  try {
+    return [DateTimeOffset]::Parse($textValue, [Globalization.CultureInfo]::InvariantCulture).ToUniversalTime()
+  } catch {
+    throw "$Label timestamp is invalid."
+  }
+}
+
 function Set-DeploymentHold {
   param(
     [Parameter(Mandatory = $true)][string]$Path,
@@ -141,7 +167,7 @@ function Assert-FreshIdentityRecord {
   if ($ExpectedBuild -and -not ([string]$Record.buildSha).Equals($ExpectedBuild, [StringComparison]::OrdinalIgnoreCase)) {
     throw "$Label build SHA mismatch."
   }
-  $timestamp = [DateTimeOffset]::Parse([string]$Record.timestamp).ToUniversalTime()
+  $timestamp = ConvertTo-UtcTimestamp -Value $Record.timestamp -Label $Label
   $now = [DateTimeOffset]::UtcNow
   $ageSeconds = ($now - $timestamp).TotalSeconds
   if ($ageSeconds -lt -120 -or $ageSeconds -gt $MaximumAgeSeconds) {

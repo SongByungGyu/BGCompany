@@ -87,6 +87,11 @@ test("reviewed installer quiesces, verifies the database, captures exact process
   assert.match(script, /\[AllowEmptyString\(\)\]\[string\]\$Value/);
   assert.match(script, /\[AllowEmptyCollection\(\)\]\[object\[\]\]\$Captured/);
   assert.match(script, /Assert-FreshIdentityRecord/);
+  assert.match(script, /ConvertTo-UtcTimestamp/);
+  assert.match(script, /\$Value -is \[DateTimeOffset\]/);
+  assert.match(script, /\$Value -is \[DateTime\]/);
+  assert.match(script, /DateTimeKind\]::Unspecified/);
+  assert.match(script, /ISO 8601 value with a timezone/);
   assert.match(script, /Get-CimInstance Win32_Process/);
   assert.match(script, /Get-CapturedAgentAuxiliaryProcesses/);
   assert.match(script, /naver-login-setup\.js/);
