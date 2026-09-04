@@ -83,6 +83,7 @@ test("reviewed installer quiesces, verifies the database, captures exact process
   assert.match(script, /activeAgentJobCount -ne 0/);
   assert.match(script, /deployment_hold/);
   assert.match(script, /Wait-ForDeploymentHold/);
+  assert.match(script, /\[AllowEmptyString\(\)\]\[string\]\$Value/);
   assert.match(script, /Assert-FreshIdentityRecord/);
   assert.match(script, /Get-CimInstance Win32_Process/);
   assert.match(script, /ParentProcessId/);

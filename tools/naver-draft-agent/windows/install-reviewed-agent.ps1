@@ -52,7 +52,7 @@ function Get-DotEnvValue {
 function Resolve-RuntimeFile {
   param(
     [Parameter(Mandatory = $true)][string]$Root,
-    [Parameter(Mandatory = $true)][string]$Value,
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Value,
     [Parameter(Mandatory = $true)][string]$DefaultRelative,
     [Parameter(Mandatory = $true)][string]$Label
   )
