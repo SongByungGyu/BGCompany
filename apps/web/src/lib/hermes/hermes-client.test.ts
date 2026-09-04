@@ -52,6 +52,12 @@ test("QA가 승인·발행 가능을 명시하면 누락된 requiredRevisions를
     finalRecommendation: "approve",
   });
   assert.deepEqual(normalized.requiredRevisions, []);
+  assert.deepEqual(normalizeQaAuditHermesResponse({
+    qaScore: 97,
+    publishReadiness: "ready",
+    finalRecommendation: "approve",
+    revisions: null,
+  }).requiredRevisions, []);
 });
 
 test("QA 응답 정규화는 문자열이나 비문자 배열을 requiredRevisions로 인정하지 않는다", () => {

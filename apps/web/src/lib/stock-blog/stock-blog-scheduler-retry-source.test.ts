@@ -86,7 +86,7 @@ test("드래프트 참고자료 오류는 조립 시도를 되돌리고 참고�
   assert.match(source, /STOCK_REFERENCE_PREFLIGHT_BLOCKED: \$\{reason\}/);
 });
 
-test("수동 복구는 본문 생성 claim에만 두 번의 추가 상한을 전달한다", async () => {
+test("수동 복구는 본문 생성 claim에만 제한된 추가 상한을 전달한다", async () => {
   const source = await readFile(sourceUrl, "utf8");
   const overrides = source.match(/maxAttempts: options\.manualRecovery \? STOCK_BLOG_MANUAL_RECOVERY_GENERATION_LIMIT : undefined/g) ?? [];
   assert.equal(overrides.length, 2);

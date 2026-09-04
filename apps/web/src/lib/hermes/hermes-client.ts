@@ -515,7 +515,11 @@ export function normalizeQaAuditHermesResponse(raw: unknown): QaAuditResult {
 
   const revisionKeys = ["requiredRevisions", "revisions", "mustFix"];
   const requiredRevisions = pickExplicitStringArray(record, revisionKeys);
-  const revisionsFieldPresent = revisionKeys.some((key) => Object.prototype.hasOwnProperty.call(record, key));
+  const revisionsFieldPresent = revisionKeys.some((key) => (
+    Object.prototype.hasOwnProperty.call(record, key)
+    && record[key] !== null
+    && record[key] !== undefined
+  ));
   const publishReadiness = pickPublishReadiness(record);
   const finalRecommendation = pickQaRecommendation(record);
 
