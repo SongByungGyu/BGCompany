@@ -29,7 +29,6 @@ function Set-RestrictedAcl {
   } else {
     [System.Security.AccessControl.FileSecurity]::new()
   }
-  $acl.SetOwner($currentUser)
   $acl.SetAccessRuleProtection($true, $false)
   foreach ($sid in @($currentUser, $systemSid, $administratorsSid)) {
     $rule = if ($IsDirectory) {
