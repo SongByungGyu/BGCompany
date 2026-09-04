@@ -15,10 +15,18 @@ import {
   resolveStockBlogRecoveryPublishTime,
   settleStockBlogRetryV2Claim,
   STOCK_BLOG_RETRY_PHASE_LIMITS,
+  STOCK_BLOG_MANUAL_RECOVERY_GENERATION_LIMIT,
   STOCK_BLOG_RETRY_PHASE_LEASE_MS,
   shouldClearRecoverablePipelineCircuitBreaker,
   shouldClearReferencePreflightCircuitBreaker,
 } from "./stock-blog-scheduler-policy.ts";
+
+test("수동 본문 생성 복구는 기본 상한보다 정확히 두 번 더 허용한다", () => {
+  assert.equal(
+    STOCK_BLOG_MANUAL_RECOVERY_GENERATION_LIMIT,
+    STOCK_BLOG_RETRY_PHASE_LIMITS.content_generation + 2,
+  );
+});
 
 test("같은 날 발행창이 지난 수동 복구는 현재 시각으로 다시 예약한다", () => {
   const originalPublishAtMs = Date.parse("2026-09-04T08:00:00.000Z");

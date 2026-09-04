@@ -198,3 +198,54 @@ test("FRED 일부 지연 때 2년물과 금리차가 없어도 10년물로 저�
     await rm(outputDir, { recursive: true, force: true });
   }
 });
+
+test("FRED 금리 전체 지연 때 검증된 환율만으로 빈 영역 없는 저녁 차트를 만든다", async () => {
+  const pipelineId = `test-evening-fred-no-yields-${process.pid}`;
+  const outputDir = path.join(process.cwd(), "public", "generated", "stock-blog", pipelineId);
+  const snapshot: MarketSnapshot = {
+    provider: "kis-fred",
+    status: "ready",
+    marketDate: "2026-09-04",
+    collectedAt: AS_OF,
+    dataQuality: "partial",
+    fallbackUsed: false,
+    degradedMode: "fred_unavailable",
+    degradedProviders: ["fred"],
+    disclosures: [FRED_DEGRADED_DISCLOSURE],
+    freshness: { status: "fresh", checkedAt: AS_OF, staleItems: [] },
+    korea: {
+      kospi: verifiedMetric({ label: "KOSPI", value: 7110.31, changePct: -0.38, unit: "pt" }),
+      kosdaq: verifiedMetric({ label: "KOSDAQ", value: 902.44, changePct: 0.21, unit: "pt" }),
+      investorFlows: [],
+    },
+    us: {
+      sp500: verifiedMetric({ label: "S&P 500", value: 6488.12, changePct: 0.51, unit: "pt" }),
+      nasdaq: verifiedMetric({ label: "NASDAQ", value: 21455.31, changePct: 1.02, unit: "pt" }),
+      fx: verifiedMetric({ label: "USD/KRW", value: 1392.4, changePct: -0.14, unit: "원" }),
+    },
+    macro: {},
+    missingItems: ["미국 2년물 국채금리", "미국 10년물 국채금리"],
+  };
+
+  try {
+    const result = await generateStockBlogImages({
+      pipelineId,
+      template: "KOREA_MARKET_CLOSE_US_PREVIEW",
+      title: "미국 고용보고서 앞둔 나스닥 전망",
+      topic: "나스닥과 원·달러 환율 흐름을 확인한다.",
+      marketDate: "2026-09-04",
+      marketSnapshot: snapshot,
+    });
+    const fxImage = result.contentImages.find((image) => image.id === "fx-and-us-yields");
+    const fxSvg = await readFile(path.join(outputDir, "fx-and-us-yields.svg"), "utf8");
+
+    assert.equal(result.imageStatus, "generated");
+    assert.deepEqual(result.contentImages.map((image) => image.id), ["thumbnail", "major-index-change", "fx-and-us-yields"]);
+    assert.equal(fxImage?.title, "원·달러 환율 현황");
+    assert.deepEqual(fxImage?.dataKeys, ["us.fx.value", "us.fx.changePct"]);
+    assert.match(fxSvg, /원·달러 환율 현황|원·달러 환율/);
+    assert.doesNotMatch(fxSvg, /미국 2년물|미국 10년물|10년-2년 금리차/);
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});

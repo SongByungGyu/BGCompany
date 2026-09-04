@@ -45,8 +45,18 @@ test("QA 응답 정규화는 명시적인 빈 requiredRevisions 배열을 보존
   assert.deepEqual(normalized.requiredRevisions, []);
 });
 
+test("QA가 승인·발행 가능을 명시하면 누락된 requiredRevisions를 빈 배열로 보완한다", () => {
+  const normalized = normalizeQaAuditHermesResponse({
+    qaScore: 97,
+    publishReadiness: "ready",
+    finalRecommendation: "approve",
+  });
+  assert.deepEqual(normalized.requiredRevisions, []);
+});
+
 test("QA 응답 정규화는 문자열이나 비문자 배열을 requiredRevisions로 인정하지 않는다", () => {
-  assert.equal(normalizeQaAuditHermesResponse({ requiredRevisions: "없음" }).requiredRevisions, undefined);
-  assert.equal(normalizeQaAuditHermesResponse({ requiredRevisions: [123] }).requiredRevisions, undefined);
-  assert.equal(normalizeQaAuditHermesResponse({ requiredRevisions: [""] }).requiredRevisions, undefined);
+  const approval = { publishReadiness: "ready", finalRecommendation: "approve" };
+  assert.equal(normalizeQaAuditHermesResponse({ ...approval, requiredRevisions: "없음" }).requiredRevisions, undefined);
+  assert.equal(normalizeQaAuditHermesResponse({ ...approval, requiredRevisions: [123] }).requiredRevisions, undefined);
+  assert.equal(normalizeQaAuditHermesResponse({ ...approval, requiredRevisions: [""] }).requiredRevisions, undefined);
 });

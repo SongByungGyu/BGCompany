@@ -33,6 +33,7 @@ import {
   resolveStockBlogRecoveryPublishTime,
   requestStockBlogRetryV2ReferenceRefresh,
   settleStockBlogRetryV2Claim,
+  STOCK_BLOG_MANUAL_RECOVERY_GENERATION_LIMIT,
   STOCK_BLOG_RETRY_PHASE_LIMITS,
   shouldClearRecoverablePipelineCircuitBreaker,
   type StockBlogRetryPhase,
@@ -2146,7 +2147,7 @@ async function runOneSchedule(
         now,
         seedState: logicalExisting ? undefined : retryV2,
         seedCheckpoint: logicalExisting ? undefined : retryCheckpoint,
-        maxAttempts: options.manualRecovery ? STOCK_BLOG_RETRY_PHASE_LIMITS.content_generation + 1 : undefined,
+        maxAttempts: options.manualRecovery ? STOCK_BLOG_MANUAL_RECOVERY_GENERATION_LIMIT : undefined,
       });
       retryV2 = recoveredClaim.state;
       retryCheckpoint = recoveredClaim.checkpoint;
@@ -2164,7 +2165,7 @@ async function runOneSchedule(
         now,
         seedState: logicalExisting ? undefined : retryV2,
         seedCheckpoint: logicalExisting ? undefined : retryCheckpoint,
-        maxAttempts: options.manualRecovery ? STOCK_BLOG_RETRY_PHASE_LIMITS.content_generation + 1 : undefined,
+        maxAttempts: options.manualRecovery ? STOCK_BLOG_MANUAL_RECOVERY_GENERATION_LIMIT : undefined,
       });
       retryV2 = generationClaim.state;
       retryCheckpoint = generationClaim.checkpoint;

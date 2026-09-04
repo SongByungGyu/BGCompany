@@ -513,6 +513,12 @@ export function normalizeQaAuditHermesResponse(raw: unknown): QaAuditResult {
     };
   }
 
+  const revisionKeys = ["requiredRevisions", "revisions", "mustFix"];
+  const requiredRevisions = pickExplicitStringArray(record, revisionKeys);
+  const revisionsFieldPresent = revisionKeys.some((key) => Object.prototype.hasOwnProperty.call(record, key));
+  const publishReadiness = pickPublishReadiness(record);
+  const finalRecommendation = pickQaRecommendation(record);
+
   return {
     ok: true,
     provider: typeof record.provider === "string" && record.provider === "hermes-bridge" ? "hermes-bridge" : "hermes",
@@ -522,11 +528,12 @@ export function normalizeQaAuditHermesResponse(raw: unknown): QaAuditResult {
     qualityNotes: pickStringArray(record, ["qualityNotes", "quality", "qualityFindings"]),
     riskNotes: pickStringArray(record, ["riskNotes", "risks", "risk"]),
     typoAndStyleNotes: pickStringArray(record, ["typoAndStyleNotes", "styleNotes", "typos"]),
-    requiredRevisions: pickExplicitStringArray(record, ["requiredRevisions", "revisions", "mustFix"]),
+    requiredRevisions: requiredRevisions
+      ?? (!revisionsFieldPresent && publishReadiness === "ready" && finalRecommendation === "approve" ? [] : undefined),
     optionalSuggestions: pickStringArray(record, ["optionalSuggestions", "suggestions", "optionalFixes"]),
-    publishReadiness: pickPublishReadiness(record),
+    publishReadiness,
     qaScore: pickNumber(record, ["qaScore", "score"]),
-    finalRecommendation: pickQaRecommendation(record),
+    finalRecommendation,
     reason: pickString(record, ["reason", "recommendationReason"]),
     parseStatus: pickParseStatus(record),
     rawText: pickString(record, ["rawText"]),

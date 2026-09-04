@@ -76,6 +76,7 @@ const STOCK_CONTENT_QUALITY_PREFIX = "STOCK_CONTENT_QUALITY_FAILED:";
 const NAVER_DRAFT_QUALITY_PREFIX = "NAVER_DRAFT_QUALITY_FAILED:";
 
 export const STOCK_BLOG_RETRY_PHASE_LIMITS = { reference_preflight: 4, content_generation: 2, draft_assembly: 2 } as const;
+export const STOCK_BLOG_MANUAL_RECOVERY_GENERATION_LIMIT = STOCK_BLOG_RETRY_PHASE_LIMITS.content_generation + 2;
 // Content generation can use multiple serial Hermes calls plus image generation,
 // while reference collection and draft assembly should recover inside the same
 // publication window after a crashed worker.

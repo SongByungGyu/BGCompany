@@ -315,15 +315,25 @@ function ratesAndFxSvg(input: {
   fx: number;
   fxChange: number;
   twoYear?: number;
-  tenYear: number;
+  tenYear?: number;
   spread?: number;
   source: string;
 }) {
-  const maxRate = Math.max(input.twoYear ?? 0, input.tenYear, 0.01);
-  const rateRows = [
+  const rawRateRows = [
     ...(input.twoYear === undefined ? [] : [{ label: "미국 2년물", value: input.twoYear }]),
-    { label: "미국 10년물", value: input.tenYear },
-  ].map((row, index, rows) => ({
+    ...(input.tenYear === undefined ? [] : [{ label: "미국 10년물", value: input.tenYear }]),
+  ];
+  if (rawRateRows.length === 0) {
+    const content = `<g>
+      <rect x="72" y="218" width="1056" height="335" rx="20" fill="#0A2138" stroke="#75BFFF" stroke-opacity="0.3"/>
+      <text x="600" y="294" text-anchor="middle" fill="#BFD2E5" font-size="22" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">원·달러 환율</text>
+      <text x="600" y="410" text-anchor="middle" fill="#FFFFFF" font-size="82" font-weight="800" font-family="Arial,sans-serif">${input.fx.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}</text>
+      <text x="600" y="470" text-anchor="middle" fill="#BFD2E5" font-size="23" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">원 · 전일 대비 ${signed(input.fxChange)}%</text>
+    </g>`;
+    return chartFrame({ title: "원·달러 환율 현황", subtitle: "확인된 최신 환율 수치만 표시했습니다.", source: input.source, content, accent: "#9B8CFF" });
+  }
+  const maxRate = Math.max(...rawRateRows.map((row) => row.value), 0.01);
+  const rateRows = rawRateRows.map((row, index, rows) => ({
     ...row,
     y: rows.length === 1 ? 370 : 330 + (index * 100),
   })).map((row) => `<g><text x="650" y="${row.y}" fill="#DDEAF5" font-size="20" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${row.label}</text><rect x="650" y="${row.y + 18}" width="390" height="28" rx="8" fill="#193B5A"/><rect x="650" y="${row.y + 18}" width="${Math.round(row.value / maxRate * 390)}" height="28" rx="8" fill="#9B8CFF"/><text x="1065" y="${row.y + 41}" text-anchor="end" fill="#FFFFFF" font-size="19" font-weight="800" font-family="Arial,sans-serif">${row.value.toFixed(2)}%</text></g>`).join("");
@@ -1060,7 +1070,9 @@ export async function generateStockBlogImages(input: {
     const twoYear = snapshot.macro?.us2Year
       ? numericMetric(snapshot.macro.us2Year, "value", "US2Y_VALUE")
       : undefined;
-    const tenYear = numericMetric(snapshot.macro?.us10Year, "value", "US10Y_VALUE");
+    const tenYear = snapshot.macro?.us10Year
+      ? numericMetric(snapshot.macro.us10Year, "value", "US10Y_VALUE")
+      : undefined;
     const spread = snapshot.macro?.yieldSpread10Y2Y
       ? numericMetric(snapshot.macro.yieldSpread10Y2Y, "value", "SPREAD_VALUE")
       : undefined;
@@ -1136,8 +1148,11 @@ export async function generateStockBlogImages(input: {
     const flowSource = formattedInvestorFlows
       ? `기준일 ${dateLabel(kospiFlows[0].metric.asOf!)} | 단위 ${formattedInvestorFlows.unit} | 출처 한국투자증권 Open API`
       : undefined;
+    const yieldMetric = tenYear ?? twoYear;
     const macroSource = fx
-      ? `기준일 ${dateLabel(tenYear.metric.asOf!)}(금리) · ${dateLabel(fx.metric.asOf!)}(환율) | 출처 한국투자증권 Open API · FRED`
+      ? yieldMetric
+        ? `기준일 ${dateLabel(yieldMetric.metric.asOf!)}(금리) · ${dateLabel(fx.metric.asOf!)}(환율) | 출처 한국투자증권 Open API · FRED`
+        : `기준일 ${dateLabel(fx.metric.asOf!)} | 출처 한국투자증권 Open API`
       : undefined;
     const files: Array<{ name: string; svg: string }> = [
       {
@@ -1176,8 +1191,8 @@ export async function generateStockBlogImages(input: {
           fx: fx.value,
           fxChange: fxChange.value,
           twoYear: twoYear?.value,
-          tenYear: tenYear.value,
-          spread: spread?.value,
+          tenYear: tenYear?.value,
+          spread: twoYear && tenYear ? spread?.value : undefined,
           source: macroSource,
         }),
       });
@@ -1264,15 +1279,19 @@ export async function generateStockBlogImages(input: {
         id: "fx-and-us-yields",
         role: "body",
         type: "chart",
-        title: "원·달러 환율과 미국 국채금리 현황",
+        title: yieldMetric ? "원·달러 환율과 미국 국채금리 현황" : "원·달러 환율 현황",
         placementAfterHeading: placements.fxAndUsYields,
         imageUrl: `${relativeDir}/fx-and-us-yields.svg`,
-        caption: twoYear
+        caption: twoYear && tenYear
           ? "원·달러 환율과 미국 2년물·10년물 국채금리 비교"
-          : "원·달러 환율과 미국 10년물 국채금리 비교",
+          : tenYear
+            ? "원·달러 환율과 미국 10년물 국채금리 비교"
+            : twoYear
+              ? "원·달러 환율과 미국 2년물 국채금리 비교"
+              : "원·달러 환율 현황",
         sourceLabel: macroSource,
-        sourceName: "한국투자증권 Open API · FRED",
-        sourceUrl: tenYear.metric.url,
+        sourceName: yieldMetric ? "한국투자증권 Open API · FRED" : "한국투자증권 Open API",
+        sourceUrl: yieldMetric?.metric.url ?? fx.metric.url,
         licenseType: "generated-data-chart",
         collectedAt: snapshot.collectedAt,
         usageAllowed: true,
@@ -1280,15 +1299,15 @@ export async function generateStockBlogImages(input: {
           "us.fx.value",
           "us.fx.changePct",
           ...(twoYear ? ["macro.us2Year.value"] : []),
-          "macro.us10Year.value",
-          ...(spread ? ["macro.yieldSpread10Y2Y.value"] : []),
+          ...(tenYear ? ["macro.us10Year.value"] : []),
+          ...(twoYear && tenYear && spread ? ["macro.yieldSpread10Y2Y.value"] : []),
         ],
         dataPoints: [
           dataPoint("us.fx.value", "USD/KRW", fx.value, "원", fx.metric.asOf!),
           dataPoint("us.fx.changePct", "USD/KRW 등락률", fxChange.value, "%", fxChange.metric.asOf!),
           ...(twoYear ? [dataPoint("macro.us2Year.value", "미국 2년물", twoYear.value, "%", twoYear.metric.asOf!)] : []),
-          dataPoint("macro.us10Year.value", "미국 10년물", tenYear.value, "%", tenYear.metric.asOf!),
-          ...(spread ? [dataPoint("macro.yieldSpread10Y2Y.value", "10Y-2Y", spread.value, "%p", spread.metric.asOf!)] : []),
+          ...(tenYear ? [dataPoint("macro.us10Year.value", "미국 10년물", tenYear.value, "%", tenYear.metric.asOf!)] : []),
+          ...(twoYear && tenYear && spread ? [dataPoint("macro.yieldSpread10Y2Y.value", "10Y-2Y", spread.value, "%p", spread.metric.asOf!)] : []),
         ],
         width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
       });
