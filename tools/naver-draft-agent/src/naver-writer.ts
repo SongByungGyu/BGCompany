@@ -1520,12 +1520,12 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
           status: publishGate?.status === "duplicate_blocked"
             ? "duplicate_blocked"
             : gateStillWaiting
-              ? "failed"
+              ? "publish_ready"
               : "publish_blocked",
           externalUrl: page.url(),
           errorCode: publishGate?.errorCode ?? (gateStillWaiting ? "NAVER_PUBLISH_GATE_NOT_READY" : "NAVER_SERVER_PUBLISH_BLOCKED"),
           errorMessage: gateStillWaiting
-            ? "The scheduled publish gate was still waiting, so the pre-publish job will be retried safely."
+            ? "The publish gate is paused; this prepared job remains eligible for a later lease."
             : "Server-side final duplicate/canary check blocked publishing.",
         };
       }

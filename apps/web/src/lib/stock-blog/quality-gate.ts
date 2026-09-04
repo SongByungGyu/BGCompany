@@ -1,4 +1,10 @@
 import type { ContentPipelineRun } from "@/features/content-pipeline/content-pipeline-types";
+import {
+  inspectStockBlogSourceContract,
+  inspectStockBlogTailContract,
+  type StockBlogSourceContractInspection,
+  type StockBlogTailContractInspection,
+} from "@/lib/stock-blog/canonical-stock-blog-body";
 import { FRED_DEGRADED_DISCLOSURE, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
 import { KIS_SECTOR_DEGRADED_DISCLOSURE, isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
 import { KIS_OVERSEAS_DEGRADED_DISCLOSURE, isAllowedKisOverseasDegradedSnapshot } from "@/lib/stock-blog/references/kis-overseas-degraded-policy";
@@ -71,6 +77,11 @@ export type StockBlogQualityDiagnostics = {
   repeatedPhraseWarnings: string[];
   missingReferenceItems: string[];
   qaScore?: number;
+  originalQaScore?: number;
+  qaStructuralReconciliationApplied?: boolean;
+  qaApprovalReasons?: string[];
+  sourceContract: StockBlogSourceContractInspection;
+  tailContract: StockBlogTailContractInspection;
   editorialQualityScore?: number;
   editorialQualityTarget?: number;
   editorialQualityPassed?: boolean;
@@ -85,6 +96,65 @@ export type StockBlogQualityGateResult = {
   reasons: string[];
   diagnostics: StockBlogQualityDiagnostics;
 };
+
+export type StockBlogQaApprovalInspection = {
+  ok: boolean;
+  authoritativeQaScore?: number;
+  reportedQaScore?: number;
+  originalQaScore?: number;
+  requiredRevisionCount: number;
+  legacyReconciliationDetected: boolean;
+  reasons: string[];
+};
+
+function finiteNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+export function inspectStockBlogQaApproval(result: unknown): StockBlogQaApprovalInspection {
+  const qa = recordValue(result);
+  const legacyReconciliation = recordValue(qa?.deterministicQaReconciliation);
+  const reportedQaScore = finiteNumber(qa?.qaScore);
+  const originalQaScore = finiteNumber(qa?.originalQaScore)
+    ?? finiteNumber(legacyReconciliation?.originalQaScore);
+  const scoreCandidates = [reportedQaScore, originalQaScore]
+    .filter((value): value is number => value !== undefined);
+  const authoritativeQaScore = scoreCandidates.length > 0
+    ? Math.min(...scoreCandidates)
+    : undefined;
+  const requiredRevisions = qa?.requiredRevisions;
+  const requiredRevisionsValid = Array.isArray(requiredRevisions)
+    && requiredRevisions.every((item) => typeof item === "string" && item.trim().length > 0);
+  const requiredRevisionCount = requiredRevisionsValid && Array.isArray(requiredRevisions)
+    ? requiredRevisions.length
+    : 0;
+  const legacyReconciliationDetected = Boolean(legacyReconciliation);
+  const reasons: string[] = [];
+  if (qa?.ok !== true) reasons.push("qa-auditor 실행 결과 ok=true 필요");
+  if (qa?.publishReadiness !== "ready") reasons.push("qa-auditor publishReadiness=ready 필요");
+  if (qa?.finalRecommendation !== "approve") reasons.push("qa-auditor finalRecommendation=approve 필요");
+  if (!requiredRevisionsValid) reasons.push("qa-auditor requiredRevisions는 명시적인 문자열 배열이어야 함");
+  if (requiredRevisionCount > 0) reasons.push("qa-auditor 필수 수정사항 0건 필요");
+  if ((authoritativeQaScore ?? 0) < STOCK_BLOG_EDITORIAL_QUALITY_TARGET) {
+    reasons.push(`qa-auditor 원 판정 점수 ${STOCK_BLOG_EDITORIAL_QUALITY_TARGET}점 이상 필요`);
+  }
+  if (legacyReconciliationDetected) reasons.push("과거 deterministic QA 승인 보정 결과는 재검수 필요");
+  return {
+    ok: reasons.length === 0,
+    authoritativeQaScore,
+    reportedQaScore,
+    originalQaScore,
+    requiredRevisionCount,
+    legacyReconciliationDetected,
+    reasons,
+  };
+}
 
 const FORBIDDEN_SOURCE_NAMES = ["Mock Market Desk", "BG Reference Lab"];
 const MOCK_TEXT_PATTERNS = [
@@ -112,8 +182,10 @@ const DISCLAIMER_PATTERNS = [/투자 참고용/, /매수·매도 추천이 아�
 const BG_MARKET_NOTE_JUDGMENT_PATTERN = /BG\s*Market\s*Note\s*(?:의\s*)?판단/i;
 const REPEATED_PHRASES = ["중요합니다", "확인할 필요가 있습니다", "살펴봐야 합니다", "방향성보다 선택이 중요합니다", "체크해야 합니다", "주목해야 합니다"];
 const NEXT_WEEK_HEADINGS = [
-  ...getStockBlogEditorialPolicy("NEXT_WEEK_MARKET_PREVIEW").bodyStructure,
+  ...getStockBlogEditorialPolicy("NEXT_WEEK_MARKET_PREVIEW").bodyStructure
+    .filter((heading) => heading !== "함께 확인한 기사"),
   "마무리",
+  "함께 확인한 기사",
 ];
 const NEXT_WEEK_DISCLAIMER = STOCK_BLOG_INVESTMENT_DISCLAIMER;
 const NEXT_WEEK_FORBIDDEN_PATTERNS = [
@@ -129,9 +201,13 @@ const NEXT_WEEK_FORBIDDEN_PATTERNS = [
 
 export function inspectNextWeekEditorialContract(body: string) {
   const articleHeadingIndex = body.indexOf("함께 확인한 기사");
-  const conclusionMarkers = ["\n\n7. 마무리", "\n\n마무리"];
-  const articleEndCandidates = conclusionMarkers
-    .map((marker) => body.indexOf(marker, Math.max(0, articleHeadingIndex)))
+  const articleEndCandidates = [
+    NEXT_WEEK_DISCLAIMER,
+    FRED_DEGRADED_DISCLOSURE,
+    KIS_SECTOR_DEGRADED_DISCLOSURE,
+    KIS_OVERSEAS_DEGRADED_DISCLOSURE,
+  ]
+    .map((marker) => body.indexOf(marker, Math.max(0, articleHeadingIndex + 1)))
     .filter((index) => index >= 0);
   const articleEnd = articleEndCandidates.length > 0 ? Math.min(...articleEndCandidates) : body.length;
   const articleText = articleHeadingIndex >= 0 ? body.slice(articleHeadingIndex, articleEnd) : "";
@@ -254,6 +330,8 @@ function diagnostics(input: {
   const kisSectorDegraded = isAllowedKisSectorDegradedSnapshot(marketSnapshot);
   const kisOverseasDegraded = isAllowedKisOverseasDegradedSnapshot(marketSnapshot);
   const marketSnapshotDegraded = fredDegraded || kisSectorDegraded || kisOverseasDegraded;
+  const sourceContract = inspectStockBlogSourceContract(body, realRefs);
+  const tailContract = inspectStockBlogTailContract(body, marketSnapshot);
   return {
     referenceProvider: input.bundle?.provider,
     referenceMode: input.bundle?.mode,
@@ -298,6 +376,8 @@ function diagnostics(input: {
     manualMarketSnapshot: marketSnapshot?.provider === "manual",
     repeatedPhraseWarnings,
     missingReferenceItems: input.bundle?.missingItems ?? [],
+    sourceContract,
+    tailContract,
   };
 }
 
@@ -334,6 +414,22 @@ export function evaluateStockBlogReferences(bundle?: ReferenceBundle, requireRea
   return { ok: true, status: "passed", reasons: [], diagnostics: d };
 }
 
+export function inspectStockBlogImagePublishReadiness(pipeline: ContentPipelineRun) {
+  const reasons: string[] = [];
+  if (pipeline.imageStatus !== "generated") reasons.push("imageStatus=generated 필요");
+  if (!clean(pipeline.thumbnailImageUrl ?? pipeline.naverBlogPublishPrep?.thumbnailImageUrl)) reasons.push("thumbnailImageUrl 필요");
+  if ((pipeline.inlineImageUrls ?? pipeline.naverBlogPublishPrep?.inlineImageUrls ?? []).length < 1) reasons.push("inlineImageUrls 1개 이상 필요");
+  const contentImages = pipeline.contentImages ?? [];
+  const bodyImages = contentImages.filter((image) => image.role === "body");
+  if (pipeline.imageQuality?.status !== "passed") reasons.push("imageQuality=passed 필요");
+  if (bodyImages.length < 2 || bodyImages.length > 4) reasons.push("본문 이미지 2~4장 필요");
+  if (bodyImages.some((image) => !image.fileVerified || !image.usageAllowed || !image.placementAfterHeading || !image.caption || !image.sourceLabel)) {
+    reasons.push("본문 이미지 파일·라이선스·섹션 연결 검증 필요");
+  }
+  if (bodyImages.every((image) => image.type !== "chart")) reasons.push("검증 수치 기반 본문 차트 1장 이상 필요");
+  return reasons;
+}
+
 export function evaluateStockBlogPublishQuality(input: {
   pipeline: ContentPipelineRun;
   referenceBundle?: ReferenceBundle;
@@ -350,6 +446,11 @@ export function evaluateStockBlogPublishQuality(input: {
   const contentType = bundle?.contentType ?? "KOREA_DAILY_PREVIEW";
   const policy = getStockBlogEditorialPolicy(contentType);
   const publicEditorialContract = inspectStockBlogEditorialContract(body, contentType);
+  const qaApproval = inspectStockBlogQaApproval(input.pipeline.qaResult);
+  const effectiveQaScore = qaApproval.authoritativeQaScore;
+  const imagePublishReadinessReasons = requireReal
+    ? inspectStockBlogImagePublishReadiness(input.pipeline)
+    : [];
   const nextWeekPreview = contentType === "NEXT_WEEK_MARKET_PREVIEW";
   const editorialContract = nextWeekPreview ? inspectNextWeekEditorialContract(body) : undefined;
   const imageCount = input.pipeline.contentImages?.length
@@ -367,11 +468,14 @@ export function evaluateStockBlogPublishQuality(input: {
     verifiedMarketSnapshot: baseDiagnostics.marketSnapshotStatus === "ready"
       && baseDiagnostics.marketSnapshotDataQuality === "verified"
       && baseDiagnostics.marketSnapshotFreshnessStatus === "fresh",
-    qaScore: input.pipeline.qaResult?.qaScore,
+    qaScore: effectiveQaScore,
   });
   const d: StockBlogQualityDiagnostics = {
     ...baseDiagnostics,
-    qaScore: input.pipeline.qaResult?.qaScore,
+    qaScore: effectiveQaScore,
+    originalQaScore: qaApproval.originalQaScore ?? qaApproval.reportedQaScore,
+    qaStructuralReconciliationApplied: qaApproval.legacyReconciliationDetected,
+    qaApprovalReasons: qaApproval.reasons,
     editorialQualityScore: editorialQuality.score,
     editorialQualityTarget: editorialQuality.target,
     editorialQualityPassed: editorialQuality.passed,
@@ -380,21 +484,20 @@ export function evaluateStockBlogPublishQuality(input: {
     editorialContract: publicEditorialContract,
   };
 
-  if (
-    d.marketSnapshotDegradedMode === "fred_unavailable"
-    && !d.hasFredDegradedDisclosure
-  ) reasons.push("FRED 제한 모드 고지 문구 누락");
-  if (
-    d.marketSnapshotDegradedMode === "kis_sector_unavailable"
-    && !d.hasKisSectorDegradedDisclosure
-  ) reasons.push("KIS 업종 제한 모드 고지 문구 누락");
-  if (
-    d.marketSnapshotDegradedMode === "kis_overseas_unavailable"
-    && !d.hasKisOverseasDegradedDisclosure
-  ) reasons.push("해외지수·환율 제외 모드 고지 문구 누락");
+  if (requireReal && !d.sourceContract.ok) {
+    reasons.push("함께 확인한 기사에는 선택된 실제 기사 제목과 원문 URL을 정확히 3개 표시해야 함");
+  }
+  if (requireReal && !d.sourceContract.onlyDisclaimerAfterSource) reasons.push("함께 확인한 기사 뒤에는 투자 유의문구만 있어야 함");
+  if (requireReal && !qaApproval.ok) reasons.push(...qaApproval.reasons);
+  if (requireReal && d.tailContract.disclaimerCount !== 1) reasons.push("지정 투자 유의문구 정확히 1회 필요");
+  if (requireReal && !d.tailContract.disclaimerIsLast) reasons.push("투자 유의문구는 공개 본문의 마지막 문단이어야 함");
+  if (requireReal && d.tailContract.missingDisclosures.length > 0) reasons.push("허용된 시장 데이터 제한 모드 고지 문구 누락");
+  if (requireReal && d.tailContract.unexpectedDisclosures.length > 0) reasons.push("현재 MarketSnapshot과 일치하지 않는 시장 데이터 제한 고지 포함");
+  if (requireReal && !d.tailContract.disclosuresBeforeDisclaimer) reasons.push("시장 데이터 제한 고지는 투자 유의문구 앞에 있어야 함");
   if (requireReal && !editorialQuality.passed) {
     reasons.push(`편집 품질 ${STOCK_BLOG_EDITORIAL_QUALITY_TARGET}점 이상 필요: 현재 ${editorialQuality.score}점 · ${editorialQuality.failedChecks.join(", ")}`);
   }
+  reasons.push(...imagePublishReadinessReasons);
 
   if (requireReal) {
     const minRefs = 5;
@@ -442,6 +545,7 @@ export function evaluateStockBlogPublishQuality(input: {
     return { ok: false, status: "needs_reference", reasons, diagnostics: d };
   }
   if (reasons.some((reason) => reason.includes("시장 데이터") || reason.includes("MarketSnapshot") || reason.includes("최신성"))) return { ok: false, status: "needs_data", reasons, diagnostics: d };
+  if (imagePublishReadinessReasons.length > 0) return { ok: false, status: "image_pending", reasons, diagnostics: d };
   if (d.hasImagePromptLeak) return { ok: false, status: "image_pending", reasons, diagnostics: d };
   if (d.duplicateSentenceCount > 1) return { ok: false, status: "duplicate_content_failed", reasons, diagnostics: d };
   if (

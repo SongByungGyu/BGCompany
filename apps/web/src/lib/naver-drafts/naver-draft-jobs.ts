@@ -6,10 +6,16 @@ import type { ContentPipelineRun, StockBriefingTemplate } from "@/features/conte
 import type { CompetitorBlogReference, ReferenceBundle, ReferenceItem } from "@/lib/stock-blog/references/reference-types";
 import { buildStockBlogThumbnail, inferStockBriefingTemplateFromPipeline } from "@/lib/stock-blog/thumbnail-automation";
 import { resolveStockBriefingNaverCategory } from "@/lib/naver-drafts/naver-category";
-import { evaluateStockBlogPublishQuality, getRealStockReferences } from "@/lib/stock-blog/quality-gate";
-import { ensureFredDegradedDisclosure, FRED_DEGRADED_DISCLOSURE, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
-import { ensureKisSectorDegradedDisclosure, KIS_SECTOR_DEGRADED_DISCLOSURE, isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
-import { ensureKisOverseasDegradedDisclosure, KIS_OVERSEAS_DEGRADED_DISCLOSURE, isAllowedKisOverseasDegradedSnapshot } from "@/lib/stock-blog/references/kis-overseas-degraded-policy";
+import {
+  evaluateStockBlogPublishQuality,
+  getRealStockReferences,
+  inspectStockBlogImagePublishReadiness,
+  inspectStockBlogQaApproval,
+} from "@/lib/stock-blog/quality-gate";
+import { FRED_DEGRADED_DISCLOSURE, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
+import { KIS_SECTOR_DEGRADED_DISCLOSURE, isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
+import { KIS_OVERSEAS_DEGRADED_DISCLOSURE, isAllowedKisOverseasDegradedSnapshot } from "@/lib/stock-blog/references/kis-overseas-degraded-policy";
+import { canonicalizeStockBlogBody } from "@/lib/stock-blog/canonical-stock-blog-body";
 import { renderNaverBody, type NaverBodyBlock } from "@/lib/stock-blog/naver-body";
 import { selectBestStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
 import {
@@ -25,7 +31,6 @@ import {
   type PublishedPostCandidate,
 } from "@/lib/stock-blog/stock-blog-discovery";
 import type { StockBlogContentImage, StockBlogImageQualityAudit } from "@/lib/stock-blog/stock-blog-image-types";
-import { STOCK_BLOG_EDITORIAL_QUALITY_TARGET } from "@/lib/stock-blog/stock-blog-editorial-benchmark";
 import {
   getStockBlogEditorialPolicy,
   STOCK_BLOG_INVESTMENT_DISCLAIMER,
@@ -374,10 +379,10 @@ function buildPlainBody(pipeline: ContentPipelineRun, template: StockBriefingTem
       { type: "heading", text: heading },
       { type: "paragraph", text: buildSectionBody(pipeline, analysisHeadings.length + index, template) },
     ]),
-    { type: "heading", text: "함께 확인한 기사" },
-    ...refs.slice(0, 3).map<NaverBodyBlock>((item, index) => ({ type: "reference", item, index: index + 1 })),
     { type: "heading", text: "마무리" },
     { type: "paragraph", text: clean(pipeline.writerResult?.conclusion) || "시장은 매일 다른 신호를 주지만, 중요한 것은 방향을 단정하기보다 확인할 변수를 근거별로 줄여가는 것입니다." },
+    { type: "heading", text: "함께 확인한 기사" },
+    ...refs.filter((item) => item.sourceType === "news").slice(0, 3).map<NaverBodyBlock>((item, index) => ({ type: "reference", item, index: index + 1 })),
     ...marketDisclosureBlocks,
     { type: "disclaimer", text: INVESTMENT_DISCLAIMER },
   ];
@@ -387,6 +392,12 @@ function buildPlainBody(pipeline: ContentPipelineRun, template: StockBriefingTem
 function buildWriterEditorialBody(pipeline: ContentPipelineRun, template: StockBriefingTemplate) {
   const writer = pipeline.writerResult;
   if (!writer) return "";
+  const canonicalDraft = clean(writer.fullDraft) || clean(writer.markdownDraft);
+  if (canonicalDraft) {
+    return sanitizeByTemplate(stripMarkdownSyntax(canonicalDraft)
+      .replace(/\r\n?/g, "\n")
+      .replace(/\n{3,}/g, "\n\n"), template);
+  }
   const sections = writer.sections?.map((section) => {
     const heading = clean(section.heading);
     const body = clean(section.body).replaceAll(INVESTMENT_DISCLAIMER, "").trim();
@@ -471,21 +482,24 @@ function buildDraftFromPipeline(pipeline: ContentPipelineRun, publishedPosts: Pu
   const thumbnailPrompt = clean(thumbnail.thumbnailPrompt) || `네이버 블로그 썸네일, 깔끔한 금융 리포트 스타일, 제목: ${title}, 핵심 문구: ${thumbnailText}`;
   const refs = collectReferences(pipeline);
   const writerBody = buildWriterEditorialBody(pipeline, template);
-  const snapshot = collectReferenceBundle(pipeline)?.marketSnapshot;
-  const disclosedWriterBody = ensureKisOverseasDegradedDisclosure(
-    ensureKisSectorDegradedDisclosure(
-      ensureFredDegradedDisclosure(writerBody, snapshot),
-      snapshot,
-    ),
-    snapshot,
-  );
-  const baseBody = pipeline.runnerMode === "hermes" && disclosedWriterBody
-    ? disclosedWriterBody
+  const referenceBundle = collectReferenceBundle(pipeline);
+  const snapshot = referenceBundle?.marketSnapshot;
+  const canonicalWriterBody = canonicalizeStockBlogBody({
+    body: writerBody,
+    referenceItems: getRealStockReferences(referenceBundle),
+    marketSnapshot: snapshot,
+  });
+  const baseBody = pipeline.runnerMode === "hermes" && canonicalWriterBody
+    ? canonicalWriterBody
     : buildPlainBody(pipeline, template, title, refs);
-  const body = appendRelatedPostSection({
-    body: baseBody,
-    template,
-    posts: selectRelatedPublishedPosts({ currentTitle: title, posts: publishedPosts, limit: 2 }),
+  const body = canonicalizeStockBlogBody({
+    body: appendRelatedPostSection({
+      body: baseBody,
+      template,
+      posts: selectRelatedPublishedPosts({ currentTitle: title, posts: publishedPosts, limit: 2 }),
+    }),
+    referenceItems: getRealStockReferences(referenceBundle),
+    marketSnapshot: snapshot,
   });
   const quality = buildDraftQualityCheck(template, title, body, refs, pipeline, publishedPosts);
   if (!quality.ok) {
@@ -613,6 +627,7 @@ export function getNaverDraftPolicy() {
 function automaticPublishBlockReasons(pipeline: ContentPipelineRun, body: string) {
   const bundle = collectReferenceBundle(pipeline);
   const snapshot = bundle?.marketSnapshot;
+  const qaApproval = inspectStockBlogQaApproval(pipeline.qaResult);
   const allowedDegradedSnapshot = isAllowedFredDegradedSnapshot(snapshot)
     || isAllowedKisSectorDegradedSnapshot(snapshot)
     || isAllowedKisOverseasDegradedSnapshot(snapshot);
@@ -628,29 +643,14 @@ function automaticPublishBlockReasons(pipeline: ContentPipelineRun, body: string
   if (!pipeline.plannerResult?.ok) reasons.push("content-planner 실패");
   if (!pipeline.marketingResult?.ok) reasons.push("marketing-manager 실패");
   if (!pipeline.writerResult?.ok) reasons.push("content-writer 실패");
-  if (!pipeline.qaResult?.ok || pipeline.qaResult.publishReadiness !== "ready" || pipeline.qaResult.finalRecommendation !== "approve") {
-    reasons.push("qa-auditor 자동 발행 승인 실패");
-  }
-  if ((pipeline.qaResult?.qaScore ?? 0) < STOCK_BLOG_EDITORIAL_QUALITY_TARGET) {
-    reasons.push(`qa-auditor ${STOCK_BLOG_EDITORIAL_QUALITY_TARGET}점 이상 필요`);
-  }
+  if (!qaApproval.ok) reasons.push(...qaApproval.reasons);
   if ((bundle?.missingItems?.length ?? 0) > 0 && !allowedDegradedSnapshot) reasons.push("Reference missingItems 존재");
   if ((bundle?.competitorAnalysis?.analyzedCount ?? 0) < 1) reasons.push("경쟁 블로그 심층 구조 분석 PASS 필요");
   if (snapshot?.status !== "ready") reasons.push("MarketSnapshot status=ready 필요");
   if (snapshot?.dataQuality !== "verified" && !allowedDegradedSnapshot) reasons.push("MarketSnapshot dataQuality=verified 필요");
   if (snapshot?.freshness?.status !== "fresh") reasons.push("MarketSnapshot freshness=fresh 필요");
   if (snapshot?.fallbackUsed !== false) reasons.push("MarketSnapshot fallbackUsed=false 필요");
-  if (pipeline.imageStatus !== "generated") reasons.push("imageStatus=generated 필요");
-  if (!clean(pipeline.thumbnailImageUrl ?? pipeline.naverBlogPublishPrep?.thumbnailImageUrl)) reasons.push("thumbnailImageUrl 필요");
-  if ((pipeline.inlineImageUrls ?? pipeline.naverBlogPublishPrep?.inlineImageUrls ?? []).length < 1) reasons.push("inlineImageUrls 1개 이상 필요");
-  const contentImages = pipeline.contentImages ?? [];
-  const bodyImages = contentImages.filter((image) => image.role === "body");
-  if (pipeline.imageQuality?.status !== "passed") reasons.push("imageQuality=passed 필요");
-  if (bodyImages.length < 2 || bodyImages.length > 4) reasons.push("본문 이미지 2~4장 필요");
-  if (bodyImages.some((image) => !image.fileVerified || !image.usageAllowed || !image.placementAfterHeading || !image.caption || !image.sourceLabel)) {
-    reasons.push("본문 이미지 파일·라이선스·섹션 연결 검증 필요");
-  }
-  if (bodyImages.every((image) => image.type !== "chart")) reasons.push("검증 수치 기반 본문 차트 1장 이상 필요");
+  reasons.push(...inspectStockBlogImagePublishReadiness(pipeline));
   return Array.from(new Set(reasons));
 }
 
@@ -704,11 +704,17 @@ export async function createNaverDraftJobFromPipeline(input: {
   approvalId?: string | null;
   allowPublish?: boolean;
   publishKey?: string | null;
+  publishKeyAliases?: string[];
   marketDate?: string | null;
   scheduleSlot?: string | null;
 }) {
   const detail = await getContentPipelineDetail(input.contentPipelineId);
   if (!detail) throw new Error("CONTENT_PIPELINE_NOT_FOUND");
+  const publishKey = clean(input.publishKey);
+  const acceptedPublishKeys = Array.from(new Set([
+    publishKey,
+    ...(input.publishKeyAliases ?? []).map((value) => clean(value)),
+  ].filter(Boolean)));
 
   const approvalId = input.approvalId ?? detail.pipeline.approvalId ?? detail.approval?.id ?? null;
   const { requireApproval: requiresApproval } = getNaverDraftPolicy();
@@ -724,7 +730,7 @@ export async function createNaverDraftJobFromPipeline(input: {
     orderBy: { createdAt: "desc" },
   });
   if (existing) {
-    if (input.allowPublish && (!existing.allowPublish || existing.publishKey !== clean(input.publishKey))) {
+    if (input.allowPublish && (!existing.allowPublish || !acceptedPublishKeys.includes(existing.publishKey ?? ""))) {
       throw new Error("NAVER_EXISTING_DRAFT_NOT_PUBLISH_ENABLED");
     }
     return serializeNaverDraftJobWithPipeline(existing, detail.pipeline);
@@ -745,17 +751,15 @@ export async function createNaverDraftJobFromPipeline(input: {
     publishedPosts.flatMap((post) => post.publishedUrl ? [{ title: post.title, body: post.body, url: post.publishedUrl }] : []),
   );
   if (input.allowPublish) {
-    const circuitBreaker = await getPublishCircuitBreaker();
-    if (circuitBreaker.active) throw new Error("NAVER_PUBLISH_CIRCUIT_BREAKER_ACTIVE");
     const reasons = automaticPublishBlockReasons(detail.pipeline, draft.body);
     if (reasons.length > 0) throw new Error(`NAVER_AUTO_PUBLISH_PREFLIGHT_FAILED: ${reasons.join(" · ")}`);
-    if (!clean(input.publishKey) || !clean(input.marketDate) || !clean(input.scheduleSlot)) {
+    if (!publishKey || !clean(input.marketDate) || !clean(input.scheduleSlot)) {
       throw new Error("NAVER_AUTO_PUBLISH_IDEMPOTENCY_FIELDS_REQUIRED");
     }
     const duplicate = await prisma.naverDraftJob.findFirst({
       where: {
         OR: [
-          { publishKey: input.publishKey },
+          { publishKey: { in: acceptedPublishKeys } },
           { contentPipelineId: detail.pipeline.id, status: "published" },
           { title: draft.title, marketDate: input.marketDate, status: "published" },
         ],
@@ -770,7 +774,7 @@ export async function createNaverDraftJobFromPipeline(input: {
       approvalId,
       status: "queued",
       allowPublish: input.allowPublish === true,
-      publishKey: clean(input.publishKey) || null,
+      publishKey: publishKey || null,
       marketDate: clean(input.marketDate) || null,
       scheduleSlot: clean(input.scheduleSlot) || null,
       ...draft,
@@ -874,13 +878,16 @@ async function scheduleSafeNaverDraftRetry(
 
 export async function getNextNaverDraftJob() {
   const staleBefore = maxClaimAgeDate();
+  const publishCircuitBreaker = await getPublishCircuitBreaker();
   const candidates = await prisma.naverDraftJob.findMany({
-    where: {
-      OR: [
-        { status: "queued" },
-        { allowPublish: true, status: { in: reclaimablePrePublishStatuses }, claimedAt: { lt: staleBefore } },
-      ],
-    },
+    where: publishCircuitBreaker.active
+      ? { status: "queued", allowPublish: false }
+      : {
+        OR: [
+          { status: "queued" },
+          { allowPublish: true, status: { in: reclaimablePrePublishStatuses }, claimedAt: { lt: staleBefore } },
+        ],
+      },
     orderBy: { createdAt: "asc" },
     take: 50,
   });
@@ -894,6 +901,7 @@ export async function claimNaverDraftJob(jobId: string, claimedBy: string) {
   const staleBefore = maxClaimAgeDate();
   const current = await prisma.naverDraftJob.findUnique({ where: { id: jobId } });
   if (!current || !isNaverDraftClaimDue(current, now)) return null;
+  if (current.allowPublish && (await getPublishCircuitBreaker()).active) return null;
   const updated = await prisma.naverDraftJob.updateMany({
     where: {
       id: jobId,
@@ -975,10 +983,15 @@ async function beginNaverPublish(jobId: string, claimedBy?: string) {
       ? circuit.payload as Record<string, Prisma.JsonValue>
       : {};
     if (circuitPayload.active === true) {
-      return tx.naverDraftJob.update({
-        where: { id: jobId },
-        data: { status: "publish_blocked", completedAt: new Date(), errorCode: "NAVER_PUBLISH_CIRCUIT_BREAKER_ACTIVE", errorMessage: "Automatic publish circuit breaker is active." },
-      });
+      // Hold the already-assembled job at the publish gate. Once operations
+      // clears the account-level circuit, the stale lease can be reclaimed and
+      // the same idempotent job resumes without rebuilding or becoming terminal.
+      return {
+        ...job,
+        status: "publish_ready" as const,
+        errorCode: "NAVER_PUBLISH_CIRCUIT_BREAKER_ACTIVE",
+        errorMessage: "Automatic publish circuit breaker is active.",
+      };
     }
     const canaryLimit = Math.max(1, parseNonNegativeInt(process.env.STOCK_BLOG_AUTO_PUBLISH_CANARY_LIMIT, 1));
     const publishedCount = await tx.naverDraftJob.count({ where: { allowPublish: true, status: "published" } });

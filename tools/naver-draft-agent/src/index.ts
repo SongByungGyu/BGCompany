@@ -113,11 +113,15 @@ async function processJob(cfg: AgentConfig, job: NaverDraftJob) {
       await waitForScheduledPublish(cfg, claimed.job);
       for (let attempt = 0; attempt < 60; attempt += 1) {
         const response = await reportStatus(cfg, claimed.job.id, { status: "publishing" });
+        const errorCode = response.job.errorCode;
+        if (response.job.status === "publish_ready" && errorCode === "NAVER_PUBLISH_CIRCUIT_BREAKER_ACTIVE") {
+          return { allowed: false, status: "publish_ready", errorCode };
+        }
         if (response.job.status !== "publish_ready") {
           return {
             allowed: response.job.status === "publishing",
             status: response.job.status ?? "publish_blocked",
-            errorCode: (response.job as NaverDraftJob & { errorCode?: string | null }).errorCode,
+            errorCode,
           };
         }
         await new Promise((resolve) => setTimeout(resolve, 1000));

@@ -1,11 +1,15 @@
-import { timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { startContentPipeline } from "@/lib/content-pipeline/content-pipeline-service";
+import {
+  findContentPipelineByOperationalAttempt,
+  startContentPipelineFromTrustedInput,
+} from "@/lib/content-pipeline/content-pipeline-service";
+import type { ContentPipelineInput } from "@/lib/content-pipeline/content-pipeline-input";
 import { HermesDailyLimitExceededError, getHermesUsageSummary } from "@/lib/hermes/hermes-usage";
 import { createNaverDraftJobFromPipeline, getPublishCircuitBreaker } from "@/lib/naver-drafts/naver-draft-jobs";
-import type { StockBlogQualityGateResult } from "@/features/content-pipeline/content-pipeline-types";
-import { evaluateStockBlogPublishQuality } from "@/lib/stock-blog/quality-gate";
+import type { ContentPipelineRun, StockBlogQualityGateResult } from "@/features/content-pipeline/content-pipeline-types";
+import { evaluateStockBlogPublishQuality, evaluateStockBlogReferences } from "@/lib/stock-blog/quality-gate";
 import { collectStockBlogReferences } from "@/lib/stock-blog/references/reference-adapter";
 import type { ReferenceBundle, ReferenceItem } from "@/lib/stock-blog/references/reference-types";
 import {
@@ -14,13 +18,23 @@ import {
   type LargeCapDisclosureScanResult,
 } from "@/lib/stock-blog/large-cap-disclosure-monitor";
 import {
+  buildStockBlogLegacyPublishKeyAliases,
+  buildStockBlogLogicalPublishKey,
+  buildStockBlogLogicalScheduleKey,
+  createEmptyStockBlogRetryV2State,
   evaluateStockBlogRecoveryDate,
   evaluateStockBlogPhaseBudget,
-  evaluateStockBlogSchedulerRetry,
-  isNaverDraftAssemblyQualityFailure,
+  evaluateStockBlogRetryV2Claim,
   isStockContentQualityFailure,
   isStockReferencePreflightFailure,
+  parseStockBlogRetryV2,
+  reopenStockBlogRetryV2ContentGeneration,
+  requestStockBlogRetryV2ReferenceRefresh,
+  settleStockBlogRetryV2Claim,
+  STOCK_BLOG_RETRY_PHASE_LIMITS,
   shouldClearRecoverablePipelineCircuitBreaker,
+  type StockBlogRetryPhase,
+  type StockBlogRetryV2State,
 } from "@/lib/stock-blog/stock-blog-scheduler-policy";
 import { buildStockBlogEditorialTitle } from "@/lib/stock-blog/stock-blog-title";
 import {
@@ -447,12 +461,34 @@ function isDueToday(definition: StockBlogSchedulerDefinition, now: Date, timezon
   return elapsedMs >= 0 && elapsedMs <= lookbackMinutes * 60 * 1000;
 }
 
-function scheduleKey(definition: StockBlogSchedulerDefinition, scheduledAt: Date) {
-  return `${definition.scheduleId}-${scheduledAt.toISOString().slice(0, 16).replace(/[-:T]/g, "")}`;
+function scheduleKey(definition: StockBlogSchedulerDefinition, marketDate: string) {
+  return buildStockBlogLogicalScheduleKey(definition.scheduleId, marketDate);
 }
 
 function schedulerEventId(key: string) {
   return `event-stock-scheduler-${key}`;
+}
+
+function legacySchedulerEventIds(
+  definition: StockBlogSchedulerDefinition,
+  marketDate: string,
+  timezone: string,
+) {
+  const [year, month, day] = marketDate.split("-").map(Number);
+  const times = Array.from(new Set([
+    definition.scheduledTime,
+    ...(definition.scheduleId === "weekday-korea-daily-preview" ? ["07:20"] : []),
+  ]));
+  return times.flatMap((time) => {
+    const { hour, minute } = parseTime(time);
+    const scheduledAt = zonedDateTimeToUtc(year, month, day, hour, minute, timezone);
+    const utcStamp = scheduledAt.toISOString().slice(0, 16).replace(/[-:T]/g, "");
+    const localStamp = `${marketDate.replace(/-/g, "")}${pad(hour)}${pad(minute)}`;
+    return [
+      schedulerEventId(`${definition.scheduleId}-${utcStamp}`),
+      schedulerEventId(`${definition.scheduleId}-${localStamp}`),
+    ];
+  });
 }
 
 function briefDateLabel(now: Date, timezone: string) {
@@ -827,54 +863,286 @@ function usageSnapshot(usage: Awaited<ReturnType<typeof getHermesUsageSummary>>)
   return { used: usage.used, remaining: usage.remaining, limit: usage.limit };
 }
 
-async function writeSchedulerEvent(input: {
+async function persistSchedulerEvent(input: {
   key: string;
   contentType: StockBlogContentType;
   scheduledFor: string;
   status: StockBlogSchedulerRunStatus;
   summary: string;
   payload: Prisma.InputJsonObject;
+  expectedRetryV2: StockBlogRetryV2State;
 }) {
   const id = schedulerEventId(input.key);
-  const event = await prisma.eventLog.upsert({
-    where: { id },
-    create: {
-      id,
-      type: EVENT_TYPE,
-      timestamp: new Date(),
-      payload: {
-        scheduleKey: input.key,
-        contentType: input.contentType,
-        scheduledFor: input.scheduledFor,
-        status: input.status,
-        ...input.payload,
-      },
-      summary: input.summary,
-    },
-    update: {
-      timestamp: new Date(),
-      payload: {
-        scheduleKey: input.key,
-        contentType: input.contentType,
-        scheduledFor: input.scheduledFor,
-        status: input.status,
-        ...input.payload,
-      },
-      summary: input.summary,
-    },
-  });
-  if (input.status === "failed" || input.status === "partial_failed") {
-    await recordFailureFromPersistedEvent(event).catch((error: unknown) => {
-      console.error("Operational learning failed after scheduler event persistence", error);
-    });
+  for (let casAttempt = 0; casAttempt < 8; casAttempt += 1) {
+    const previous = await prisma.eventLog.findUnique({ where: { id } });
+    const previousPayload = previous ? eventPayload(previous.payload) : {};
+    if (previousPayload.retryV2 !== undefined) {
+      const currentRetry = parseStockBlogRetryV2({ payload: { retryV2: previousPayload.retryV2 } });
+      if (!currentRetry.ok || JSON.stringify(currentRetry.state) !== JSON.stringify(input.expectedRetryV2)) {
+        // This caller finished against an older phase revision. Returning the
+        // newer event prevents stale succeeded/failed/skipped status from
+        // hiding a lease that another worker already owns.
+        return previous;
+      }
+    }
+    // A status/summary write must never replace a phase lease or checkpoint that a
+    // concurrent worker has already claimed. The latest persisted retry fields win.
+    const retryPersistence = {
+      retryV2: retryStateJson(input.expectedRetryV2),
+      ...(previousPayload.retryCheckpoint !== undefined ? { retryCheckpoint: previousPayload.retryCheckpoint } : {}),
+      ...(previousPayload.referenceAttempt !== undefined ? { referenceAttempt: previousPayload.referenceAttempt } : {}),
+      ...(previousPayload.generationAttempt !== undefined ? { generationAttempt: previousPayload.generationAttempt } : {}),
+      ...(previousPayload.draftAssemblyAttempt !== undefined ? { draftAssemblyAttempt: previousPayload.draftAssemblyAttempt } : {}),
+    };
+    const payload: Prisma.InputJsonObject = {
+      scheduleKey: input.key,
+      contentType: input.contentType,
+      scheduledFor: input.scheduledFor,
+      status: input.status,
+      ...input.payload,
+      ...retryPersistence,
+    };
+    const timestamp = new Date(Math.max(Date.now(), (previous?.timestamp.getTime() ?? 0) + 1));
+    let event;
+    if (!previous) {
+      try {
+        event = await prisma.eventLog.create({
+          data: { id, type: EVENT_TYPE, timestamp, payload, summary: input.summary },
+        });
+      } catch (error) {
+        if (isPrismaUniqueConflict(error)) continue;
+        throw error;
+      }
+    } else {
+      const updated = await prisma.eventLog.updateMany({
+        where: { id, timestamp: previous.timestamp },
+        data: { timestamp, payload, summary: input.summary },
+      });
+      if (updated.count !== 1) continue;
+      event = await prisma.eventLog.findUnique({ where: { id } });
+      if (!event) throw new Error("STOCK_SCHEDULER_EVENT_MISSING_AFTER_UPDATE");
+    }
+    if (input.status === "failed" || input.status === "partial_failed") {
+      await recordFailureFromPersistedEvent(event).catch((error: unknown) => {
+        console.error("Operational learning failed after scheduler event persistence", error);
+      });
+    }
+    return event;
   }
-  return event;
+  throw new Error("STOCK_SCHEDULER_EVENT_UPDATE_CONFLICT");
 }
 
 function eventPayload(value: Prisma.JsonValue): Record<string, Prisma.JsonValue> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, Prisma.JsonValue>
     : {};
+}
+
+type StockBlogRetryCheckpoint = {
+  pipelineInput?: ContentPipelineInput;
+  pipelineId?: string;
+  approvalId?: string;
+  naverDraftJobId?: string;
+};
+
+type SchedulerPhaseClaim = {
+  action: "claim" | "completed" | "blocked";
+  state: StockBlogRetryV2State;
+  checkpoint: StockBlogRetryCheckpoint;
+  token?: string;
+  attempt?: number;
+  reason?: string;
+};
+
+function retryCheckpointFromPayload(payload: Record<string, Prisma.JsonValue>): StockBlogRetryCheckpoint {
+  const value = payload.retryCheckpoint;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const record = value as Record<string, unknown>;
+  return {
+    pipelineInput: record.pipelineInput && typeof record.pipelineInput === "object" && !Array.isArray(record.pipelineInput)
+      ? record.pipelineInput as ContentPipelineInput
+      : undefined,
+    pipelineId: typeof record.pipelineId === "string" ? record.pipelineId : undefined,
+    approvalId: typeof record.approvalId === "string" ? record.approvalId : undefined,
+    naverDraftJobId: typeof record.naverDraftJobId === "string" ? record.naverDraftJobId : undefined,
+  };
+}
+
+function retryCheckpointJson(checkpoint: StockBlogRetryCheckpoint): Prisma.InputJsonObject {
+  return JSON.parse(JSON.stringify(checkpoint)) as Prisma.InputJsonObject;
+}
+
+function retryStateJson(state: StockBlogRetryV2State): Prisma.InputJsonObject {
+  return JSON.parse(JSON.stringify(state)) as Prisma.InputJsonObject;
+}
+
+function isPrismaUniqueConflict(error: unknown) {
+  return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2002");
+}
+
+async function claimSchedulerPhase(input: {
+  key: string;
+  contentType: StockBlogContentType;
+  scheduledFor: string;
+  phase: StockBlogRetryPhase;
+  now: Date;
+  seedState?: StockBlogRetryV2State;
+  seedCheckpoint?: StockBlogRetryCheckpoint;
+  forceReferenceRefresh?: boolean;
+  maxAttempts?: number;
+}): Promise<SchedulerPhaseClaim> {
+  const id = schedulerEventId(input.key);
+  for (let casAttempt = 0; casAttempt < 5; casAttempt += 1) {
+    const current = await prisma.eventLog.findUnique({ where: { id } });
+    const payload = current ? eventPayload(current.payload) : {};
+    const parsed = current
+      ? parseStockBlogRetryV2({ payload, eventTimestamp: current.timestamp })
+      : { ok: true as const, state: input.seedState ?? createEmptyStockBlogRetryV2State(), migratedFromLegacy: Boolean(input.seedState) };
+    if (!parsed.ok) {
+      return {
+        action: "blocked",
+        state: createEmptyStockBlogRetryV2State(),
+        checkpoint: retryCheckpointFromPayload(payload),
+        reason: parsed.reason,
+      };
+    }
+    let checkpoint = current ? retryCheckpointFromPayload(payload) : input.seedCheckpoint ?? {};
+    const token = randomUUID();
+    const claimNow = new Date(Math.max(input.now.getTime(), (current?.timestamp.getTime() ?? 0) + 1));
+    let claimState = parsed.state;
+    if (input.forceReferenceRefresh) {
+      if (claimState.lease && Date.parse(claimState.lease.expiresAt) > claimNow.getTime()) {
+        return {
+          action: "blocked",
+          state: claimState,
+          checkpoint,
+          reason: `${claimState.lease.phase} 단계가 다른 실행에서 처리 중입니다.`,
+        };
+      }
+      if (claimState.lease) claimState = { ...claimState, lease: null };
+      const refreshState = requestStockBlogRetryV2ReferenceRefresh(claimState);
+      if (!refreshState) {
+        return {
+          action: "blocked",
+          state: claimState,
+          checkpoint,
+          reason: "참고자료 갱신 상태로 안전하게 전환할 수 없습니다.",
+        };
+      }
+      claimState = refreshState;
+      checkpoint = {};
+    }
+    const decision = evaluateStockBlogRetryV2Claim({
+      state: claimState,
+      phase: input.phase,
+      now: claimNow,
+      token,
+      maxAttempts: input.maxAttempts,
+    });
+    if (decision.action !== "claim") {
+      return {
+        action: decision.action,
+        state: decision.state,
+        checkpoint,
+        reason: decision.action === "blocked" ? decision.reason : undefined,
+      };
+    }
+    const nextPayload: Prisma.InputJsonObject = {
+      ...payload,
+      scheduleKey: input.key,
+      contentType: input.contentType,
+      scheduledFor: input.scheduledFor,
+      status: "running",
+      phase: input.phase,
+      attempt: Math.max(...Object.values(decision.state.attempts)),
+      referenceAttempt: decision.state.attempts.reference_preflight,
+      generationAttempt: decision.state.attempts.content_generation,
+      draftAssemblyAttempt: decision.state.attempts.draft_assembly,
+      retryV2: retryStateJson(decision.state),
+      retryCheckpoint: retryCheckpointJson(checkpoint),
+    };
+    if (!current) {
+      try {
+        await prisma.eventLog.create({
+          data: {
+            id,
+            type: EVENT_TYPE,
+            timestamp: claimNow,
+            summary: `${input.contentType} ${input.phase} ${decision.lease.attempt}회차 시작`,
+            payload: nextPayload,
+          },
+        });
+        return { action: "claim", state: decision.state, checkpoint, token, attempt: decision.lease.attempt };
+      } catch (error) {
+        if (isPrismaUniqueConflict(error)) continue;
+        throw error;
+      }
+    }
+    const updated = await prisma.eventLog.updateMany({
+      where: { id, timestamp: current.timestamp },
+      data: {
+        timestamp: claimNow,
+        summary: `${input.contentType} ${input.phase} ${decision.lease.attempt}회차 시작`,
+        payload: nextPayload,
+      },
+    });
+    if (updated.count === 1) {
+      return { action: "claim", state: decision.state, checkpoint, token, attempt: decision.lease.attempt };
+    }
+  }
+  return {
+    action: "blocked",
+    state: input.seedState ?? createEmptyStockBlogRetryV2State(),
+    checkpoint: input.seedCheckpoint ?? {},
+    reason: "동시에 실행된 다른 스케줄러가 단계 실행권을 획득했습니다.",
+  };
+}
+
+async function settleSchedulerPhase(input: {
+  key: string;
+  token: string;
+  succeeded: boolean;
+  consumeAttempt?: boolean;
+  reopenContentGeneration?: boolean;
+  requestReferenceRefresh?: boolean;
+  checkpoint: StockBlogRetryCheckpoint;
+}) {
+  const id = schedulerEventId(input.key);
+  for (let casAttempt = 0; casAttempt < 8; casAttempt += 1) {
+    const current = await prisma.eventLog.findUnique({ where: { id } });
+    if (!current) throw new Error("STOCK_RETRY_V2_EVENT_MISSING");
+    const payload = eventPayload(current.payload);
+    const parsed = parseStockBlogRetryV2({ payload, eventTimestamp: current.timestamp });
+    if (!parsed.ok) throw new Error(`STOCK_RETRY_V2_STATE_INVALID: ${parsed.reason}`);
+    const settledClaim = settleStockBlogRetryV2Claim({
+      state: parsed.state,
+      token: input.token,
+      succeeded: input.succeeded,
+      consumeAttempt: input.consumeAttempt,
+    });
+    if (!settledClaim) throw new Error("STOCK_RETRY_V2_LEASE_LOST");
+    let settled: StockBlogRetryV2State | null = settledClaim;
+    if (input.reopenContentGeneration) settled = reopenStockBlogRetryV2ContentGeneration(settled);
+    if (settled && input.requestReferenceRefresh) settled = requestStockBlogRetryV2ReferenceRefresh(settled);
+    if (!settled) throw new Error("STOCK_RETRY_V2_RECOVERY_TRANSITION_INVALID");
+    const timestamp = new Date(Math.max(Date.now(), current.timestamp.getTime() + 1));
+    const updated = await prisma.eventLog.updateMany({
+      where: { id, timestamp: current.timestamp },
+      data: {
+        timestamp,
+        payload: {
+          ...payload,
+          retryV2: retryStateJson(settled),
+          retryCheckpoint: retryCheckpointJson(input.checkpoint),
+          referenceAttempt: settled.attempts.reference_preflight,
+          generationAttempt: settled.attempts.content_generation,
+          draftAssemblyAttempt: settled.attempts.draft_assembly,
+        },
+      },
+    });
+    if (updated.count === 1) return settled;
+  }
+  throw new Error("STOCK_RETRY_V2_LEASE_UPDATE_CONFLICT");
 }
 
 async function resolveScheduleMarketDecision(
@@ -927,39 +1195,6 @@ async function clearRecoverablePipelineCircuitBreaker(scheduleKey: string) {
     },
   });
   return true;
-}
-
-function retryState(
-  existing: Awaited<ReturnType<typeof prisma.eventLog.findUnique>>,
-  now: Date,
-  config: StockBlogSchedulerConfig,
-  manualRecovery = false,
-  maxAttempts = config.maxRetries,
-) {
-  const payload = existing ? eventPayload(existing.payload) : {};
-  const reason = typeof payload.reason === "string" ? payload.reason : "";
-  const qualityGate = payload.qualityGate;
-  const qualityGateFailed = Boolean(
-    qualityGate
-      && typeof qualityGate === "object"
-      && !Array.isArray(qualityGate)
-      && qualityGate.ok === false,
-  );
-  const retryableGenerationFailure = qualityGateFailed
-    || isStockContentQualityFailure(reason);
-  return evaluateStockBlogSchedulerRetry({
-    exists: Boolean(existing),
-    status: typeof payload.status === "string" ? payload.status : "",
-    previousAttempt: typeof payload.attempt === "number" ? payload.attempt : 1,
-    elapsedMs: existing ? now.getTime() - existing.timestamp.getTime() : 0,
-    autoPublish: config.autoPublish,
-    autoPublishRetryLimit: config.autoPublishRetryLimit,
-    maxRetries: maxAttempts,
-    retryDelayMinutes: config.retryDelayMinutes,
-    referencePreflightFailure: isStockReferencePreflightFailure(reason),
-    retryableGenerationFailure,
-    manualRecovery,
-  });
 }
 
 function startOfSchedulerWeek(now: Date, timezone: string) {
@@ -1051,38 +1286,137 @@ async function runOneSchedule(
   const contentType = definition.contentType;
   const scheduledAt = options.scheduledAt
     ?? getScheduledAtForParts(definition, getZonedParts(now, config.timezone), config.timezone);
-  const key = scheduleKey(definition, scheduledAt);
-  const id = schedulerEventId(key);
   const scheduledFor = scheduledAt.toISOString();
   const scheduledParts = getZonedParts(scheduledAt, config.timezone);
   const marketDate = `${scheduledParts.year}-${pad(scheduledParts.month)}-${pad(scheduledParts.day)}`;
+  const key = scheduleKey(definition, marketDate);
+  const id = schedulerEventId(key);
   const publishTime = definition.publishTime ?? definition.scheduledTime;
-  let publishKey = `${contentType}:${marketDate}:${publishTime}`;
+  let publishKey = buildStockBlogLogicalPublishKey(definition.scheduleId, marketDate);
+  const publishKeyAliases = buildStockBlogLegacyPublishKeyAliases({
+    contentType,
+    marketDate,
+    publishTime,
+    legacyTimes: definition.scheduleId === "weekday-korea-daily-preview" ? ["06:50", "07:20"] : [],
+  });
 
   if (config.autoPublish) {
     await clearRecoverablePipelineCircuitBreaker(key);
-    const circuit = await getPublishCircuitBreaker();
-    if (circuit.active) {
-      return { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "skipped", reason: circuit.message ?? "자동 발행 circuit breaker 활성화" };
-    }
     if (config.firstAutoPublishAt && now.getTime() < Date.parse(config.firstAutoPublishAt)) {
       return { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "not_due", reason: "첫 자동 발행 예약 시각 이전" };
     }
   }
 
-  const existing = await prisma.eventLog.findUnique({ where: { id } });
+  const logicalExisting = await prisma.eventLog.findUnique({ where: { id } });
+  const legacyExisting = logicalExisting
+    ? null
+    : await prisma.eventLog.findFirst({
+      where: { id: { in: legacySchedulerEventIds(definition, marketDate, config.timezone) } },
+      orderBy: { timestamp: "desc" },
+    });
+  const existing = logicalExisting ?? legacyExisting;
   const previousPayload = existing ? eventPayload(existing.payload) : {};
   const previousReason = typeof previousPayload.reason === "string" ? previousPayload.reason : "";
-  const previousReferenceAttempt = typeof previousPayload.referenceAttempt === "number"
-    ? previousPayload.referenceAttempt
-    : isStockReferencePreflightFailure(previousReason) && typeof previousPayload.attempt === "number"
-      ? previousPayload.attempt
-      : 0;
-  const previousGenerationAttempt = typeof previousPayload.generationAttempt === "number"
-    ? previousPayload.generationAttempt
-    : isStockContentQualityFailure(previousReason)
-      ? 1
-      : 0;
+  const parsedRetry = parseStockBlogRetryV2({
+    payload: previousPayload,
+    eventTimestamp: existing?.timestamp,
+  });
+  if (!parsedRetry.ok) {
+    return {
+      scheduleId: definition.scheduleId,
+      contentType,
+      scheduleKey: key,
+      scheduledFor,
+      status: "already_ran",
+      reason: parsedRetry.reason,
+    };
+  }
+  let retryV2 = parsedRetry.state;
+  const writeSchedulerEvent = (eventInput: Omit<Parameters<typeof persistSchedulerEvent>[0], "expectedRetryV2">) => persistSchedulerEvent({
+    ...eventInput,
+    expectedRetryV2: retryV2,
+  });
+  const legacyOperationalRunKey = typeof previousPayload.scheduleKey === "string"
+    ? previousPayload.scheduleKey
+    : legacyExisting
+      ? legacyExisting.id.replace(/^event-stock-scheduler-/, "")
+      : undefined;
+  const legacyOperationalAttempt = typeof previousPayload.attempt === "number"
+    && Number.isInteger(previousPayload.attempt)
+    && previousPayload.attempt > 0
+    ? previousPayload.attempt
+    : undefined;
+  let recoveredLegacyPipeline: ContentPipelineRun | null = null;
+  if (!logicalExisting
+    && parsedRetry.migratedFromLegacy
+    && previousPayload.status === "running"
+    && legacyOperationalRunKey
+    && legacyOperationalAttempt) {
+    recoveredLegacyPipeline = await findContentPipelineByOperationalAttempt(legacyOperationalRunKey, legacyOperationalAttempt);
+    if (recoveredLegacyPipeline) {
+      retryV2 = createEmptyStockBlogRetryV2State();
+      retryV2.attempts.reference_preflight = 1;
+      retryV2.completed.reference_preflight = true;
+    }
+  }
+  let retryCheckpoint: StockBlogRetryCheckpoint = {
+    ...retryCheckpointFromPayload(previousPayload),
+    pipelineId: retryCheckpointFromPayload(previousPayload).pipelineId
+      ?? (typeof previousPayload.pipelineId === "string" ? previousPayload.pipelineId : undefined),
+    approvalId: retryCheckpointFromPayload(previousPayload).approvalId
+      ?? (typeof previousPayload.approvalId === "string" ? previousPayload.approvalId : undefined),
+    naverDraftJobId: retryCheckpointFromPayload(previousPayload).naverDraftJobId
+      ?? (typeof previousPayload.naverDraftJobId === "string" ? previousPayload.naverDraftJobId : undefined),
+  };
+  if (recoveredLegacyPipeline) {
+    retryCheckpoint = {
+      ...retryCheckpoint,
+      pipelineInput: {
+        topic: recoveredLegacyPipeline.topic,
+        title: recoveredLegacyPipeline.title,
+        channel: recoveredLegacyPipeline.channel,
+        runnerMode: recoveredLegacyPipeline.runnerMode,
+        contentType: recoveredLegacyPipeline.referenceBundle?.contentType,
+        referenceBundle: recoveredLegacyPipeline.referenceBundle,
+      },
+    };
+  }
+  const previousReferenceAttempt = retryV2.attempts.reference_preflight;
+  const previousGenerationAttempt = retryV2.attempts.content_generation;
+  if (!recoveredLegacyPipeline && retryV2.lease && Date.parse(retryV2.lease.expiresAt) > now.getTime()) {
+    return {
+      scheduleId: definition.scheduleId,
+      contentType,
+      scheduleKey: key,
+      scheduledFor,
+      status: "already_ran",
+      attempt: Math.max(1, ...Object.values(retryV2.attempts)),
+      referenceAttempt: previousReferenceAttempt,
+      generationAttempt: previousGenerationAttempt,
+      reason: `${retryV2.lease.phase} 단계가 다른 실행에서 처리 중입니다.`,
+    };
+  }
+  const previousStatus = typeof previousPayload.status === "string" ? previousPayload.status : "";
+  if (!options.manualRecovery
+    && existing
+    && ["failed", "partial_failed", "deferred"].includes(previousStatus)) {
+    const delayMs = config.retryDelayMinutes * 60 * 1000;
+    const alignmentGraceMs = Math.min(60_000, Math.floor(delayMs * 0.1));
+    const remainingMs = Math.max(0, delayMs - alignmentGraceMs - (now.getTime() - existing.timestamp.getTime()));
+    if (remainingMs > 0) {
+      return {
+        scheduleId: definition.scheduleId,
+        contentType,
+        scheduleKey: key,
+        scheduledFor,
+        status: "already_ran",
+        attempt: Math.max(1, ...Object.values(retryV2.attempts)),
+        referenceAttempt: previousReferenceAttempt,
+        generationAttempt: previousGenerationAttempt,
+        reason: `실패 재시도 대기 중 · 약 ${Math.max(1, Math.ceil(remainingMs / 60_000))}분 후 가능`,
+      };
+    }
+  }
   const dataFallbackCutoffReached = definition.dataFailureFallback === "investment-study"
     && config.weekdayInvestmentStudyEnabled
     && isKisOverseasDegradedCutoffReached(now, definition.dataFailureFallbackAfterKst);
@@ -1108,9 +1442,20 @@ async function runOneSchedule(
       reason: phaseBudget.reason,
     };
   }
-  const retry = retryState(existing, now, config, options.manualRecovery, definition.maxAttempts);
-  if (!retry.allowed) return { scheduleId: definition.scheduleId, contentType, scheduleKey: key, scheduledFor, status: "already_ran", attempt: retry.attempt, reason: retry.reason };
-  const attempt = retry.attempt;
+  if (["succeeded", "skipped", "already_ran"].includes(previousStatus)) {
+    return {
+      scheduleId: definition.scheduleId,
+      contentType,
+      scheduleKey: key,
+      scheduledFor,
+      status: "already_ran",
+      attempt: Math.max(1, ...Object.values(retryV2.attempts)),
+      referenceAttempt: previousReferenceAttempt,
+      generationAttempt: previousGenerationAttempt,
+      reason: "이미 처리된 스케줄입니다.",
+    };
+  }
+  const attempt = Math.max(1, ...Object.values(retryV2.attempts));
   const marketDecision = await resolveScheduleMarketDecision(contentType, marketDate);
   const marketSession = marketDecision.session;
   const holidaySearchReplacement = marketDecision.action === "skip"
@@ -1203,7 +1548,10 @@ async function runOneSchedule(
     }
   }
   if (config.autoPublish && !holidaySearchReplacement && !dataFailureStudyFallback) {
-    const existingScheduledJob = await prisma.naverDraftJob.findUnique({ where: { publishKey } });
+    const existingScheduledJob = await prisma.naverDraftJob.findFirst({
+      where: { publishKey: { in: [publishKey, ...publishKeyAliases] } },
+      orderBy: { createdAt: "desc" },
+    });
     if (existingScheduledJob) {
       const result: StockBlogSchedulerRunResult = {
         scheduleId: definition.scheduleId,
@@ -1226,42 +1574,266 @@ async function runOneSchedule(
       return result;
     }
   }
-  const resumablePipelineId = options.manualRecovery
-    && previousPayload.status === "partial_failed"
-    && isNaverDraftAssemblyQualityFailure(previousReason)
-    && typeof previousPayload.pipelineId === "string"
-    ? previousPayload.pipelineId
-    : null;
-  const resumableApprovalId = typeof previousPayload.approvalId === "string"
-    ? previousPayload.approvalId
-    : undefined;
+  const resumablePipelineId = retryV2.completed.content_generation ? retryCheckpoint.pipelineId ?? null : null;
+  const resumableApprovalId = retryCheckpoint.approvalId;
+  let recoveredPipeline: Awaited<ReturnType<typeof findContentPipelineByOperationalAttempt>> = recoveredLegacyPipeline;
+  if (!resumablePipelineId
+    && retryV2.lease?.phase === "content_generation"
+    && Date.parse(retryV2.lease.expiresAt) <= now.getTime()) {
+    for (const runKey of Array.from(new Set([key, legacyOperationalRunKey].filter((value): value is string => Boolean(value))))) {
+      recoveredPipeline = await findContentPipelineByOperationalAttempt(runKey, retryV2.lease.attempt);
+      if (recoveredPipeline) break;
+    }
+  }
 
-  await writeSchedulerEvent({
-    key,
-    contentType,
-    scheduledFor,
-    status: "running",
-    summary: holidaySearchReplacement
-      ? `${marketSession?.market} 휴장 대체 검색 유입형 투자공부 시작`
-      : dataFailureStudyFallback
-        ? `${contentType} 시장자료 지연 대체 검색형 투자공부 시작`
-      : `${contentType} 자동 실행 시작`,
-    payload: {
-      phase: "started",
-      runnerMode: config.runnerMode,
-      attempt,
-      referenceAttempt: previousReferenceAttempt,
-      generationAttempt: previousGenerationAttempt,
-      holidaySearchReplacement,
-      dataFailureStudyFallback,
-      effectiveContentType,
-    },
-  });
+  if (config.runnerMode === "hermes" && !resumablePipelineId && !recoveredPipeline) {
+    const requiredRuns = getExpectedHermesRunsForStockBlog(effectiveContentType);
+    const usage = usageSnapshot(await getHermesUsageSummary({ recentLimit: 4 }));
+    if (usage.remaining < requiredRuns) {
+      const result: StockBlogSchedulerRunResult = {
+        scheduleId: definition.scheduleId,
+        contentType,
+        scheduleKey: key,
+        scheduledFor,
+        status: "deferred",
+        attempt,
+        referenceAttempt: retryV2.attempts.reference_preflight,
+        generationAttempt: retryV2.attempts.content_generation,
+        reason: `Hermes 남은 횟수 부족: ${requiredRuns}회 필요, ${usage.remaining}회 남음`,
+        hermesUsageBefore: usage,
+      };
+      await writeSchedulerEvent({
+        key,
+        contentType,
+        scheduledFor,
+        status: "deferred",
+        summary: `${effectiveContentType} 자동 실행 대기 · Hermes 한도 부족`,
+        payload: {
+          ...(result as unknown as Prisma.InputJsonObject),
+          retryV2: retryStateJson(retryV2),
+          retryCheckpoint: retryCheckpointJson(retryCheckpoint),
+        },
+      });
+      return result;
+    }
+  }
+
+  let activePhase: { phase: StockBlogRetryPhase; token: string } | null = null;
+  const settleActivePhase = async (
+    succeeded: boolean,
+    consumeAttempt = true,
+    reopenContentGeneration = false,
+    requestReferenceRefresh = false,
+  ) => {
+    if (!activePhase) return;
+    retryV2 = await settleSchedulerPhase({
+      key,
+      token: activePhase.token,
+      succeeded,
+      consumeAttempt,
+      reopenContentGeneration,
+      requestReferenceRefresh,
+      checkpoint: retryCheckpoint,
+    });
+    activePhase = null;
+  };
+  const resumeDraftAssembly = async (input: {
+    pipelineId: string;
+    approvalId?: string;
+    hermesUsage: { used: number; remaining: number; limit: number };
+  }): Promise<StockBlogSchedulerRunResult> => {
+    if (config.autoApprove && input.approvalId) {
+      const approval = await prisma.approvalRequest.findUnique({
+        where: { id: input.approvalId },
+        select: { status: true },
+      });
+      if (approval?.status !== "승인 완료") {
+        await resolveApproval({
+          approvalId: input.approvalId,
+          status: "승인 완료",
+          decisionReason: "Stock Blog Scheduler 자동 승인 복구 · 네이버 임시저장 준비",
+        });
+      }
+    }
+    const draftClaim = await claimSchedulerPhase({
+      key,
+      contentType,
+      scheduledFor,
+      phase: "draft_assembly",
+      now,
+      seedState: logicalExisting ? undefined : retryV2,
+      seedCheckpoint: logicalExisting ? undefined : retryCheckpoint,
+    });
+    retryV2 = draftClaim.state;
+    retryCheckpoint = draftClaim.checkpoint;
+    if (draftClaim.action === "blocked") {
+      return {
+        scheduleId: definition.scheduleId,
+        contentType,
+        scheduleKey: key,
+        scheduledFor,
+        status: "already_ran",
+        attempt: Math.max(1, ...Object.values(retryV2.attempts)),
+        referenceAttempt: retryV2.attempts.reference_preflight,
+        generationAttempt: retryV2.attempts.content_generation,
+        reason: draftClaim.reason,
+        pipelineId: input.pipelineId,
+      };
+    }
+    if (draftClaim.action === "completed") {
+      const result: StockBlogSchedulerRunResult = {
+        scheduleId: definition.scheduleId,
+        contentType,
+        scheduleKey: key,
+        scheduledFor,
+        status: "succeeded",
+        attempt: Math.max(1, ...Object.values(retryV2.attempts)),
+        referenceAttempt: retryV2.attempts.reference_preflight,
+        generationAttempt: retryV2.attempts.content_generation,
+        reason: "네이버 작업 조립이 이미 완료됐습니다.",
+        pipelineId: input.pipelineId,
+        approvalId: input.approvalId,
+        naverDraftJobId: retryCheckpoint.naverDraftJobId,
+        hermesUsageBefore: input.hermesUsage,
+        hermesUsageAfter: input.hermesUsage,
+      };
+      await writeSchedulerEvent({
+        key,
+        contentType,
+        scheduledFor,
+        status: "succeeded",
+        summary: `${contentType} 네이버 작업 조립 완료 상태 복구`,
+        payload: {
+          ...(result as unknown as Prisma.InputJsonObject),
+          retryV2: retryStateJson(retryV2),
+          retryCheckpoint: retryCheckpointJson(retryCheckpoint),
+        },
+      });
+      return result;
+    }
+    if (draftClaim.token) activePhase = { phase: "draft_assembly", token: draftClaim.token };
+    try {
+      const job = await createNaverDraftJobFromPipeline({
+        contentPipelineId: input.pipelineId,
+        approvalId: input.approvalId,
+        allowPublish: config.autoPublish,
+        publishKey: config.autoPublish ? publishKey : null,
+        publishKeyAliases: config.autoPublish && !holidaySearchReplacement && !dataFailureStudyFallback ? publishKeyAliases : [],
+        marketDate: config.autoPublish ? marketDate : null,
+        scheduleSlot: config.autoPublish ? publishTime : null,
+      });
+      retryCheckpoint = { ...retryCheckpoint, naverDraftJobId: job.id };
+      await settleActivePhase(true);
+      const result: StockBlogSchedulerRunResult = {
+        scheduleId: definition.scheduleId,
+        contentType,
+        scheduleKey: key,
+        scheduledFor,
+        status: "succeeded",
+        attempt: Math.max(1, ...Object.values(retryV2.attempts)),
+        referenceAttempt: retryV2.attempts.reference_preflight,
+        generationAttempt: retryV2.attempts.content_generation,
+        reason: "기존 고품질 파이프라인에서 네이버 작업 조립 복구 완료",
+        pipelineId: input.pipelineId,
+        approvalId: input.approvalId,
+        naverDraftJobId: job.id,
+        hermesUsageBefore: input.hermesUsage,
+        hermesUsageAfter: input.hermesUsage,
+      };
+      await writeSchedulerEvent({
+        key,
+        contentType,
+        scheduledFor,
+        status: "succeeded",
+        summary: `${contentType} 네이버 작업 조립 복구 완료`,
+        payload: result as unknown as Prisma.InputJsonObject,
+      });
+      return result;
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "네이버 작업 조립 복구 실패";
+      const needsReferenceRefresh = reason.startsWith("NAVER_DRAFT_NEEDS_REFERENCE:");
+      const automaticReferenceRegenerationAvailable = retryV2.attempts.content_generation
+        < STOCK_BLOG_RETRY_PHASE_LIMITS.content_generation;
+      const regenerateContent = needsReferenceRefresh
+        || reason.startsWith("NAVER_DRAFT_DUPLICATE_CONTENT_BLOCKED:")
+        || reason.startsWith("NAVER_DRAFT_QUALITY_FAILED:")
+        || reason.startsWith("NAVER_DRAFT_NEEDS_REFERENCE:");
+      if (regenerateContent) {
+        retryCheckpoint = needsReferenceRefresh
+          ? {}
+          : {
+              ...retryCheckpoint,
+              pipelineId: undefined,
+              approvalId: undefined,
+              naverDraftJobId: undefined,
+            };
+      }
+      await settleActivePhase(false, !regenerateContent, regenerateContent && !needsReferenceRefresh, needsReferenceRefresh);
+      const qualityFailure = regenerateContent || isStockContentQualityFailure(reason);
+      const result: StockBlogSchedulerRunResult = {
+        scheduleId: definition.scheduleId,
+        contentType,
+        scheduleKey: key,
+        scheduledFor,
+        status: "partial_failed",
+        attempt: Math.max(1, ...Object.values(retryV2.attempts)),
+        referenceAttempt: retryV2.attempts.reference_preflight,
+        generationAttempt: retryV2.attempts.content_generation,
+        reason: needsReferenceRefresh && automaticReferenceRegenerationAvailable
+          ? `STOCK_REFERENCE_PREFLIGHT_BLOCKED: ${reason}`
+          : qualityFailure
+            ? `STOCK_CONTENT_QUALITY_FAILED: ${reason}`
+            : reason,
+        pipelineId: input.pipelineId,
+        approvalId: input.approvalId,
+        hermesUsageBefore: input.hermesUsage,
+        hermesUsageAfter: input.hermesUsage,
+      };
+      await writeSchedulerEvent({
+        key,
+        contentType,
+        scheduledFor,
+        status: "partial_failed",
+        summary: `${contentType} 네이버 작업 조립 복구 실패`,
+        payload: result as unknown as Prisma.InputJsonObject,
+      });
+      return result;
+    }
+  };
+
+  if (!resumablePipelineId && !recoveredPipeline && !retryCheckpoint.pipelineInput) {
+    const claim = await claimSchedulerPhase({
+      key,
+      contentType,
+      scheduledFor,
+      phase: "reference_preflight",
+      now,
+      seedState: logicalExisting ? undefined : retryV2,
+      seedCheckpoint: logicalExisting ? undefined : retryCheckpoint,
+      forceReferenceRefresh: retryV2.completed.reference_preflight,
+    });
+    retryV2 = claim.state;
+    retryCheckpoint = claim.checkpoint;
+    if (claim.action === "blocked") {
+      return {
+        scheduleId: definition.scheduleId,
+        contentType,
+        scheduleKey: key,
+        scheduledFor,
+        status: "already_ran",
+        attempt,
+        referenceAttempt: retryV2.attempts.reference_preflight,
+        generationAttempt: retryV2.attempts.content_generation,
+        reason: claim.reason,
+      };
+    }
+    if (claim.action === "claim" && claim.token) activePhase = { phase: "reference_preflight", token: claim.token };
+  }
 
   let holidaySearchStudyBuild: Awaited<ReturnType<typeof buildHolidaySearchStudyPipelineInput>> | null = null;
   let dataFailureStudyBuild: Awaited<ReturnType<typeof buildMarketDataFallbackStudyPipelineInput>> | null = null;
   try {
-    if (holidaySearchReplacement && marketSession && !resumablePipelineId) {
+    if (holidaySearchReplacement && marketSession && !resumablePipelineId && !recoveredPipeline && !retryCheckpoint.pipelineInput) {
       holidaySearchStudyBuild = await buildHolidaySearchStudyPipelineInput(
         marketSession,
         config.runnerMode,
@@ -1269,7 +1841,7 @@ async function runOneSchedule(
         config.timezone,
       );
     }
-    if (dataFailureStudyFallback && !resumablePipelineId) {
+    if (dataFailureStudyFallback && !resumablePipelineId && !recoveredPipeline && !retryCheckpoint.pipelineInput) {
       dataFailureStudyBuild = await buildMarketDataFallbackStudyPipelineInput(
         definition,
         config.runnerMode,
@@ -1279,8 +1851,9 @@ async function runOneSchedule(
       );
     }
     let investmentStudyBuild: Awaited<ReturnType<typeof buildInvestmentStudyPipelineInput>> | null = null;
-    if (contentType === "INVESTMENT_STUDY" && definition.investmentStudyMode && !resumablePipelineId) {
+    if (contentType === "INVESTMENT_STUDY" && definition.investmentStudyMode && !resumablePipelineId && !recoveredPipeline && !retryCheckpoint.pipelineInput) {
       if (!config.weekdayInvestmentStudyEnabled) {
+        await settleActivePhase(false, false);
         const result: StockBlogSchedulerRunResult = {
           scheduleId: definition.scheduleId,
           contentType,
@@ -1304,6 +1877,7 @@ async function runOneSchedule(
         const requiredRuns = getExpectedHermesRunsForStockBlog(contentType);
         const usage = usageSnapshot(await getHermesUsageSummary({ recentLimit: 4 }));
         if (usage.remaining < requiredRuns) {
+          await settleActivePhase(false, false);
           const result: StockBlogSchedulerRunResult = {
             scheduleId: definition.scheduleId,
             contentType,
@@ -1329,6 +1903,7 @@ async function runOneSchedule(
         definition.investmentStudyMode === "conditional"
         && await hasConditionalInvestmentStudyRunThisWeek(now, config.timezone, key)
       ) {
+        await settleActivePhase(false, false);
         const result: StockBlogSchedulerRunResult = {
           scheduleId: definition.scheduleId,
           contentType,
@@ -1362,6 +1937,7 @@ async function runOneSchedule(
           && bundle.marketSnapshot?.dataQuality === "verified"
           && bundle.marketSnapshot?.freshness?.status === "fresh";
         if (!dataReady) {
+          await settleActivePhase(false);
           const result: StockBlogSchedulerRunResult = {
             scheduleId: definition.scheduleId,
             contentType,
@@ -1385,6 +1961,7 @@ async function runOneSchedule(
           return result;
         }
         if (!qualifiesForConditionalInvestmentStudy(investmentStudyBuild.selection)) {
+          await settleActivePhase(true);
           const result: StockBlogSchedulerRunResult = {
             scheduleId: definition.scheduleId,
             contentType,
@@ -1411,8 +1988,9 @@ async function runOneSchedule(
     }
 
     let largeCapScan: LargeCapDisclosureScanResult | null = null;
-    if (contentType === "LARGE_CAP_DISCLOSURE_EARNINGS" && !resumablePipelineId) {
+    if (contentType === "LARGE_CAP_DISCLOSURE_EARNINGS" && !resumablePipelineId && !recoveredPipeline && !retryCheckpoint.pipelineInput) {
       if (!config.largeCapEventsEnabled) {
+        await settleActivePhase(false, false);
         const result: StockBlogSchedulerRunResult = {
           scheduleId: definition.scheduleId,
           contentType,
@@ -1434,6 +2012,7 @@ async function runOneSchedule(
       }
       largeCapScan = await scanLargeCapDisclosureEvents({ now });
       if (largeCapScan.events.length === 0) {
+        await settleActivePhase(false);
         const providerUnavailable = largeCapScan.providers.openDart !== "ready" && largeCapScan.providers.secEdgar !== "ready";
         const reason = providerUnavailable
           ? `공식 공시 제공자를 조회하지 못했습니다. ${largeCapScan.notes.join(" / ")}`
@@ -1464,103 +2043,124 @@ async function runOneSchedule(
         return result;
       }
     }
-    const hermesUsageBefore = usageSnapshot(await getHermesUsageSummary({ recentLimit: 4 }));
-    if (resumablePipelineId) {
-      try {
-        const job = await createNaverDraftJobFromPipeline({
-          contentPipelineId: resumablePipelineId,
-          approvalId: resumableApprovalId,
-          allowPublish: config.autoPublish,
-          publishKey: config.autoPublish ? publishKey : null,
-          marketDate: config.autoPublish ? marketDate : null,
-          scheduleSlot: config.autoPublish ? publishTime : null,
-        });
-        const result: StockBlogSchedulerRunResult = {
-          scheduleId: definition.scheduleId,
-          contentType,
-          scheduleKey: key,
-          scheduledFor,
-          status: "succeeded",
-          attempt,
-          reason: "기존 고품질 파이프라인에서 네이버 작업 조립 복구 완료",
-          pipelineId: resumablePipelineId,
-          approvalId: resumableApprovalId,
-          naverDraftJobId: job.id,
-          hermesUsageBefore,
-          hermesUsageAfter: hermesUsageBefore,
+    let pipelineInput: ContentPipelineInput | undefined = retryCheckpoint.pipelineInput;
+    if (!resumablePipelineId && !recoveredPipeline && !pipelineInput) {
+      const builtPipelineInput = largeCapScan
+        ? await buildLargeCapPipelineInput(definition, config.runnerMode, scheduledAt, config.timezone, largeCapScan)
+        : holidaySearchStudyBuild?.input
+          ?? dataFailureStudyBuild?.input
+          ?? investmentStudyBuild?.input
+          ?? buildPipelineInput(definition, config.runnerMode, scheduledAt, config.timezone);
+      let preparedPipelineInput: ContentPipelineInput = { ...builtPipelineInput, channel: "blog" } as ContentPipelineInput;
+      if (!preparedPipelineInput.referenceBundle) {
+        const referenceMarket = [
+          "NEXT_WEEK_MARKET_PREVIEW",
+          "KOREA_MARKET_CLOSE_US_PREVIEW",
+          "INVESTMENT_STUDY",
+          "LARGE_CAP_DISCLOSURE_EARNINGS",
+        ].includes(effectiveContentType) ? "GLOBAL" : "KR";
+        preparedPipelineInput = {
+          ...preparedPipelineInput,
+          referenceBundle: await collectStockBlogReferences({
+            topic: preparedPipelineInput.topic,
+            title: preparedPipelineInput.title,
+            channel: preparedPipelineInput.channel,
+            contentType: effectiveContentType,
+            market: referenceMarket,
+            keywords: Array.from(new Set(`${preparedPipelineInput.topic} ${preparedPipelineInput.title}`
+              .split(/[\s,·/]+/)
+              .map((item) => item.trim())
+              .filter((item) => item.length >= 2))).slice(0, 8),
+            prioritizeInputQueries: effectiveContentType === "INVESTMENT_STUDY",
+          }),
         };
-        await writeSchedulerEvent({
-          key,
-          contentType,
-          scheduledFor,
-          status: "succeeded",
-          summary: `${contentType} 네이버 작업 조립 복구 완료`,
-          payload: result as unknown as Prisma.InputJsonObject,
-        });
-        return result;
-      } catch (error) {
-        const reason = error instanceof Error ? error.message : "네이버 작업 조립 복구 실패";
-        const qualityFailure = isStockContentQualityFailure(reason);
-        const result: StockBlogSchedulerRunResult = {
-          scheduleId: definition.scheduleId,
-          contentType,
-          scheduleKey: key,
-          scheduledFor,
-          status: "partial_failed",
-          attempt,
-          reason: qualityFailure ? `STOCK_CONTENT_QUALITY_FAILED: ${reason}` : reason,
-          pipelineId: resumablePipelineId,
-          approvalId: resumableApprovalId,
-          hermesUsageBefore,
-          hermesUsageAfter: hermesUsageBefore,
-        };
-        await writeSchedulerEvent({
-          key,
-          contentType,
-          scheduledFor,
-          status: "partial_failed",
-          summary: `${contentType} 네이버 작업 조립 복구 실패`,
-          payload: result as unknown as Prisma.InputJsonObject,
-        });
-        return result;
       }
-    }
-    if (config.runnerMode === "hermes") {
-      const requiredRuns = getExpectedHermesRunsForStockBlog(effectiveContentType);
-      if (hermesUsageBefore.remaining < requiredRuns) {
-        const result: StockBlogSchedulerRunResult = {
-          scheduleId: definition.scheduleId,
-          contentType,
-          scheduleKey: key,
-          scheduledFor,
-          status: "deferred",
-          attempt,
-          reason: `Hermes 남은 횟수 부족: ${requiredRuns}회 필요, ${hermesUsageBefore.remaining}회 남음`,
-          hermesUsageBefore,
-        };
-        await writeSchedulerEvent({
-          key,
-          contentType,
-          scheduledFor,
-          status: "deferred",
-          summary: `${contentType} 자동 실행 대기 · Hermes 한도 부족`,
-          payload: result as unknown as Prisma.InputJsonObject,
-        });
-        return result;
+      pipelineInput = preparedPipelineInput;
+      retryCheckpoint = { ...retryCheckpoint, pipelineInput };
+      const referenceGate = evaluateStockBlogReferences(preparedPipelineInput.referenceBundle, config.runnerMode === "hermes");
+      if (config.runnerMode === "hermes" && !referenceGate.ok) {
+        const error = new Error(`STOCK_REFERENCE_PREFLIGHT_BLOCKED: ${referenceGate.status} · ${referenceGate.reasons.join(" / ")}`);
+        Object.assign(error, { code: "STOCK_REFERENCE_PREFLIGHT_BLOCKED", qualityGate: referenceGate });
+        throw error;
       }
+      await settleActivePhase(true);
     }
 
-    const pipelineInput = largeCapScan
-      ? await buildLargeCapPipelineInput(definition, config.runnerMode, scheduledAt, config.timezone, largeCapScan)
-      : holidaySearchStudyBuild?.input
-        ?? dataFailureStudyBuild?.input
-        ?? investmentStudyBuild?.input
-        ?? buildPipelineInput(definition, config.runnerMode, scheduledAt, config.timezone);
-    const pipeline = await startContentPipeline({
-      ...pipelineInput,
-      operationalRunKey: key,
-      operationalAttempt: attempt,
-    });
+    const hermesUsageBefore = usageSnapshot(await getHermesUsageSummary({ recentLimit: 4 }));
+    if (resumablePipelineId) {
+      return resumeDraftAssembly({
+        pipelineId: resumablePipelineId,
+        approvalId: resumableApprovalId,
+        hermesUsage: hermesUsageBefore,
+      });
+    }
+    let pipeline = recoveredPipeline;
+    if (pipeline && retryV2.lease?.phase === "content_generation") {
+      activePhase = { phase: "content_generation", token: retryV2.lease.token };
+    } else if (pipeline) {
+      const recoveredClaim = await claimSchedulerPhase({
+        key,
+        contentType,
+        scheduledFor,
+        phase: "content_generation",
+        now,
+        seedState: logicalExisting ? undefined : retryV2,
+        seedCheckpoint: logicalExisting ? undefined : retryCheckpoint,
+        maxAttempts: options.manualRecovery ? STOCK_BLOG_RETRY_PHASE_LIMITS.content_generation + 1 : undefined,
+      });
+      retryV2 = recoveredClaim.state;
+      retryCheckpoint = recoveredClaim.checkpoint;
+      if (recoveredClaim.action !== "claim" || !recoveredClaim.token) {
+        throw new Error(recoveredClaim.reason ?? "STOCK_RETRY_V2_RECOVERED_PIPELINE_CLAIM_FAILED");
+      }
+      activePhase = { phase: "content_generation", token: recoveredClaim.token };
+    }
+    if (!pipeline) {
+      const generationClaim = await claimSchedulerPhase({
+        key,
+        contentType,
+        scheduledFor,
+        phase: "content_generation",
+        now,
+        seedState: logicalExisting ? undefined : retryV2,
+        seedCheckpoint: logicalExisting ? undefined : retryCheckpoint,
+        maxAttempts: options.manualRecovery ? STOCK_BLOG_RETRY_PHASE_LIMITS.content_generation + 1 : undefined,
+      });
+      retryV2 = generationClaim.state;
+      retryCheckpoint = generationClaim.checkpoint;
+      if (generationClaim.action === "blocked") {
+        return {
+          scheduleId: definition.scheduleId,
+          contentType,
+          scheduleKey: key,
+          scheduledFor,
+          status: "already_ran",
+          attempt,
+          referenceAttempt: retryV2.attempts.reference_preflight,
+          generationAttempt: retryV2.attempts.content_generation,
+          reason: generationClaim.reason,
+        };
+      }
+      if (generationClaim.action === "completed" && retryCheckpoint.pipelineId) {
+        return resumeDraftAssembly({
+          pipelineId: retryCheckpoint.pipelineId,
+          approvalId: retryCheckpoint.approvalId,
+          hermesUsage: hermesUsageBefore,
+        });
+      }
+      if (!generationClaim.token || !generationClaim.attempt || !pipelineInput) {
+        throw new Error("STOCK_RETRY_V2_GENERATION_CHECKPOINT_MISSING");
+      }
+      activePhase = { phase: "content_generation", token: generationClaim.token };
+      pipeline = await findContentPipelineByOperationalAttempt(key, generationClaim.attempt)
+        ?? await startContentPipelineFromTrustedInput({
+          ...pipelineInput,
+          channel: "blog" as const,
+          operationalRunKey: key,
+          operationalAttempt: generationClaim.attempt,
+        });
+    }
+    if (!pipeline) throw new Error("STOCK_RETRY_V2_PIPELINE_MISSING");
     const approvalId = pipeline.approvalId ?? null;
     let naverDraftJobId: string | undefined;
     let status: StockBlogSchedulerRunStatus = "succeeded";
@@ -1579,6 +2179,12 @@ async function runOneSchedule(
         : `품질 게이트 차단: ${qualityGate.status} · ${qualityGate.reasons.join(" / ")}`;
       notes.push(`STOCK_CONTENT_QUALITY_FAILED: ${qualityReason}`);
     }
+    retryCheckpoint = {
+      ...retryCheckpoint,
+      pipelineId: pipeline.id,
+      approvalId: approvalId ?? undefined,
+    };
+    await settleActivePhase(!qualityBlocked);
 
     if (!qualityBlocked && config.autoApprove && approvalId && pipeline.status === "director_approval") {
       await resolveApproval({
@@ -1591,22 +2197,62 @@ async function runOneSchedule(
     }
 
     if (!qualityBlocked && config.autoCreateDraftJob) {
-      try {
-        const job = await createNaverDraftJobFromPipeline({
-          contentPipelineId: pipeline.id,
-          approvalId,
-          allowPublish: config.autoPublish,
-          publishKey: config.autoPublish ? publishKey : null,
-          marketDate: config.autoPublish ? marketDate : null,
-          scheduleSlot: config.autoPublish ? publishTime : null,
-        });
-        naverDraftJobId = job.id;
-      } catch (error) {
+      const draftClaim = await claimSchedulerPhase({
+        key,
+        contentType,
+        scheduledFor,
+        phase: "draft_assembly",
+        now,
+      });
+      retryV2 = draftClaim.state;
+      retryCheckpoint = draftClaim.checkpoint;
+      if (draftClaim.action === "completed") {
+        naverDraftJobId = retryCheckpoint.naverDraftJobId;
+      } else if (draftClaim.action === "blocked") {
         status = "partial_failed";
-        const reason = error instanceof Error ? error.message : "네이버 임시저장 job 생성 실패";
-        const contentQualityBlocked = reason.startsWith("NAVER_DRAFT_DUPLICATE_CONTENT_BLOCKED:")
-          || reason.startsWith("NAVER_DRAFT_QUALITY_FAILED:");
-        notes.push(contentQualityBlocked ? `STOCK_CONTENT_QUALITY_FAILED: ${reason}` : reason);
+        notes.push(draftClaim.reason ?? "네이버 작업 조립 재시도 한도 도달");
+      } else {
+        if (draftClaim.token) activePhase = { phase: "draft_assembly", token: draftClaim.token };
+        try {
+          const job = await createNaverDraftJobFromPipeline({
+            contentPipelineId: pipeline.id,
+            approvalId,
+            allowPublish: config.autoPublish,
+            publishKey: config.autoPublish ? publishKey : null,
+            publishKeyAliases: config.autoPublish && !holidaySearchReplacement && !dataFailureStudyFallback ? publishKeyAliases : [],
+            marketDate: config.autoPublish ? marketDate : null,
+            scheduleSlot: config.autoPublish ? publishTime : null,
+          });
+          naverDraftJobId = job.id;
+          retryCheckpoint = { ...retryCheckpoint, naverDraftJobId: job.id };
+          await settleActivePhase(true);
+        } catch (error) {
+          status = "partial_failed";
+          const reason = error instanceof Error ? error.message : "네이버 임시저장 job 생성 실패";
+          const needsReferenceRefresh = reason.startsWith("NAVER_DRAFT_NEEDS_REFERENCE:");
+          const automaticReferenceRegenerationAvailable = retryV2.attempts.content_generation
+            < STOCK_BLOG_RETRY_PHASE_LIMITS.content_generation;
+          const contentQualityBlocked = needsReferenceRefresh
+            || reason.startsWith("NAVER_DRAFT_DUPLICATE_CONTENT_BLOCKED:")
+            || reason.startsWith("NAVER_DRAFT_QUALITY_FAILED:")
+            || reason.startsWith("NAVER_DRAFT_NEEDS_REFERENCE:");
+          if (contentQualityBlocked) {
+            retryCheckpoint = needsReferenceRefresh
+              ? {}
+              : {
+                  ...retryCheckpoint,
+                  pipelineId: undefined,
+                  approvalId: undefined,
+                  naverDraftJobId: undefined,
+                };
+          }
+          await settleActivePhase(false, !contentQualityBlocked, contentQualityBlocked && !needsReferenceRefresh, needsReferenceRefresh);
+          notes.push(needsReferenceRefresh && automaticReferenceRegenerationAvailable
+            ? `STOCK_REFERENCE_PREFLIGHT_BLOCKED: ${reason}`
+            : contentQualityBlocked
+              ? `STOCK_CONTENT_QUALITY_FAILED: ${reason}`
+              : reason);
+        }
       }
     }
 
@@ -1617,9 +2263,9 @@ async function runOneSchedule(
       scheduleKey: key,
       scheduledFor,
       status,
-      attempt,
-      referenceAttempt: previousReferenceAttempt,
-      generationAttempt: previousGenerationAttempt + 1,
+      attempt: Math.max(1, ...Object.values(retryV2.attempts)),
+      referenceAttempt: retryV2.attempts.reference_preflight,
+      generationAttempt: retryV2.attempts.content_generation,
       reason: notes.join(" · ") || undefined,
       pipelineId: pipeline.id,
       approvalId: approvalId ?? undefined,
@@ -1648,13 +2294,19 @@ async function runOneSchedule(
         : dataFailureStudyFallback
           ? `${contentType} 시장자료 지연 대체 검색형 투자공부 ${status === "succeeded" ? "완료" : "부분 완료"}`
           : `${contentType} 자동 실행 ${status === "succeeded" ? "완료" : "부분 완료"}`,
-      payload: result as unknown as Prisma.InputJsonObject,
+      payload: {
+        ...(result as unknown as Prisma.InputJsonObject),
+        retryV2: retryStateJson(retryV2),
+        retryCheckpoint: retryCheckpointJson(retryCheckpoint),
+      },
     });
     return result;
   } catch (error) {
     const reason = error instanceof HermesDailyLimitExceededError ? error.message : error instanceof Error ? error.message : "알 수 없는 스케줄러 오류";
     const referencePreflightFailure = isStockReferencePreflightFailure(reason);
     const capacityDeferred = error instanceof HermesDailyLimitExceededError;
+    if (referencePreflightFailure) retryCheckpoint = { ...retryCheckpoint, pipelineInput: undefined };
+    if (activePhase) await settleActivePhase(false, !capacityDeferred);
     const qualityGate = error && typeof error === "object" && "qualityGate" in error
       ? (error as { qualityGate?: StockBlogQualityGateResult }).qualityGate
       : undefined;
@@ -1664,9 +2316,9 @@ async function runOneSchedule(
       scheduleKey: key,
       scheduledFor,
       status: capacityDeferred ? "deferred" : "failed",
-      attempt,
-      referenceAttempt: previousReferenceAttempt + (referencePreflightFailure ? 1 : 0),
-      generationAttempt: previousGenerationAttempt + (!referencePreflightFailure && !capacityDeferred ? 1 : 0),
+      attempt: Math.max(1, ...Object.values(retryV2.attempts)),
+      referenceAttempt: retryV2.attempts.reference_preflight,
+      generationAttempt: retryV2.attempts.content_generation,
       reason,
       qualityGate,
       marketSession,
@@ -1691,6 +2343,8 @@ async function runOneSchedule(
         ...(result as unknown as Prisma.InputJsonObject),
         failurePhase: referencePreflightFailure ? "reference_preflight" : capacityDeferred ? "capacity" : "runtime",
         retryable: referencePreflightFailure || capacityDeferred,
+        retryV2: retryStateJson(retryV2),
+        retryCheckpoint: retryCheckpointJson(retryCheckpoint),
       },
     });
     return result;

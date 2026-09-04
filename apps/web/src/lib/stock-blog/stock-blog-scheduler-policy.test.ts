@@ -1,15 +1,424 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  createEmptyStockBlogRetryV2State,
+  evaluateStockBlogRetryV2Claim,
   evaluateStockBlogPhaseBudget,
   evaluateStockBlogRecoveryDate,
   evaluateStockBlogSchedulerRetry,
   isNaverDraftAssemblyQualityFailure,
   isStockContentQualityFailure,
   isStockReferencePreflightFailure,
+  parseStockBlogRetryV2,
+  reopenStockBlogRetryV2ContentGeneration,
+  requestStockBlogRetryV2ReferenceRefresh,
+  settleStockBlogRetryV2Claim,
+  STOCK_BLOG_RETRY_PHASE_LIMITS,
+  STOCK_BLOG_RETRY_PHASE_LEASE_MS,
   shouldClearRecoverablePipelineCircuitBreaker,
   shouldClearReferencePreflightCircuitBreaker,
 } from "./stock-blog-scheduler-policy.ts";
+
+test("기존 retryV2에 참고자료 갱신 필드가 없어도 false로 호환한다", () => {
+  const parsed = parseStockBlogRetryV2({
+    payload: {
+      retryV2: {
+        version: 2,
+        attempts: { reference_preflight: 1, content_generation: 0, draft_assembly: 0 },
+        completed: { reference_preflight: true, content_generation: false, draft_assembly: false },
+        lease: null,
+      },
+    },
+  });
+
+  assert.equal(parsed.ok, true);
+  if (parsed.ok) assert.equal(parsed.state.referenceRefreshRequired, false);
+});
+
+test("참고자료 갱신 필드가 boolean이 아니면 fail-closed 한다", () => {
+  const parsed = parseStockBlogRetryV2({
+    payload: {
+      retryV2: {
+        version: 2,
+        attempts: { reference_preflight: 1, content_generation: 0, draft_assembly: 0 },
+        completed: { reference_preflight: true, content_generation: false, draft_assembly: false },
+        referenceRefreshRequired: "yes",
+        lease: null,
+      },
+    },
+  });
+
+  assert.equal(parsed.ok, false);
+});
+
+test("retryV2의 필수 필드가 손상되면 기존 숫자로 추측하지 않고 닫힌 상태로 중단한다", () => {
+  const parsed = parseStockBlogRetryV2({
+    payload: {
+      retryV2: {
+        version: 2,
+        attempts: { reference_preflight: 1, content_generation: "1", draft_assembly: 0 },
+        completed: { reference_preflight: true, content_generation: false, draft_assembly: false },
+        lease: null,
+      },
+      attempt: 1,
+    },
+  });
+
+  assert.equal(parsed.ok, false);
+  if (!parsed.ok) assert.match(parsed.reason, /손상/);
+});
+
+test("레거시 품질 실패 횟수는 보수적으로 생성 단계에 이관한다", () => {
+  const parsed = parseStockBlogRetryV2({
+    payload: {
+      status: "failed",
+      attempt: 3,
+      reason: "STOCK_CONTENT_QUALITY_FAILED: QA 차단",
+      pipelineId: "content-pipeline-old",
+    },
+  });
+
+  assert.equal(parsed.ok, true);
+  if (!parsed.ok) return;
+  assert.equal(parsed.migratedFromLegacy, true);
+  assert.equal(parsed.state.attempts.content_generation, 3);
+  assert.equal(parsed.state.completed.reference_preflight, true);
+  assert.equal(parsed.state.completed.content_generation, false);
+});
+
+test("레거시 네이버 조립 실패는 생성 재시도가 아니라 조립 단계만 이관한다", () => {
+  const parsed = parseStockBlogRetryV2({
+    payload: {
+      status: "partial_failed",
+      attempt: 7,
+      reason: "STOCK_CONTENT_QUALITY_FAILED: NAVER_DRAFT_QUALITY_FAILED: 본문 꼬리 중복",
+      pipelineId: "content-pipeline-good",
+    },
+  });
+
+  assert.equal(parsed.ok, true);
+  if (!parsed.ok) return;
+  assert.equal(parsed.state.completed.reference_preflight, true);
+  assert.equal(parsed.state.completed.content_generation, true);
+  assert.equal(parsed.state.completed.draft_assembly, false);
+  assert.equal(parsed.state.attempts.content_generation, 1);
+  assert.equal(parsed.state.attempts.draft_assembly, 1);
+});
+
+test("레거시 running 이벤트는 기존 15분 복구 창을 유지한다", () => {
+  const parsed = parseStockBlogRetryV2({
+    payload: { status: "running", attempt: 1 },
+    eventTimestamp: new Date("2026-09-04T00:00:00.000Z"),
+  });
+
+  assert.equal(parsed.ok, true);
+  if (!parsed.ok) return;
+  assert.equal(parsed.state.lease?.claimedAt, "2026-09-04T00:00:00.000Z");
+  assert.equal(parsed.state.lease?.expiresAt, "2026-09-04T00:15:00.000Z");
+});
+
+test("선행 단계 없이 후행 단계 시도나 완료가 기록된 retryV2는 거부한다", () => {
+  const parsed = parseStockBlogRetryV2({
+    payload: {
+      retryV2: {
+        version: 2,
+        attempts: { reference_preflight: 0, content_generation: 1, draft_assembly: 0 },
+        completed: { reference_preflight: false, content_generation: false, draft_assembly: false },
+        lease: null,
+      },
+    },
+  });
+  assert.equal(parsed.ok, false);
+});
+
+test("완료 횟수와 lease 선행조건이 모순된 retryV2는 모두 fail-closed 한다", () => {
+  const malformedStates = [
+    {
+      version: 2,
+      attempts: { reference_preflight: 0, content_generation: 0, draft_assembly: 0 },
+      completed: { reference_preflight: true, content_generation: false, draft_assembly: false },
+      lease: null,
+    },
+    {
+      version: 2,
+      attempts: { reference_preflight: 0, content_generation: 1, draft_assembly: 0 },
+      completed: { reference_preflight: false, content_generation: false, draft_assembly: false },
+      lease: {
+        phase: "content_generation",
+        attempt: 1,
+        token: "worker-token",
+        claimedAt: "2026-09-04T00:00:00.000Z",
+        expiresAt: "2026-09-04T01:30:00.000Z",
+      },
+    },
+    {
+      version: 2,
+      attempts: { reference_preflight: 1, content_generation: 0, draft_assembly: 0 },
+      completed: { reference_preflight: true, content_generation: false, draft_assembly: false },
+      lease: {
+        phase: "reference_preflight",
+        attempt: 1,
+        token: "worker-token",
+        claimedAt: "2026-09-04T00:00:00.000Z",
+        expiresAt: "2026-09-04T01:30:00.000Z",
+      },
+    },
+  ];
+
+  for (const retryV2 of malformedStates) {
+    assert.equal(parseStockBlogRetryV2({ payload: { retryV2 } }).ok, false);
+  }
+});
+
+test("먼저 저장된 활성 lease는 뒤따른 실행의 중복 claim을 막는다", () => {
+  const now = new Date("2026-09-04T00:00:00.000Z");
+  const first = evaluateStockBlogRetryV2Claim({
+    state: createEmptyStockBlogRetryV2State(),
+    phase: "reference_preflight",
+    now,
+    token: "worker-a-token",
+  });
+  assert.equal(first.action, "claim");
+  if (first.action !== "claim") return;
+
+  const second = evaluateStockBlogRetryV2Claim({
+    state: first.state,
+    phase: "reference_preflight",
+    now: new Date(now.getTime() + 60_000),
+    token: "worker-b-token",
+  });
+  assert.equal(second.action, "blocked");
+  assert.equal(second.state.attempts.reference_preflight, 1);
+});
+
+test("선행 단계가 완료되지 않은 후행 단계는 seed 상태에서도 claim하지 않는다", () => {
+  const decision = evaluateStockBlogRetryV2Claim({
+    state: createEmptyStockBlogRetryV2State(),
+    phase: "draft_assembly",
+    now: new Date("2026-09-04T00:00:00.000Z"),
+    token: "worker-token",
+  });
+  assert.equal(decision.action, "blocked");
+  assert.equal(decision.state.attempts.draft_assembly, 0);
+});
+
+test("중단된 실행의 lease가 만료돼도 이미 잡은 시도는 소모되며 상한을 우회하지 않는다", () => {
+  const state = createEmptyStockBlogRetryV2State();
+  state.attempts.content_generation = 2;
+  state.completed.reference_preflight = true;
+  state.lease = {
+    phase: "content_generation",
+    attempt: 2,
+    token: "crashed-worker",
+    claimedAt: "2026-09-04T00:00:00.000Z",
+    expiresAt: "2026-09-04T00:20:00.000Z",
+  };
+
+  const decision = evaluateStockBlogRetryV2Claim({
+    state,
+    phase: "content_generation",
+    now: new Date("2026-09-04T00:21:00.000Z"),
+    token: "replacement-worker",
+  });
+  assert.equal(decision.action, "blocked");
+  if (decision.action === "blocked") assert.match(decision.reason, /2회/);
+});
+
+test("인증된 수동 복구는 본문 생성 1회만 추가하고 누적 횟수로 반복 우회를 막는다", () => {
+  const state = createEmptyStockBlogRetryV2State();
+  state.attempts.reference_preflight = 1;
+  state.completed.reference_preflight = true;
+  state.attempts.content_generation = 2;
+
+  const automatic = evaluateStockBlogRetryV2Claim({
+    state,
+    phase: "content_generation",
+    now: new Date("2026-09-04T00:00:00.000Z"),
+    token: "automatic-token",
+  });
+  assert.equal(automatic.action, "blocked");
+
+  const manual = evaluateStockBlogRetryV2Claim({
+    state,
+    phase: "content_generation",
+    now: new Date("2026-09-04T00:00:00.000Z"),
+    token: "manual-token",
+    maxAttempts: STOCK_BLOG_RETRY_PHASE_LIMITS.content_generation + 1,
+  });
+  assert.equal(manual.action, "claim");
+  if (manual.action !== "claim") return;
+  const failed = settleStockBlogRetryV2Claim({
+    state: manual.state,
+    token: manual.lease.token,
+    succeeded: false,
+  });
+  assert.ok(failed);
+  const repeated = evaluateStockBlogRetryV2Claim({
+    state: failed!,
+    phase: "content_generation",
+    now: new Date("2026-09-04T00:01:00.000Z"),
+    token: "second-manual-token",
+    maxAttempts: STOCK_BLOG_RETRY_PHASE_LIMITS.content_generation + 1,
+  });
+  assert.equal(repeated.action, "blocked");
+});
+
+test("Hermes 용량 대기는 claim을 되돌려 단계 시도를 소모하지 않는다", () => {
+  const claimed = evaluateStockBlogRetryV2Claim({
+    state: createEmptyStockBlogRetryV2State(),
+    phase: "reference_preflight",
+    now: new Date("2026-09-04T00:00:00.000Z"),
+    token: "capacity-token",
+  });
+  assert.equal(claimed.action, "claim");
+  if (claimed.action !== "claim") return;
+  const released = settleStockBlogRetryV2Claim({
+    state: claimed.state,
+    token: claimed.lease.token,
+    succeeded: false,
+    consumeAttempt: false,
+  });
+  assert.equal(released?.attempts.reference_preflight, 0);
+  assert.equal(released?.lease, null);
+});
+
+test("성공한 단계는 완료 처리되어 같은 외부 호출을 다시 claim하지 않는다", () => {
+  const claimed = evaluateStockBlogRetryV2Claim({
+    state: createEmptyStockBlogRetryV2State(),
+    phase: "reference_preflight",
+    now: new Date("2026-09-04T00:00:00.000Z"),
+    token: "success-token",
+  });
+  assert.equal(claimed.action, "claim");
+  if (claimed.action !== "claim") return;
+  const settled = settleStockBlogRetryV2Claim({
+    state: claimed.state,
+    token: claimed.lease.token,
+    succeeded: true,
+  });
+  assert.ok(settled);
+  const replay = evaluateStockBlogRetryV2Claim({
+    state: settled!,
+    phase: "reference_preflight",
+    now: new Date("2026-09-04T00:01:00.000Z"),
+    token: "replay-token",
+  });
+  assert.equal(replay.action, "completed");
+});
+
+test("참고자료 갱신은 과거 완료 이력과 생성 시도는 보존하고 후행 checkpoint만 다시 연다", () => {
+  const state = createEmptyStockBlogRetryV2State();
+  state.attempts.reference_preflight = 1;
+  state.completed.reference_preflight = true;
+  state.attempts.content_generation = 1;
+  state.completed.content_generation = true;
+  state.attempts.draft_assembly = 1;
+
+  const refreshed = requestStockBlogRetryV2ReferenceRefresh(state);
+  assert.ok(refreshed);
+  assert.equal(refreshed?.referenceRefreshRequired, true);
+  assert.equal(refreshed?.completed.reference_preflight, true);
+  assert.equal(refreshed?.completed.content_generation, false);
+  assert.equal(refreshed?.attempts.content_generation, 1);
+  assert.equal(refreshed?.attempts.draft_assembly, 0);
+  assert.equal(parseStockBlogRetryV2({ payload: { retryV2: refreshed } }).ok, true);
+});
+
+test("참고자료 갱신 중에는 후행 단계를 막고 이미 완료된 참고자료 단계만 다시 claim한다", () => {
+  const state = createEmptyStockBlogRetryV2State();
+  state.attempts.reference_preflight = 1;
+  state.completed.reference_preflight = true;
+  state.referenceRefreshRequired = true;
+
+  const generation = evaluateStockBlogRetryV2Claim({
+    state,
+    phase: "content_generation",
+    now: new Date("2026-09-04T00:00:00.000Z"),
+    token: "generation-token",
+  });
+  assert.equal(generation.action, "blocked");
+
+  const reference = evaluateStockBlogRetryV2Claim({
+    state,
+    phase: "reference_preflight",
+    now: new Date("2026-09-04T00:00:00.000Z"),
+    token: "reference-token",
+  });
+  assert.equal(reference.action, "claim");
+  if (reference.action !== "claim") return;
+  const settled = settleStockBlogRetryV2Claim({
+    state: reference.state,
+    token: reference.lease.token,
+    succeeded: true,
+  });
+  assert.equal(settled?.referenceRefreshRequired, false);
+  assert.equal(settled?.completed.reference_preflight, true);
+});
+
+test("단계별 lease는 참고자료 20분·본문 생성 90분·조립 10분을 사용한다", () => {
+  const now = new Date("2026-09-04T00:00:00.000Z");
+  for (const phase of ["reference_preflight", "content_generation", "draft_assembly"] as const) {
+    const state = createEmptyStockBlogRetryV2State();
+    if (phase !== "reference_preflight") {
+      state.attempts.reference_preflight = 1;
+      state.completed.reference_preflight = true;
+    }
+    if (phase === "draft_assembly") {
+      state.attempts.content_generation = 1;
+      state.completed.content_generation = true;
+    }
+    const claim = evaluateStockBlogRetryV2Claim({ state, phase, now, token: `${phase}-token` });
+    assert.equal(claim.action, "claim");
+    if (claim.action === "claim") {
+      assert.equal(
+        Date.parse(claim.lease.expiresAt) - now.getTime(),
+        STOCK_BLOG_RETRY_PHASE_LEASE_MS[phase],
+      );
+    }
+  }
+});
+
+test("네이버 본문 품질 실패는 조립 시도를 되돌린 뒤 생성 checkpoint만 다시 연다", () => {
+  const state = createEmptyStockBlogRetryV2State();
+  state.attempts.reference_preflight = 1;
+  state.completed.reference_preflight = true;
+  state.attempts.content_generation = 1;
+  state.completed.content_generation = true;
+  const draftClaim = evaluateStockBlogRetryV2Claim({
+    state,
+    phase: "draft_assembly",
+    now: new Date("2026-09-04T00:00:00.000Z"),
+    token: "draft-worker-token",
+  });
+  assert.equal(draftClaim.action, "claim");
+  if (draftClaim.action !== "claim") return;
+  const released = settleStockBlogRetryV2Claim({
+    state: draftClaim.state,
+    token: draftClaim.lease.token,
+    succeeded: false,
+    consumeAttempt: false,
+  });
+  assert.ok(released);
+  const reopened = reopenStockBlogRetryV2ContentGeneration(released!);
+  assert.ok(reopened);
+  assert.equal(reopened?.attempts.content_generation, 1);
+  assert.equal(reopened?.completed.content_generation, false);
+  assert.equal(reopened?.attempts.draft_assembly, 0);
+});
+
+test("이전 조립 실패 이력이 있어도 새 본문 생성으로 전환할 때 조립 예산을 초기화한다", () => {
+  const state = createEmptyStockBlogRetryV2State();
+  state.attempts.reference_preflight = 1;
+  state.completed.reference_preflight = true;
+  state.attempts.content_generation = 1;
+  state.completed.content_generation = true;
+  state.attempts.draft_assembly = 1;
+
+  const reopened = reopenStockBlogRetryV2ContentGeneration(state);
+  assert.ok(reopened);
+  assert.equal(reopened?.attempts.draft_assembly, 0);
+  assert.equal(reopened?.completed.content_generation, false);
+});
 
 test("지난 7일 안의 올바른 요일 일정만 복구 대상으로 허용한다", () => {
   assert.deepEqual(evaluateStockBlogRecoveryDate({

@@ -115,6 +115,9 @@ export type QaAuditResult = {
   optionalSuggestions?: string[];
   publishReadiness?: "ready" | "needs_revision" | "blocked";
   qaScore?: number;
+  originalQaScore?: number;
+  deterministicQaReconciliation?: Record<string, unknown>;
+  deterministicQaStructuralAudit?: Record<string, unknown>;
   finalRecommendation?: "approve" | "revise" | "block";
   reason?: string;
   referenceBundle?: ReferenceBundle;

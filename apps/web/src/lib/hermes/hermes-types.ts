@@ -143,6 +143,7 @@ export type HermesQaAuditPayload = {
     realReferences?: ReferenceItem[];
     marketSnapshot?: MarketSnapshot;
     qualityGateDiagnostics?: Record<string, unknown>;
+    qaResponsibility?: Record<string, unknown>;
     editorialBenchmarkGuidelines?: string[];
     finalPasteReadyBody?: string;
     prohibitedPhrases?: string[];

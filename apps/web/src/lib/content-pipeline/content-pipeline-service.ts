@@ -9,9 +9,10 @@ import { assertHermesDailyRunAvailable } from "@/lib/hermes/hermes-usage";
 import { collectStockBlogReferences } from "@/lib/stock-blog/references/reference-adapter";
 import { buildBlogImagePrompts } from "@/lib/stock-blog/references/reference-normalizer";
 import { evaluateStockBlogPublishQuality, evaluateStockBlogReferences, getRealStockReferences } from "@/lib/stock-blog/quality-gate";
-import { FRED_DEGRADED_DISCLOSURE, ensureFredDegradedDisclosure, isAllowedFredDegradedSnapshot } from "@/lib/stock-blog/references/fred-degraded-policy";
-import { KIS_SECTOR_DEGRADED_DISCLOSURE, ensureKisSectorDegradedDisclosure, isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/kis-sector-degraded-policy";
-import { KIS_OVERSEAS_DEGRADED_DISCLOSURE, ensureKisOverseasDegradedDisclosure, isAllowedKisOverseasDegradedSnapshot } from "@/lib/stock-blog/references/kis-overseas-degraded-policy";
+import {
+  canonicalizeStockBlogBody,
+  inspectStockBlogQaStructuralAudit,
+} from "@/lib/stock-blog/canonical-stock-blog-body";
 import { generateStockBlogImages, type GeneratedStockBlogImages } from "@/lib/stock-blog/stock-blog-image-generator";
 import { applyVerifiedSchedule, type VerifiedSchedule, type VerifiedScheduleValidation } from "@/lib/stock-blog/verified-schedule";
 import type { HermesRunTelemetry, NormalizedHermesRunResult } from "@/lib/hermes/hermes-types";
@@ -41,21 +42,11 @@ import {
   STOCK_BLOG_MAX_QA_ATTEMPTS,
 } from "@/lib/stock-blog/qa-revision-policy";
 import { loadApprovedLessonInstructionsForAgents } from "@/lib/operational-learning/operational-learning-service";
-import type { OperationalLessonInstruction } from "@/lib/operational-learning/operational-learning-policy";
-
-type ContentPipelineInput = {
-  topic: string;
-  channel: ContentChannel;
-  title: string;
-  runnerMode?: "mock" | "hermes-dry-run" | "hermes";
-  contentType?: StockReferenceBriefingTemplate;
-  referenceBundle?: ReferenceBundle;
-  blogImagePrompts?: BlogImagePrompt[];
-  editorialBenchmarkGuidelines?: string[];
-  approvedLessonsByAgent?: Record<string, OperationalLessonInstruction[]>;
-  operationalRunKey?: string;
-  operationalAttempt?: number;
-};
+import {
+  assertPublicContentPipelineInput,
+  assertTrustedContentPipelineInput,
+  type ContentPipelineInput,
+} from "@/lib/content-pipeline/content-pipeline-input";
 
 type PlannerExecution = {
   status: "succeeded" | "failed" | "dry-run";
@@ -121,34 +112,42 @@ const stockContentTypes = new Set<StockReferenceBriefingTemplate>([
 ]);
 const HERMES_PIPELINE_REQUIRED_RUNS = STOCK_BLOG_MAX_HERMES_RUNS;
 
-function withMarketDataDisclosure(writer: WriterExecution, referenceBundle?: ReferenceBundle): WriterExecution {
-  const snapshot = referenceBundle?.marketSnapshot;
-  const fredDegraded = isAllowedFredDegradedSnapshot(snapshot);
-  const kisSectorDegraded = isAllowedKisSectorDegradedSnapshot(snapshot);
-  const kisOverseasDegraded = isAllowedKisOverseasDegradedSnapshot(snapshot);
-  if (!fredDegraded && !kisSectorDegraded && !kisOverseasDegraded) return writer;
-
+function withCanonicalStockBlogBody(writer: WriterExecution, referenceBundle?: ReferenceBundle): WriterExecution {
+  if (writer.agentRunStatus !== "succeeded") return writer;
+  const references = getRealStockReferences(referenceBundle);
   const result = { ...writer.result };
   for (const key of ["fullDraft", "markdownDraft"] as const) {
     const value = result[key];
     if (typeof value === "string") {
-      const withFred = ensureFredDegradedDisclosure(value, snapshot);
-      const withSector = ensureKisSectorDegradedDisclosure(withFred, snapshot);
-      result[key] = ensureKisOverseasDegradedDisclosure(withSector, snapshot);
-    }
-  }
-  const htmlDraft = result.htmlDraft;
-  if (typeof htmlDraft === "string") {
-    const disclosures = [
-      fredDegraded ? FRED_DEGRADED_DISCLOSURE : null,
-      kisSectorDegraded ? KIS_SECTOR_DEGRADED_DISCLOSURE : null,
-      kisOverseasDegraded ? KIS_OVERSEAS_DEGRADED_DISCLOSURE : null,
-    ].filter((item): item is string => typeof item === "string" && !htmlDraft.includes(item));
-    if (disclosures.length) {
-      result.htmlDraft = `${htmlDraft.trimEnd()}\n${disclosures.map((item) => `<p>${item}</p>`).join("\n")}`;
+      result[key] = canonicalizeStockBlogBody({
+        body: value,
+        referenceItems: references,
+        marketSnapshot: referenceBundle?.marketSnapshot,
+      });
     }
   }
   return { ...writer, result };
+}
+
+function withDeterministicStructuralQaAudit(
+  qa: QaExecution,
+  writer: WriterExecution,
+  referenceBundle?: ReferenceBundle,
+): QaExecution {
+  if (qa.agentRunStatus !== "succeeded" || typeof writer.result.fullDraft !== "string") return qa;
+  const structuralAudit = inspectStockBlogQaStructuralAudit({
+    result: qa.result,
+    body: writer.result.fullDraft,
+    referenceItems: getRealStockReferences(referenceBundle),
+  });
+  return {
+    ...qa,
+    currentStep: "결정론적 출처 구조 검사 기록 완료",
+    result: {
+      ...qa.result,
+      deterministicQaStructuralAudit: structuralAudit,
+    },
+  };
 }
 
 function withVerifiedSchedule(writer: WriterExecution, referenceBundle?: ReferenceBundle): WriterExecution {
@@ -177,45 +176,6 @@ function withVerifiedSchedule(writer: WriterExecution, referenceBundle?: Referen
       errorCode: "VERIFIED_SCHEDULE_VALIDATION_FAILED",
       errorMessage: outputSummary,
     },
-  };
-}
-
-export function assertValidInput(input: unknown): ContentPipelineInput {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    throw new Error("request body must be a JSON object");
-  }
-  const body = input as Record<string, unknown>;
-  const topic = typeof body.topic === "string" ? body.topic.trim() : "";
-  const title = typeof body.title === "string" ? body.title.trim() : "";
-  const channel = typeof body.channel === "string" ? body.channel : "";
-  const runnerMode = typeof body.runnerMode === "string" ? body.runnerMode : "mock";
-  const contentType = typeof body.contentType === "string" && stockContentTypes.has(body.contentType as StockReferenceBriefingTemplate)
-    ? body.contentType as StockReferenceBriefingTemplate
-    : undefined;
-  const operationalRunKey = typeof body.operationalRunKey === "string" && body.operationalRunKey.trim()
-    ? body.operationalRunKey.trim().slice(0, 240)
-    : undefined;
-  const operationalAttempt = typeof body.operationalAttempt === "number" && Number.isInteger(body.operationalAttempt) && body.operationalAttempt > 0
-    ? body.operationalAttempt
-    : undefined;
-  if (!topic) throw new Error("topic is required");
-  if (!title) throw new Error("title is required");
-  if (!channels.has(channel)) throw new Error("channel must be blog/instagram/youtube/newsletter");
-  if (!["mock", "hermes-dry-run", "hermes"].includes(runnerMode)) throw new Error("runnerMode must be mock/hermes-dry-run/hermes");
-  const referenceBundle = asReferenceBundle(body.referenceBundle);
-  const blogImagePrompts = asBlogImagePrompts(body.blogImagePrompts);
-  const editorialBenchmarkGuidelines = asStringArray(body.editorialBenchmarkGuidelines);
-  return {
-    topic,
-    title,
-    channel: channel as ContentChannel,
-    runnerMode: runnerMode as ContentPipelineInput["runnerMode"],
-    contentType,
-    referenceBundle,
-    blogImagePrompts,
-    editorialBenchmarkGuidelines,
-    operationalRunKey,
-    operationalAttempt,
   };
 }
 
@@ -488,6 +448,7 @@ function normalizeResultForMetadata(result: NormalizedPipelineResult): Record<st
     optionalSuggestions: result.optionalSuggestions,
     publishReadiness: result.publishReadiness,
     qaScore: result.qaScore,
+    deterministicQaStructuralAudit: result.deterministicQaStructuralAudit,
     finalRecommendation: result.finalRecommendation,
     reason: result.reason,
     parseStatus: result.parseStatus,
@@ -525,6 +486,8 @@ function pipelineMetadata(input: {
   editorialBenchmark?: StockBlogEditorialBenchmark;
   generatedImages?: GeneratedStockBlogImages;
   revisionHistory?: Array<Record<string, unknown>>;
+  operationalRunKey?: string;
+  operationalAttempt?: number;
 }): Prisma.InputJsonObject {
   return toJsonObject({
     contentPipelineId: input.pipelineId,
@@ -556,6 +519,8 @@ function pipelineMetadata(input: {
     hermesWriterRequestPayload: input.hermesWriterRequestPayload,
     hermesQaRequestPayload: input.hermesQaRequestPayload,
     revisionHistory: input.revisionHistory,
+    operationalRunKey: input.operationalRunKey,
+    operationalAttempt: input.operationalAttempt,
   });
 }
 
@@ -1459,6 +1424,9 @@ function runFromEvent(event: {
       optionalSuggestions: asStringArray(qaResult.optionalSuggestions),
       publishReadiness: qaResult.publishReadiness === "ready" || qaResult.publishReadiness === "needs_revision" || qaResult.publishReadiness === "blocked" ? qaResult.publishReadiness : undefined,
       qaScore: asNumber(qaResult.qaScore),
+      originalQaScore: asNumber(qaResult.originalQaScore),
+      deterministicQaReconciliation: asRecord(qaResult.deterministicQaReconciliation),
+      deterministicQaStructuralAudit: asRecord(qaResult.deterministicQaStructuralAudit),
       finalRecommendation: qaResult.finalRecommendation === "approve" || qaResult.finalRecommendation === "revise" || qaResult.finalRecommendation === "block" ? qaResult.finalRecommendation : undefined,
       reason: typeof qaResult.reason === "string" ? qaResult.reason : undefined,
       referenceBundle: asReferenceBundle(qaResult.referenceBundle) ?? referenceBundle,
@@ -1513,6 +1481,24 @@ export async function listContentPipelines(): Promise<ContentPipelineRun[]> {
     if (run.qualityGate?.ok === false) return { ...run, status: "qa_review", currentStep: "실참조/품질 게이트 확인 필요", updatedAt: approval.updatedAt.toISOString() };
     return run;
   });
+}
+
+export async function findContentPipelineByOperationalAttempt(
+  runKey: string,
+  attempt: number,
+): Promise<ContentPipelineRun | null> {
+  if (!runKey.trim() || !Number.isInteger(attempt) || attempt < 1) return null;
+  const event = await prisma.eventLog.findFirst({
+    where: {
+      type: "ContentPipelineStarted",
+      AND: [
+        { payload: { path: ["operationalRunKey"], equals: runKey } },
+        { payload: { path: ["operationalAttempt"], equals: attempt } },
+      ],
+    },
+    orderBy: { timestamp: "desc" },
+  });
+  return event ? runFromEvent(event) : null;
 }
 
 function pipelineStatusFromApproval(status?: string | null): { status: ContentPipelineStatus; currentStep: string } {
@@ -1703,8 +1689,7 @@ export async function regenerateContentPipelineImages(pipelineId: string) {
   return generatedImages;
 }
 
-export async function startContentPipeline(input: unknown): Promise<ContentPipelineRun> {
-  const baseData = assertValidInput(input);
+async function startValidatedContentPipeline(baseData: ContentPipelineInput): Promise<ContentPipelineRun> {
   const runnerMode = baseData.runnerMode ?? "mock";
   const data = await enrichContentPipelineInput(baseData);
   const preflightQualityGate = evaluateStockBlogReferences(data.referenceBundle, runnerMode === "hermes");
@@ -1747,8 +1732,12 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
   let scheduleCheckedWriter = runnerMode === "hermes"
     ? withVerifiedSchedule(rawWriter, data.referenceBundle)
     : rawWriter;
-  let writer = withMarketDataDisclosure(scheduleCheckedWriter, data.referenceBundle);
-  let qa = await executeQa(data, planner, marketing, writer);
+  let writer = withCanonicalStockBlogBody(scheduleCheckedWriter, data.referenceBundle);
+  let qa = withDeterministicStructuralQaAudit(
+    await executeQa(data, planner, marketing, writer),
+    writer,
+    data.referenceBundle,
+  );
   const writerQaAttempts: WriterQaAttempt[] = [{ attempt: 1, writer, qa }];
 
   while (
@@ -1764,8 +1753,12 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
       qaRevisionFeedback: buildStockBlogQaRevisionFeedback(qa.result, writer.result, data.referenceBundle?.contentType),
     });
     scheduleCheckedWriter = withVerifiedSchedule(rawWriter, data.referenceBundle);
-    writer = withMarketDataDisclosure(scheduleCheckedWriter, data.referenceBundle);
-    qa = await executeQa(data, planner, marketing, writer);
+    writer = withCanonicalStockBlogBody(scheduleCheckedWriter, data.referenceBundle);
+    qa = withDeterministicStructuralQaAudit(
+      await executeQa(data, planner, marketing, writer),
+      writer,
+      data.referenceBundle,
+    );
     writerQaAttempts.push({ attempt: revisionAttempt, writer, qa });
   }
 
@@ -1825,6 +1818,8 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     blogImagePrompts: data.blogImagePrompts,
     generatedImages,
     revisionHistory,
+    operationalRunKey: data.operationalRunKey,
+    operationalAttempt: data.operationalAttempt,
   };
   const provisionalMetadata = pipelineMetadata(metadataInput);
   const provisionalPipeline = runFromEvent({ id: pipelineId, timestamp: now, payload: provisionalMetadata });
@@ -2127,4 +2122,12 @@ export async function startContentPipeline(input: unknown): Promise<ContentPipel
     createdAt: now.toISOString(),
     updatedAt: new Date().toISOString(),
   };
+}
+
+export function startContentPipeline(input: unknown): Promise<ContentPipelineRun> {
+  return startValidatedContentPipeline(assertPublicContentPipelineInput(input));
+}
+
+export function startContentPipelineFromTrustedInput(input: ContentPipelineInput): Promise<ContentPipelineRun> {
+  return startValidatedContentPipeline(assertTrustedContentPipelineInput(input));
 }

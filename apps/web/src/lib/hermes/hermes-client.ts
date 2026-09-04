@@ -139,6 +139,17 @@ function pickStringArray(record: Record<string, unknown>, keys: string[]) {
   return undefined;
 }
 
+function pickExplicitStringArray(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(record, key)) continue;
+    const value = record[key];
+    if (!Array.isArray(value)) return undefined;
+    if (!value.every((item) => typeof item === "string" && item.trim().length > 0)) return undefined;
+    return value.map((item) => (item as string).trim());
+  }
+  return undefined;
+}
+
 type PickedWriterSection = { heading?: string; body?: string };
 
 function pickWriterSections(record: Record<string, unknown>): PickedWriterSection[] | undefined {
@@ -339,17 +350,27 @@ export function buildQaAuditHermesPayload(input: QaAuditHermesInput): HermesQaAu
       marketSnapshot: input.referenceBundle?.marketSnapshot,
       qualityGateDiagnostics: {
         editorialPolicyVersion: BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION,
-        requiredRealReferences: 5,
-        requiredDistinctPublishers: 3,
-        requiredCompetitorReferences: 3,
         requireVerifiedOrAllowedFredDegradedMarketSnapshot: true,
-        requiredFredDegradedDisclosure: FRED_DEGRADED_DISCLOSURE,
-        requiredKisOverseasDegradedDisclosure: KIS_OVERSEAS_DEGRADED_DISCLOSURE,
         requiredEditorialQualityScore: STOCK_BLOG_EDITORIAL_QUALITY_TARGET,
-        requiredThirtySecondSummaryLabels: ["판단", "상방 조건", "하방 조건", "다음 확인"],
-        requiredCoreVariableCount: 2,
-        requiredChecklistItemCount: 3,
         forbiddenEngagementCta: true,
+      },
+      qaResponsibility: {
+        requiredRevisionScope: [
+          "factual_accuracy",
+          "unsupported_numeric_claims",
+          "overstatement_or_investment_solicitation",
+          "natural_korean_style",
+        ],
+        deterministicServerChecks: [
+          "source_count",
+          "source_index_title_url_order",
+          "source_section_total_url_count",
+          "market_data_disclosure_order",
+          "investment_disclaimer_position",
+          "body_structure_counts",
+        ],
+        doNotAddServerStructuralChecksToRequiredRevisions: true,
+        instruction: "출처 개수·기사 제목과 URL 순서·고지문과 투자 유의문구 위치·본문 구조 개수는 서버가 결정론적으로 검사합니다. 이를 requiredRevisions에 넣지 말고, 사실 오류·근거 없는 수치·과장 또는 투자 권유 오해·부자연스러운 한국어만 필수 수정으로 평가하세요.",
       },
       editorialBenchmarkGuidelines: input.editorialBenchmarkGuidelines,
       finalPasteReadyBody: typeof input.writerResult?.fullDraft === "string" ? input.writerResult.fullDraft : undefined,
@@ -501,7 +522,7 @@ export function normalizeQaAuditHermesResponse(raw: unknown): QaAuditResult {
     qualityNotes: pickStringArray(record, ["qualityNotes", "quality", "qualityFindings"]),
     riskNotes: pickStringArray(record, ["riskNotes", "risks", "risk"]),
     typoAndStyleNotes: pickStringArray(record, ["typoAndStyleNotes", "styleNotes", "typos"]),
-    requiredRevisions: pickStringArray(record, ["requiredRevisions", "revisions", "mustFix"]),
+    requiredRevisions: pickExplicitStringArray(record, ["requiredRevisions", "revisions", "mustFix"]),
     optionalSuggestions: pickStringArray(record, ["optionalSuggestions", "suggestions", "optionalFixes"]),
     publishReadiness: pickPublishReadiness(record),
     qaScore: pickNumber(record, ["qaScore", "score"]),
