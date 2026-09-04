@@ -25,10 +25,14 @@ function Get-DotEnvValue {
 $configuredPort = Get-DotEnvValue -Path $envFile -Name "NAVER_AGENT_SINGLETON_PORT"
 $parsedPort = 0
 $agentSingletonPort = if ([int]::TryParse($configuredPort, [ref]$parsedPort) -and $parsedPort -ge 1024 -and $parsedPort -le 65535) { $parsedPort } else { 43923 }
-$npm = (Get-Command npm.cmd -ErrorAction Stop).Source
 $runtimeIdentity = & $runtimeAudit -AgentRoot $resolvedAgentRoot
 $agentBuildSha = [string]$runtimeIdentity.BuildSha
 $runtimeSha256 = [string]$runtimeIdentity.RuntimeSha256
+$nodeExecutable = [string]$runtimeIdentity.NodeExecutable
+$agentEntry = Join-Path $resolvedAgentRoot ([string]$runtimeIdentity.Entry).Replace("/", "\")
+if (-not (Test-Path -LiteralPath $agentEntry -PathType Leaf)) { throw "Agent entry not found: $agentEntry" }
+$env:BG_COMPANY_BUILD_SHA = $agentBuildSha
+$env:NAVER_AGENT_ROOT = $resolvedAgentRoot
 
 $logDir = Join-Path $resolvedAgentRoot "logs"
 $supervisorLog = Join-Path $logDir "naver-draft-agent-supervisor.log"
@@ -90,7 +94,7 @@ function Get-SingletonListenerState {
     $owner = Get-CimInstance Win32_Process -Filter "ProcessId = $([int]$connection.OwningProcess)" -ErrorAction SilentlyContinue
     $commandLine = [string]$owner.CommandLine
     $ownsExpectedRoot = $commandLine.IndexOf($resolvedAgentRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0
-    $isAgentEntry = $commandLine -match '(?:dist[/\\]index\.js|src[/\\]index\.ts)'
+    $isAgentEntry = $commandLine.IndexOf($agentEntry, [StringComparison]::OrdinalIgnoreCase) -ge 0
     if ($ownsExpectedRoot -and $isAgentEntry) { return "owned" }
   }
   return "foreign"
@@ -102,11 +106,16 @@ try {
 } finally {
   $rootHashAlgorithm.Dispose()
 }
-$mutexName = "Local\BGCompany.NaverDraftAgent.$rootHash"
+$mutexName = "Global\BGCompany.NaverDraftAgent.$rootHash"
 $supervisorMutex = [Threading.Mutex]::new($false, $mutexName)
 $mutexAcquired = $false
 try {
-  $mutexAcquired = $supervisorMutex.WaitOne(0)
+  try {
+    $mutexAcquired = $supervisorMutex.WaitOne(0)
+  } catch [System.Threading.AbandonedMutexException] {
+    $mutexAcquired = $true
+    Write-SupervisorLog "Recovered abandoned supervisor mutex $mutexName."
+  }
   if (-not $mutexAcquired) {
     Write-SupervisorLog "Supervisor already owns mutex $mutexName for $resolvedAgentRoot."
     exit 0
@@ -137,10 +146,23 @@ try {
       $stdoutLog = Join-Path $logDir "naver-draft-agent-$runStamp.stdout.log"
       $stderrLog = Join-Path $logDir "naver-draft-agent-$runStamp.stderr.log"
       $startedAt = Get-Date
-      $agentProcess = Start-Process -FilePath $npm -ArgumentList @("run", "start") -WorkingDirectory $resolvedAgentRoot -WindowStyle Hidden -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog -PassThru
+      $agentProcess = Start-Process -FilePath $nodeExecutable -ArgumentList @("`"$agentEntry`"") -WorkingDirectory $resolvedAgentRoot -WindowStyle Hidden -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog -PassThru
       Write-SupervisorLog "Agent process $($agentProcess.Id) started. stdout=$stdoutLog stderr=$stderrLog"
       while (-not $agentProcess.HasExited) {
-        Write-AgentHeartbeat -Status "agent_running" -ChildProcessId $agentProcess.Id
+        $runtimeSeconds = [Math]::Max(0, [int]((Get-Date) - $startedAt).TotalSeconds)
+        $listenerState = Get-SingletonListenerState
+        if ($runtimeSeconds -ge 45 -and $listenerState -ne "owned") {
+          Write-AgentHeartbeat -Status "agent_listener_unhealthy" -ChildProcessId $agentProcess.Id -Detail "listener=$listenerState"
+          Write-SupervisorLog "Agent process $($agentProcess.Id) did not own singleton port $agentSingletonPort after ${runtimeSeconds}s; restarting."
+          Stop-Process -Id $agentProcess.Id -ErrorAction SilentlyContinue
+          [void]$agentProcess.WaitForExit(5000)
+          if (-not $agentProcess.HasExited) {
+            Stop-Process -Id $agentProcess.Id -Force -ErrorAction SilentlyContinue
+            [void]$agentProcess.WaitForExit(5000)
+          }
+          break
+        }
+        Write-AgentHeartbeat -Status "agent_running" -ChildProcessId $agentProcess.Id -Detail "listener=$listenerState"
         Start-Sleep -Seconds $HeartbeatSeconds
         $agentProcess.Refresh()
       }

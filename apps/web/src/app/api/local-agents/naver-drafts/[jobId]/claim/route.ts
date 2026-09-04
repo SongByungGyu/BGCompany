@@ -17,7 +17,10 @@ export async function POST(
 ) {
   const unauthorized = requireAgent(request);
   if (unauthorized) return unauthorized;
-  const body = await request.json().catch(() => ({})) as { agentId?: unknown };
+  const body = await request.json().catch(() => ({})) as { agentId?: unknown; leaseProtocolVersion?: unknown };
+  if (body.leaseProtocolVersion !== 2) {
+    return NextResponse.json({ ok: false, error: "NAVER_DRAFT_LEASE_PROTOCOL_UPGRADE_REQUIRED" }, { status: 409 });
+  }
   const claimedBy = typeof body.agentId === "string" && body.agentId.trim() ? body.agentId.trim() : "local-naver-draft-agent";
   const { jobId } = await context.params;
   const job = await claimNaverDraftJob(jobId, claimedBy);

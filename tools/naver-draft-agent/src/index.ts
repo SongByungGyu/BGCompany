@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:net";
+import { hostname } from "node:os";
 import path from "node:path";
 import { runNaverWriter, testNaverBrowser, type NaverDraftJob } from "./naver-writer.js";
 import { getScheduledPublishWaitMs, nextPublishHeartbeatDelay } from "./publish-schedule.js";
@@ -39,7 +41,7 @@ function config(): AgentConfig {
     baseUrl,
     apiKey,
     pollIntervalMs: Number.isFinite(pollIntervalMs) && pollIntervalMs >= 5000 ? pollIntervalMs : 30000,
-    agentId: process.env.NAVER_DRAFT_AGENT_ID ?? `naver-draft-agent-${process.platform}`,
+    agentId: `${process.env.NAVER_DRAFT_AGENT_ID ?? `naver-draft-agent-${process.platform}`}:${hostname()}:${process.pid}:${randomUUID()}`,
   };
 }
 
@@ -64,14 +66,14 @@ async function nextJob(cfg: AgentConfig) {
 async function claimJob(cfg: AgentConfig, jobId: string) {
   return requestJson<{ job: NaverDraftJob }>(cfg, `/api/local-agents/naver-drafts/${encodeURIComponent(jobId)}/claim`, {
     method: "POST",
-    body: JSON.stringify({ agentId: cfg.agentId }),
+    body: JSON.stringify({ agentId: cfg.agentId, leaseProtocolVersion: 2 }),
   });
 }
 
-async function reportStatus(cfg: AgentConfig, jobId: string, body: Record<string, unknown>) {
+async function reportStatus(cfg: AgentConfig, jobId: string, leaseClaimedAt: string, body: Record<string, unknown>) {
   return requestJson<{ job: NaverDraftJob }>(cfg, `/api/local-agents/naver-drafts/${encodeURIComponent(jobId)}/status`, {
     method: "POST",
-    body: JSON.stringify({ agentId: cfg.agentId, ...body }),
+    body: JSON.stringify({ agentId: cfg.agentId, leaseClaimedAt, ...body }),
   });
 }
 
@@ -96,6 +98,8 @@ async function writeAgentState(cfg: AgentConfig, input: {
       timestamp: new Date().toISOString(),
       processId: process.pid,
       agentId: cfg.agentId,
+      agentRoot: path.resolve("."),
+      singletonPort: singletonPort(),
       buildSha: process.env.BG_COMPANY_BUILD_SHA ?? process.env.NAVER_AGENT_BUILD_SHA ?? null,
       jobId: input.jobId ?? null,
       status: input.status,
@@ -110,6 +114,7 @@ async function writeAgentState(cfg: AgentConfig, input: {
 async function waitForScheduledPublish(
   cfg: AgentConfig,
   job: NaverDraftJob,
+  leaseClaimedAt: string,
 ) {
   let waitMs = getScheduledPublishWaitMs(job.publishNotBefore);
   if (waitMs > 0) {
@@ -118,21 +123,23 @@ async function waitForScheduledPublish(
   while (waitMs > 0) {
     await new Promise((resolve) => setTimeout(resolve, nextPublishHeartbeatDelay(waitMs)));
     waitMs = getScheduledPublishWaitMs(job.publishNotBefore);
-    if (waitMs > 0) await reportStatus(cfg, job.id, { status: "publish_ready" });
+    if (waitMs > 0) await reportStatus(cfg, job.id, leaseClaimedAt, { status: "publish_ready" });
   }
 }
 
 async function processJob(cfg: AgentConfig, job: NaverDraftJob) {
   console.log(`[naver-agent] claiming ${job.id}`);
   const claimed = await claimJob(cfg, job.id);
+  const leaseClaimedAt = claimed.job.claimedAt;
+  if (!leaseClaimedAt) throw new Error("NAVER_DRAFT_LEASE_MISSING_FROM_CLAIM");
   await writeAgentState(cfg, { jobId: claimed.job.id, status: "claimed" });
-  await reportStatus(cfg, claimed.job.id, { status: "in_progress" });
+  await reportStatus(cfg, claimed.job.id, leaseClaimedAt, { status: "in_progress" });
   const draftFile = await saveLocalDraft(claimed.job);
   const result = await runNaverWriter(claimed.job, {
     draftFile,
     assetBaseUrl: cfg.baseUrl,
     reportProgress: async (body) => {
-      const response = await reportStatus(cfg, claimed.job.id, body);
+      const response = await reportStatus(cfg, claimed.job.id, leaseClaimedAt, body);
       await writeAgentState(cfg, {
         jobId: claimed.job.id,
         status: response.job.status ?? String(body.status ?? "in_progress"),
@@ -140,9 +147,9 @@ async function processJob(cfg: AgentConfig, job: NaverDraftJob) {
       });
     },
     beginPublish: async () => {
-      await waitForScheduledPublish(cfg, claimed.job);
+      await waitForScheduledPublish(cfg, claimed.job, leaseClaimedAt);
       for (let attempt = 0; attempt < 60; attempt += 1) {
-        const response = await reportStatus(cfg, claimed.job.id, { status: "publishing" });
+        const response = await reportStatus(cfg, claimed.job.id, leaseClaimedAt, { status: "publishing" });
         await writeAgentState(cfg, {
           jobId: claimed.job.id,
           status: response.job.status ?? "publish_blocked",
@@ -164,7 +171,7 @@ async function processJob(cfg: AgentConfig, job: NaverDraftJob) {
       return { allowed: false, status: "publish_ready", errorCode: "NAVER_PUBLISH_NOT_DUE" };
     },
   });
-  const reported = await reportStatus(cfg, claimed.job.id, result);
+  const reported = await reportStatus(cfg, claimed.job.id, leaseClaimedAt, result);
   await writeAgentState(cfg, { jobId: claimed.job.id, status: reported.job.status ?? result.status });
   console.log(`[naver-agent] ${claimed.job.id} -> ${result.status}`);
 }
@@ -203,11 +210,17 @@ async function main() {
   console.log(`[naver-agent] polling ${cfg.baseUrl} every ${cfg.pollIntervalMs}ms`);
   const dryRunSetting = process.env.NAVER_AGENT_DRY_RUN ?? process.env.NAVER_DRAFT_AGENT_DRY_RUN;
   const singleJob = process.env.NAVER_AGENT_SINGLE_JOB === "true";
+  const deploymentHoldFile = path.resolve(process.env.NAVER_AGENT_DEPLOY_HOLD_FILE?.trim() || "logs/naver-agent-deployment.hold");
   console.log(`[naver-agent] dry-run=${dryRunSetting !== "false"}, save=${process.env.NAVER_ALLOW_DRAFT_SAVE === "true"}, publish=${process.env.NAVER_ALLOW_PUBLISH === "true"}`);
   try {
     for (;;) {
       let attemptedJob = false;
       try {
+        if (existsSync(deploymentHoldFile)) {
+          await writeAgentState(cfg, { status: "deployment_hold" });
+          await new Promise((resolve) => setTimeout(resolve, Math.min(cfg.pollIntervalMs, 5_000)));
+          continue;
+        }
         const { job } = await nextJob(cfg);
         if (job) {
           attemptedJob = true;
@@ -218,6 +231,7 @@ async function main() {
         console.error("[naver-agent]", error instanceof Error ? error.message : error);
         if (singleJob && attemptedJob) return;
       }
+      await writeAgentState(cfg, { status: "idle" });
       await new Promise((resolve) => setTimeout(resolve, cfg.pollIntervalMs));
     }
   } finally {

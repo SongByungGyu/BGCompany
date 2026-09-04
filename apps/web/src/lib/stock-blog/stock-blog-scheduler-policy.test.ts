@@ -527,7 +527,15 @@ test("품질 실패 차단기는 해제하지만 실제 네이버 발행 실패 
     shouldClearRecoverablePipelineCircuitBreaker({
       active: true,
       status: "publish_failed",
-      reason: "네이버 최종 발행 실패",
+      reason: "NAVER_DRAFT_QUALITY_FAILED: adversarial-looking publish failure",
+    }),
+    false,
+  );
+  assert.equal(
+    shouldClearRecoverablePipelineCircuitBreaker({
+      active: true,
+      status: "publishing_unknown",
+      reason: "STOCK_REFERENCE_PREFLIGHT_BLOCKED: stale publishing must stay blocked",
     }),
     false,
   );

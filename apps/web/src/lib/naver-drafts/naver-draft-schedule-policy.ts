@@ -47,7 +47,18 @@ export function isNaverDraftScheduleExpired(input: {
   scheduleSlot?: string | null;
 }, now = new Date()) {
   const schedule = resolveNaverDraftSchedule(input);
-  return Boolean(schedule && now.getTime() > schedule.publishNotAfter.getTime());
+  if (!schedule) return isNaverDraftScheduleInvalid(input);
+  return now.getTime() > schedule.publishNotAfter.getTime();
+}
+
+export function isNaverDraftScheduleInvalid(input: {
+  marketDate?: string | null;
+  scheduleSlot?: string | null;
+}) {
+  const hasMarketDateField = input.marketDate !== null && input.marketDate !== undefined;
+  const hasScheduleSlotField = input.scheduleSlot !== null && input.scheduleSlot !== undefined;
+  if (!hasMarketDateField && !hasScheduleSlotField) return false;
+  return resolveNaverDraftSchedule(input) === null;
 }
 
 export function isNaverDraftClaimDue(input: {
@@ -55,7 +66,8 @@ export function isNaverDraftClaimDue(input: {
   scheduleSlot?: string | null;
 }, now = new Date()) {
   const schedule = resolveNaverDraftSchedule(input);
-  return !schedule || now.getTime() >= schedule.claimAvailableAt.getTime();
+  if (!schedule) return !isNaverDraftScheduleInvalid(input);
+  return now.getTime() >= schedule.claimAvailableAt.getTime();
 }
 
 export function isNaverDraftPublishDue(input: {
@@ -63,5 +75,6 @@ export function isNaverDraftPublishDue(input: {
   scheduleSlot?: string | null;
 }, now = new Date()) {
   const schedule = resolveNaverDraftSchedule(input);
-  return !schedule || now.getTime() >= schedule.publishNotBefore.getTime();
+  if (!schedule) return !isNaverDraftScheduleInvalid(input);
+  return now.getTime() >= schedule.publishNotBefore.getTime();
 }

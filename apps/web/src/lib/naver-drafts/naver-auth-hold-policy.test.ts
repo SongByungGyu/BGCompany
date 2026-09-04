@@ -2,9 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   canRequeueNaverAuthHoldJob,
+  evaluateNaverSessionReadyProbe,
   evaluateNaverAuthHold,
   getNaverAuthHoldCooldownMs,
   isNaverAuthHoldStatus,
+  isNaverAuthHoldProgressAllowed,
   isNaverSessionReadyProgress,
   parseNaverAuthHoldSnapshot,
 } from "./naver-auth-hold-policy.ts";
@@ -80,10 +82,63 @@ test("NAVER_SESSION_READY 진행 신호만 인증 성공으로 인정한다", ()
   assert.equal(isNaverSessionReadyProgress({ status: "queued", errorCode: "NAVER_SESSION_READY" }), false);
 });
 
+test("인증 hold가 풀리기 전에는 신규 공개 진행만 막고 heartbeat와 결과 기록은 허용한다", () => {
+  const base = { active: true, holdJobId: "job-held", jobId: "job-held" };
+  assert.equal(isNaverAuthHoldProgressAllowed({ ...base, currentStatus: "claimed", nextStatus: "in_progress" }), true);
+  assert.equal(isNaverAuthHoldProgressAllowed({ ...base, currentStatus: "in_progress", nextStatus: "in_progress" }), true);
+  assert.equal(isNaverAuthHoldProgressAllowed({ ...base, currentStatus: "in_progress", nextStatus: "image_uploading" }), false);
+  assert.equal(isNaverAuthHoldProgressAllowed({ ...base, currentStatus: "publish_ready", nextStatus: "publishing" }), false);
+  assert.equal(isNaverAuthHoldProgressAllowed({ ...base, jobId: "job-other", currentStatus: "claimed", nextStatus: "in_progress" }), false);
+  assert.equal(isNaverAuthHoldProgressAllowed({ ...base, jobId: "job-other", currentStatus: "in_progress", nextStatus: "in_progress" }), true);
+  assert.equal(isNaverAuthHoldProgressAllowed({ ...base, jobId: "job-other", currentStatus: "publishing", nextStatus: "published" }), true);
+  assert.equal(isNaverAuthHoldProgressAllowed({ ...base, jobId: "job-other", currentStatus: "publishing", nextStatus: "publish_failed" }), true);
+  assert.equal(isNaverAuthHoldProgressAllowed({ ...base, jobId: "job-other", currentStatus: "in_progress", nextStatus: "failed" }), true);
+  assert.equal(isNaverAuthHoldProgressAllowed({ ...base, active: false, currentStatus: "in_progress", nextStatus: "image_uploading" }), true);
+});
+
+test("인증 hold는 간격을 둔 두 번의 ready 확인 뒤에만 해제한다", () => {
+  const lease = "2026-09-04T00:00:00.000Z";
+  const first = evaluateNaverSessionReadyProbe({
+    previousCount: 0,
+    previousAt: null,
+    previousLeaseClaimedAt: null,
+    leaseClaimedAt: lease,
+    nowMs: now,
+  });
+  assert.deepEqual(first, { ready: false, nextCount: 1 });
+  assert.deepEqual(evaluateNaverSessionReadyProbe({
+    previousCount: first.nextCount,
+    previousAt: new Date(now).toISOString(),
+    previousLeaseClaimedAt: lease,
+    leaseClaimedAt: lease,
+    nowMs: now + 500,
+  }), { ready: false, nextCount: 1 });
+  assert.deepEqual(evaluateNaverSessionReadyProbe({
+    previousCount: first.nextCount,
+    previousAt: new Date(now).toISOString(),
+    previousLeaseClaimedAt: lease,
+    leaseClaimedAt: lease,
+    nowMs: now + 1_000,
+  }), { ready: true, nextCount: 2 });
+  const newLeaseFirst = evaluateNaverSessionReadyProbe({
+    previousCount: first.nextCount,
+    previousAt: new Date(now).toISOString(),
+    previousLeaseClaimedAt: lease,
+    leaseClaimedAt: "2026-09-04T00:01:00.000Z",
+    nowMs: now + 2_000,
+  });
+  assert.deepEqual(newLeaseFirst, { ready: false, nextCount: 1 });
+  assert.deepEqual(evaluateNaverSessionReadyProbe({
+    previousCount: newLeaseFirst.nextCount,
+    previousAt: new Date(now + 2_000).toISOString(),
+    previousLeaseClaimedAt: "2026-09-04T00:01:00.000Z",
+    leaseClaimedAt: "2026-09-04T00:01:00.000Z",
+    nowMs: now + 3_000,
+  }), { ready: true, nextCount: 2 });
+});
+
 test("인증 hold cooldown은 30초에서 1시간 사이로 제한한다", () => {
   assert.equal(getNaverAuthHoldCooldownMs("1"), 30_000);
   assert.equal(getNaverAuthHoldCooldownMs("9999"), 3_600_000);
   assert.equal(getNaverAuthHoldCooldownMs("invalid"), 300_000);
 });
-
-

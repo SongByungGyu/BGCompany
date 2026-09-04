@@ -43,6 +43,10 @@ if (-not $BuildSha -and (Get-Command git.exe -ErrorAction SilentlyContinue)) {
 if ($BuildSha -notmatch '^[0-9a-fA-F]{7,64}$') {
   throw "A reviewed Git build SHA is required. Pass -BuildSha or set BG_COMPANY_BUILD_SHA."
 }
+$nodeExecutable = (Get-Command node.exe -ErrorAction Stop).Source
+$nodeVersion = (& $nodeExecutable --version | Select-Object -First 1).Trim()
+$nodeExecutableSha256 = (Get-FileHash -LiteralPath $nodeExecutable -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($nodeVersion -notmatch '^v\d+\.\d+\.\d+') { throw "Unable to identify the reviewed Node.js runtime." }
 
 $relativeFiles = @("package.json", "package-lock.json", "tsconfig.json", "node_modules/playwright/package.json")
 $relativeFiles += @(Get-ChildItem -LiteralPath (Join-Path $resolvedAgentRoot "windows") -File -Filter "*.ps1" |
@@ -69,11 +73,14 @@ try {
 }
 
 $manifest = [ordered]@{
-  schemaVersion = 1
+  schemaVersion = 2
   generatedAt = (Get-Date).ToUniversalTime().ToString("o")
   buildSha = $BuildSha.ToLowerInvariant()
   runtimeMode = $runtimeMode
   entry = $entry
+  nodeExecutable = $nodeExecutable
+  nodeVersion = $nodeVersion
+  nodeExecutableSha256 = $nodeExecutableSha256
   aggregateSha256 = $aggregateHash
   files = @($files)
 }
@@ -88,4 +95,3 @@ $manifestJson = $manifest | ConvertTo-Json -Depth 5
 Move-Item -LiteralPath $temporaryPath -Destination $manifestPath -Force
 Write-Host "Wrote reviewed runtime manifest: $manifestPath"
 Write-Host "Runtime SHA256: $aggregateHash"
-

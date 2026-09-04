@@ -411,6 +411,7 @@ export function shouldClearRecoverablePipelineCircuitBreaker(input: {
   status: string;
   reason: string;
 }) {
+  if (input.status === "publish_failed" || input.status === "publishing_unknown") return false;
   return input.active && (
     input.status === "quality_failed"
     || isStockReferencePreflightFailure(input.reason)

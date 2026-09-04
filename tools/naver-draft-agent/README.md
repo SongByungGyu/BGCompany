@@ -26,6 +26,9 @@ Required `.env` values:
 ```env
 BG_COMPANY_BASE_URL=https://bgcompanyoffice.cloud
 NAVER_DRAFT_AGENT_KEY=...
+NAVER_AGENT_SINGLETON_PORT=43923
+NAVER_AGENT_STATE_FILE=./logs/naver-draft-agent-state.json
+NAVER_AGENT_DEPLOY_HOLD_FILE=./logs/naver-agent-deployment.hold
 NAVER_AGENT_DRY_RUN=true
 NAVER_ALLOW_DRAFT_SAVE=false
 ```
@@ -82,6 +85,25 @@ Publishing is off by default. A publish click is possible only when all of the f
 - the claimed job contains `allowPublish=true`
 - image upload, editor readability, draft save, and the server-side final duplicate/canary check all pass
 
-Login, security verification, CAPTCHA, image upload, draft save, and publish errors stop the job. The agent never retries a publish click automatically and never uploads the persistent browser profile or cookie/storage values.
+Login, security verification, CAPTCHA, image upload, draft save, and publish errors stop the job. Authentication recovery uses the same cause job and must pass two editor-ready probes at least one second apart under the same server lease. The agent never retries a publish click automatically and never uploads the persistent browser profile or cookie/storage values.
 
-Pre-publish editor/image failures are re-queued by the server under the same job and publish key. A stale `image_uploading`, `draft_saving`, or `publish_ready` job is reclaimed after the claim timeout; the final publish click is still attempted at most through the guarded server gate.
+Pre-publish editor/image failures are re-queued by the server under the same job and publish key. A stale `image_uploading`, `draft_saving`, or `publish_ready` job is reclaimed after the claim timeout; terminal jobs are never reclaimed. Each claim has a process-unique agent ID and stable `claimedAt` lease token. Every status transition uses both values, and the server rejects old agents that do not declare lease protocol version 2.
+
+`publishing` is never reclaimed. If its heartbeat becomes stale, the server records an uncertain global publish circuit and blocks every later automatic publish until the original result is safely resolved. Partial, blank, or invalid schedule fields fail closed; fully unscheduled manual jobs remain immediate.
+
+## Reviewed Windows rollout
+
+The production package must be built and manifested on the target Windows host. Run these from the reviewed `tools/naver-draft-agent` source directory:
+
+```powershell
+npm ci
+npm run build
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\write-runtime-manifest.ps1 -AgentRoot (Resolve-Path .) -BuildSha <reviewed-git-sha>
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\windows\install-reviewed-agent.ps1 -SourceRoot (Resolve-Path .) -InstallRoot "D:\BG Company\runtime\bg-company\naver-draft-agent-windows" -Activate
+```
+
+Roll out the web lease-protocol gate only while the database has no active or `publishing` Naver job. An old agent then receives `NAVER_DRAFT_LEASE_PROTOCOL_UPGRADE_REQUIRED` instead of claiming new work. The installer independently calls the authenticated runtime-status endpoint and fails closed unless both server counts are zero.
+
+For an online replacement, the installer creates a local deployment hold and waits for the running agent to acknowledge it before capturing exact process instances and stopping the task. A live legacy process that cannot acknowledge the hold is never interrupted, even with `-ConfirmLegacyNoPublishing`; stop and drain that legacy runtime separately first.
+
+Activation is accepted only after fresh supervisor and agent-state records match the exact root, singleton port, Git build SHA, runtime SHA, absolute Node executable, and listener PID. The active runtime, browser profile, secrets, and retained backup all receive protected ACLs limited to the current user, SYSTEM, and Administrators. Any failure after the directory swap stops only the captured process instances, restores the previous runtime and task XML/state, and retains the failed candidate for diagnosis. Do not delete the retained backup until at least one scheduled cycle has completed successfully.

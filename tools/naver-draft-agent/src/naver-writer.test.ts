@@ -7,6 +7,8 @@ import {
   hasSavedDraftTitle,
   normalizeNaverCategoryLabel,
   normalizeNaverTags,
+  isPublishedNaverUrl,
+  parsePublishedNaverUrl,
   pickMostReadableEditorText,
   prepareNaverPublicationBody,
   resolveNaverPublishCategory,
@@ -16,6 +18,29 @@ import {
   selectNaverSectionHeadings,
   waitForVerificationClear,
 } from "./naver-writer.js";
+
+test("네이버 공개 성공은 대상 블로그의 숫자형 게시글 URL만 인정한다", () => {
+  const writeUrl = "https://blog.naver.com/PostWriteForm.naver";
+  const postId = "223123456789";
+  for (const url of [
+    `https://blog.naver.com/bgmarketnote/${postId}`,
+    `https://m.blog.naver.com/bgmarketnote/${postId}?from=postView#anchor`,
+    `https://blog.naver.com/PostView.naver?blogId=bgmarketnote&logNo=${postId}`,
+  ]) {
+    assert.equal(isPublishedNaverUrl(url, writeUrl, "bgmarketnote"), true, url);
+    assert.equal(parsePublishedNaverUrl(url, "bgmarketnote")?.postId, postId);
+  }
+  for (const url of [
+    "https://blog.naver.com/",
+    "https://blog.naver.com/PostList.naver?blogId=bgmarketnote",
+    "https://blog.naver.com/PostWriteForm.naver?blogId=bgmarketnote",
+    `https://blog.naver.com/otherblog/${postId}`,
+    "https://blog.naver.com/bgmarketnote/not-a-number",
+    `https://example.com/bgmarketnote/${postId}`,
+  ]) {
+    assert.equal(isPublishedNaverUrl(url, writeUrl, "bgmarketnote"), false, url);
+  }
+});
 
 test("본문 이미지 설명과 출처를 네이버 기본 캡션 한 문단으로 합친다", () => {
   assert.equal(

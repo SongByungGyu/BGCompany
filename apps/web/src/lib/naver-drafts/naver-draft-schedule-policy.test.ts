@@ -5,6 +5,7 @@ import {
   isNaverDraftClaimDue,
   isNaverDraftPublishDue,
   isNaverDraftScheduleExpired,
+  isNaverDraftScheduleInvalid,
   resolveNaverDraftSchedule,
 } from "./naver-draft-schedule-policy.ts";
 
@@ -29,6 +30,22 @@ test("예약 필드가 없는 수동 작업은 즉시 처리한다", () => {
   assert.equal(isNaverDraftClaimDue({ marketDate: null, scheduleSlot: null }), true);
   assert.equal(isNaverDraftPublishDue({ marketDate: null, scheduleSlot: null }), true);
   assert.equal(isNaverDraftScheduleExpired({ marketDate: null, scheduleSlot: null }), false);
+});
+
+test("불완전하거나 잘못된 자동 예약 필드는 fail-closed 처리한다", () => {
+  for (const input of [
+    { marketDate: "2026-08-21", scheduleSlot: null },
+    { marketDate: null, scheduleSlot: "08:20" },
+    { marketDate: "", scheduleSlot: "" },
+    { marketDate: "   ", scheduleSlot: null },
+    { marketDate: "2026-02-30", scheduleSlot: "08:20" },
+    { marketDate: "2026-08-21", scheduleSlot: "25:00" },
+  ]) {
+    assert.equal(isNaverDraftScheduleInvalid(input), true);
+    assert.equal(isNaverDraftClaimDue(input), false);
+    assert.equal(isNaverDraftPublishDue(input), false);
+    assert.equal(isNaverDraftScheduleExpired(input), true);
+  }
 });
 
 test("예약 글은 기본 120분이 지나면 만료되고 TTL은 안전 범위로 제한한다", () => {

@@ -37,6 +37,7 @@ export async function POST(
     naverPostId: typeof body.naverPostId === "string" ? body.naverPostId : undefined,
     errorCode: typeof body.errorCode === "string" ? body.errorCode : undefined,
     errorMessage: typeof body.errorMessage === "string" ? body.errorMessage : undefined,
+    leaseClaimedAt: typeof body.leaseClaimedAt === "string" ? body.leaseClaimedAt : undefined,
   });
   return NextResponse.json({ ok: true, job });
 }

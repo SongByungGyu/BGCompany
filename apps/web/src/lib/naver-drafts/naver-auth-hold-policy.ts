@@ -33,6 +33,9 @@ export type NaverAuthHoldSnapshot = {
   heldAt: string | null;
   retryAfter: string | null;
   probeCount: number;
+  readyProbeCount: number;
+  lastReadyProbeAt: string | null;
+  readyProbeLeaseClaimedAt: string | null;
 };
 
 export type NaverAuthHoldDecision =
@@ -74,6 +77,11 @@ export function parseNaverAuthHoldSnapshot(value: unknown): NaverAuthHoldSnapsho
     probeCount: typeof payload.probeCount === "number" && Number.isFinite(payload.probeCount)
       ? Math.max(0, Math.floor(payload.probeCount))
       : 0,
+    readyProbeCount: typeof payload.readyProbeCount === "number" && Number.isFinite(payload.readyProbeCount)
+      ? Math.max(0, Math.floor(payload.readyProbeCount))
+      : 0,
+    lastReadyProbeAt: text(payload.lastReadyProbeAt),
+    readyProbeLeaseClaimedAt: text(payload.readyProbeLeaseClaimedAt),
   };
 }
 
@@ -116,3 +124,39 @@ export function isNaverSessionReadyProgress(input: { status: string; errorCode?:
   return input.status === "in_progress" && input.errorCode === NAVER_SESSION_READY_CODE;
 }
 
+export function isNaverAuthHoldProgressAllowed(input: {
+  active: boolean;
+  holdJobId: string | null;
+  jobId: string;
+  currentStatus: string;
+  nextStatus: string;
+}) {
+  if (!input.active) return true;
+  // An auth hold prevents new work from advancing toward publish, but it must
+  // never suppress the durable outcome of a publish that already happened.
+  // Failure/terminal cleanup is safe for the same reason: rejecting it would
+  // leave a leased job looking active and make a later reclaim less safe.
+  if (SAFE_TERMINAL_STATUSES.has(input.nextStatus)) return true;
+  if (input.currentStatus === "in_progress" && input.nextStatus === "in_progress") return true;
+  if (!input.holdJobId || input.holdJobId !== input.jobId) return false;
+  return input.nextStatus === "in_progress" && input.currentStatus === "claimed";
+}
+
+export function evaluateNaverSessionReadyProbe(input: {
+  previousCount: number;
+  previousAt: string | null;
+  previousLeaseClaimedAt: string | null;
+  leaseClaimedAt: string;
+  nowMs: number;
+  minimumGapMs?: number;
+}) {
+  const minimumGapMs = Math.max(500, input.minimumGapMs ?? 1_000);
+  const sameLease = input.previousLeaseClaimedAt === input.leaseClaimedAt;
+  const previousCount = sameLease ? input.previousCount : 0;
+  const previousAtMs = Date.parse(sameLease ? input.previousAt ?? "" : "");
+  if (previousCount > 0 && Number.isFinite(previousAtMs) && input.nowMs - previousAtMs < minimumGapMs) {
+    return { ready: false, nextCount: previousCount };
+  }
+  const nextCount = previousCount + 1;
+  return { ready: nextCount >= 2, nextCount };
+}

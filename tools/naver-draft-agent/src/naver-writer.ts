@@ -53,6 +53,7 @@ export type NaverDraftJob = {
   scheduleSlot?: string | null;
   publishNotBefore?: string | null;
   claimAvailableAt?: string | null;
+  claimedAt?: string | null;
   errorCode?: string | null;
   disclaimer: string | null;
 };
@@ -1122,28 +1123,41 @@ async function verifyDraftSave(page: import("playwright").Page, expectedTitle: s
   return { ok: titleConfirmed, blocked: null };
 }
 
-function naverPostIdFromUrl(value: string) {
+export function parsePublishedNaverUrl(value: string, expectedBlogId?: string) {
   try {
     const url = new URL(value);
-    return url.searchParams.get("logNo") || url.pathname.split("/").filter(Boolean).at(-1) || undefined;
+    if (url.protocol !== "https:" || !["blog.naver.com", "m.blog.naver.com"].includes(url.hostname.toLowerCase())) return null;
+    let blogId = "";
+    let postId = "";
+    const queryPostId = url.searchParams.get("logNo")?.trim() ?? "";
+    if (queryPostId) {
+      if (!["/postview.naver", "/postview.nhn"].includes(url.pathname.toLowerCase())) return null;
+      blogId = url.searchParams.get("blogId")?.trim() ?? "";
+      postId = queryPostId;
+    } else {
+      const segments = url.pathname.split("/").filter(Boolean).map((segment) => decodeURIComponent(segment));
+      if (segments.length !== 2) return null;
+      [blogId, postId] = segments;
+    }
+    if (!/^[a-z0-9_-]{2,64}$/i.test(blogId) || !/^\d+$/.test(postId)) return null;
+    if (expectedBlogId?.trim() && blogId.toLowerCase() !== expectedBlogId.trim().toLowerCase()) return null;
+    return { blogId, postId };
   } catch {
-    return undefined;
+    return null;
   }
 }
 
-function isPublishedNaverUrl(value: string, writeUrl: string) {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:"
-      && (url.hostname === "blog.naver.com" || url.hostname.endsWith(".blog.naver.com"))
-      && !value.startsWith(writeUrl)
-      && !url.pathname.includes("PostWriteForm");
-  } catch {
-    return false;
-  }
+export function isPublishedNaverUrl(value: string, writeUrl: string, expectedBlogId?: string) {
+  return value !== writeUrl && parsePublishedNaverUrl(value, expectedBlogId) !== null;
 }
 
-async function prepareNaverPublishDialog(page: import("playwright").Page, writeUrl: string, tags: string[], category?: string | null) {
+async function prepareNaverPublishDialog(
+  page: import("playwright").Page,
+  writeUrl: string,
+  expectedBlogId: string,
+  tags: string[],
+  category?: string | null,
+) {
   const publishSelectors = [
     'button:has-text("발행")',
     '[role="button"]:has-text("발행")',
@@ -1163,8 +1177,9 @@ async function prepareNaverPublishDialog(page: import("playwright").Page, writeU
   if (!clicked) throw new Error("NAVER_PUBLISH_BUTTON_NOT_FOUND");
 
   await page.waitForTimeout(1500);
-  if (isPublishedNaverUrl(page.url(), writeUrl)) {
-    throw new Error("NAVER_UNEXPECTED_DIRECT_PUBLISH");
+  const directPublished = parsePublishedNaverUrl(page.url(), expectedBlogId);
+  if (directPublished) {
+    return { publishedUrl: page.url(), naverPostId: directPublished.postId };
   }
   if (category?.trim()) {
     const normalizedCategory = normalizeNaverCategoryLabel(category);
@@ -1190,9 +1205,10 @@ async function prepareNaverPublishDialog(page: import("playwright").Page, writeU
     console.log(`[naver-agent] category confirmed: ${category}`);
   }
   if (!(await fillNaverTags(page, tags))) throw new Error("NAVER_TAG_INPUT_NOT_FOUND");
+  return null;
 }
 
-async function confirmNaverPublish(page: import("playwright").Page, writeUrl: string) {
+async function confirmNaverPublish(page: import("playwright").Page, writeUrl: string, expectedBlogId: string) {
   const confirmationSelectors = [
     'div[class*="layer_publish"] button[class*="confirm_btn"]',
     'button[class*="confirm_btn"]',
@@ -1214,13 +1230,10 @@ async function confirmNaverPublish(page: import("playwright").Page, writeUrl: st
   if (!confirmed) throw new Error("NAVER_PUBLISH_CONFIRMATION_NOT_FOUND");
 
   await page.waitForTimeout(5000);
-  let publishedUrl = page.url();
-  if (!isPublishedNaverUrl(publishedUrl, writeUrl)) {
-    const link = page.locator('a[href*="blog.naver.com"][href*="logNo"], a[href*="PostView.naver"]').first();
-    publishedUrl = await link.getAttribute("href", { timeout: 5000 }).catch(() => null) ?? publishedUrl;
-  }
-  if (!isPublishedNaverUrl(publishedUrl, writeUrl)) throw new Error("NAVER_PUBLISHED_URL_NOT_CONFIRMED");
-  return { publishedUrl, naverPostId: naverPostIdFromUrl(publishedUrl) };
+  const publishedUrl = page.url();
+  const parsed = parsePublishedNaverUrl(publishedUrl, expectedBlogId);
+  if (!parsed) throw new Error("NAVER_PUBLISHED_URL_NOT_CONFIRMED");
+  return { publishedUrl, naverPostId: parsed.postId };
 }
 
 export async function testNaverBrowser() {
@@ -1277,6 +1290,7 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
   }
 
   const writeUrl = process.env.NAVER_BLOG_WRITE_URL?.trim() || "https://blog.naver.com/PostWriteForm.naver";
+  const expectedBlogId = process.env.NAVER_BLOG_ID?.trim() || "bgmarketnote";
   const profileDir = process.env.NAVER_BROWSER_PROFILE_DIR?.trim() || "./.naver-profile";
   const browserChannel = process.env.NAVER_BROWSER_CHANNEL?.trim();
   const browserExecutablePath = process.env.NAVER_BROWSER_EXECUTABLE_PATH?.trim();
@@ -1316,14 +1330,21 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
       }
     }
 
-    await context.reportProgress?.({
-      status: "in_progress",
-      errorCode: "NAVER_SESSION_READY",
-      externalUrl: page.url(),
-    });
-
     await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => undefined);
     await dismissNaverDraftModal(page).catch(() => undefined);
+
+    for (let readyProbe = 0; readyProbe < 2; readyProbe += 1) {
+      blockedStatus = await detectBlockedStatus(page);
+      if (blockedStatus) {
+        return { status: blockedStatus, externalUrl: page.url(), errorCode: "NAVER_LOGIN_OR_SECURITY_REQUIRED", errorMessage: "Naver login/security verification returned before the editor became ready." };
+      }
+      await context.reportProgress?.({
+        status: "in_progress",
+        errorCode: "NAVER_SESSION_READY",
+        externalUrl: page.url(),
+      });
+      if (readyProbe === 0) await page.waitForTimeout(1_500);
+    }
 
     const titleSelectors = [
       'textarea[placeholder*="제목"]',
@@ -1503,21 +1524,6 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
       if (!allowPublish) return { status: "draft_saved", externalUrl: page.url() };
 
       await context.reportProgress?.({ status: "publish_ready", externalUrl: page.url() });
-      try {
-        await prepareNaverPublishDialog(
-          page,
-          writeUrl,
-          job.tags,
-          resolveNaverPublishCategory(job.category, job.scheduleSlot),
-        );
-      } catch (error) {
-        return {
-          status: "failed",
-          externalUrl: page.url(),
-          errorCode: "NAVER_PUBLISH_PREP_FAILED",
-          errorMessage: error instanceof Error ? error.message : String(error),
-        };
-      }
       const publishGate = await context.beginPublish?.();
       if (!publishGate?.allowed) {
         const gateStillWaiting = publishGate?.status === "publish_ready";
@@ -1535,7 +1541,14 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
         };
       }
       try {
-        const published = await confirmNaverPublish(page, writeUrl);
+        const directPublished = await prepareNaverPublishDialog(
+          page,
+          writeUrl,
+          expectedBlogId,
+          job.tags,
+          resolveNaverPublishCategory(job.category, job.scheduleSlot),
+        );
+        const published = directPublished ?? await confirmNaverPublish(page, writeUrl, expectedBlogId);
         return { status: "published", externalUrl: published.publishedUrl, ...published };
       } catch (error) {
         return {

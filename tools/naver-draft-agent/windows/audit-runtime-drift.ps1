@@ -41,10 +41,19 @@ if ($startCommand -match '(?:^|\s)tsx(?:\.cmd)?\s+src[/\\]index\.ts(?:\s|$)') {
   throw "Unsupported Windows agent scripts.start command: $startCommand"
 }
 
-if ($manifest.schemaVersion -ne 1) { throw "Unsupported runtime manifest schema." }
+if ($manifest.schemaVersion -ne 2) { throw "Unsupported runtime manifest schema." }
 if ([string]$manifest.buildSha -notmatch '^[0-9a-fA-F]{7,64}$') { throw "Runtime manifest buildSha is invalid." }
 if ([string]$manifest.runtimeMode -ne $runtimeMode -or [string]$manifest.entry -ne $entry) {
   throw "Runtime manifest mode/entry does not match package.json scripts.start."
+}
+$nodeExecutable = (Get-Command node.exe -ErrorAction Stop).Source
+$nodeVersion = (& $nodeExecutable --version | Select-Object -First 1).Trim()
+$nodeExecutableSha256 = (Get-FileHash -LiteralPath $nodeExecutable -Algorithm SHA256).Hash.ToLowerInvariant()
+if ([IO.Path]::GetFullPath([string]$manifest.nodeExecutable) -ne [IO.Path]::GetFullPath($nodeExecutable)) {
+  throw "Reviewed Node.js executable path changed."
+}
+if ([string]$manifest.nodeVersion -ne $nodeVersion -or [string]$manifest.nodeExecutableSha256 -ne $nodeExecutableSha256) {
+  throw "Reviewed Node.js runtime version or SHA changed."
 }
 
 $relativeFiles = @("package.json", "package-lock.json", "tsconfig.json", "node_modules/playwright/package.json")
@@ -87,5 +96,6 @@ if ([string]$manifest.aggregateSha256 -ne $aggregateHash) { throw "Runtime aggre
   RuntimeSha256 = $aggregateHash
   RuntimeMode = $runtimeMode
   Entry = $entry
+  NodeExecutable = $nodeExecutable
+  NodeVersion = $nodeVersion
 }
-

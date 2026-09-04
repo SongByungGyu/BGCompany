@@ -4,29 +4,60 @@ param(
 
 $ErrorActionPreference = "Stop"
 $resolvedAgentRoot = (Resolve-Path -LiteralPath $AgentRoot).Path.TrimEnd("\")
-$allowedName = '^\.env(?:\.bak|\.before-[A-Za-z0-9._-]+)?$'
-$targets = @(Get-ChildItem -LiteralPath $resolvedAgentRoot -File -Force |
-  Where-Object { $_.Name -match $allowedName })
-if (-not ($targets | Where-Object { $_.Name -eq ".env" })) { throw ".env not found in $resolvedAgentRoot" }
+if (-not [IO.Path]::IsPathRooted($resolvedAgentRoot) -or $resolvedAgentRoot -eq [IO.Path]::GetPathRoot($resolvedAgentRoot)) {
+  throw "Unsafe AgentRoot for ACL hardening: $resolvedAgentRoot"
+}
+if (-not (Test-Path -LiteralPath (Join-Path $resolvedAgentRoot "package.json") -PathType Leaf)) {
+  throw "Refusing ACL change outside an agent runtime: $resolvedAgentRoot"
+}
+if (-not (Test-Path -LiteralPath (Join-Path $resolvedAgentRoot ".env") -PathType Leaf)) {
+  throw ".env not found in $resolvedAgentRoot"
+}
 
 $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
 $systemSid = [System.Security.Principal.SecurityIdentifier]::new("S-1-5-18")
 $administratorsSid = [System.Security.Principal.SecurityIdentifier]::new("S-1-5-32-544")
-foreach ($target in $targets) {
-  if ($target.DirectoryName.TrimEnd("\") -ne $resolvedAgentRoot) { throw "Refusing ACL change outside AgentRoot: $($target.FullName)" }
-  $acl = [System.Security.AccessControl.FileSecurity]::new()
+
+function Set-RestrictedAcl {
+  param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][bool]$IsDirectory)
+  $fullPath = [IO.Path]::GetFullPath($Path)
+  if ($fullPath -ne $resolvedAgentRoot -and -not $fullPath.StartsWith("$resolvedAgentRoot\", [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing ACL change outside AgentRoot: $fullPath"
+  }
+  $acl = if ($IsDirectory) {
+    [System.Security.AccessControl.DirectorySecurity]::new()
+  } else {
+    [System.Security.AccessControl.FileSecurity]::new()
+  }
   $acl.SetOwner($currentUser)
   $acl.SetAccessRuleProtection($true, $false)
   foreach ($sid in @($currentUser, $systemSid, $administratorsSid)) {
-    $rule = [System.Security.AccessControl.FileSystemAccessRule]::new(
-      $sid,
-      [System.Security.AccessControl.FileSystemRights]::FullControl,
-      [System.Security.AccessControl.AccessControlType]::Allow
-    )
+    $rule = if ($IsDirectory) {
+      [System.Security.AccessControl.FileSystemAccessRule]::new(
+        $sid,
+        [System.Security.AccessControl.FileSystemRights]::FullControl,
+        [System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit,
+        [System.Security.AccessControl.PropagationFlags]::None,
+        [System.Security.AccessControl.AccessControlType]::Allow
+      )
+    } else {
+      [System.Security.AccessControl.FileSystemAccessRule]::new(
+        $sid,
+        [System.Security.AccessControl.FileSystemRights]::FullControl,
+        [System.Security.AccessControl.AccessControlType]::Allow
+      )
+    }
     [void]$acl.AddAccessRule($rule)
   }
-  Set-Acl -LiteralPath $target.FullName -AclObject $acl
-  Write-Host "Hardened ACL: $($target.Name)"
+  Set-Acl -LiteralPath $fullPath -AclObject $acl
 }
 
+Set-RestrictedAcl -Path $resolvedAgentRoot -IsDirectory $true
+foreach ($target in Get-ChildItem -LiteralPath $resolvedAgentRoot -Force -Recurse) {
+  if (($target.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw "Refusing to traverse runtime reparse point: $($target.FullName)"
+  }
+  Set-RestrictedAcl -Path $target.FullName -IsDirectory $target.PSIsContainer
+}
+Write-Host "Hardened runtime ACL for current user, SYSTEM, and Administrators: $resolvedAgentRoot"
 

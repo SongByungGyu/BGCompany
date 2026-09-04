@@ -1164,37 +1164,54 @@ async function resolveScheduleMarketDecision(
 }
 
 async function clearRecoverablePipelineCircuitBreaker(scheduleKey: string) {
-  const existing = await prisma.eventLog.findUnique({
-    where: { id: PUBLISH_CIRCUIT_BREAKER_EVENT_ID },
-  });
-  if (!existing) return false;
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.eventLog.findUnique({
+      where: { id: PUBLISH_CIRCUIT_BREAKER_EVENT_ID },
+    });
+    if (!existing) return false;
 
-  const payload = eventPayload(existing.payload);
-  const status = typeof payload.status === "string" ? payload.status : "";
-  const reason = typeof payload.reason === "string" ? payload.reason : "";
-  if (!shouldClearRecoverablePipelineCircuitBreaker({
-    active: payload.active === true,
-    status,
-    reason,
-  })) {
-    return false;
-  }
+    const payload = eventPayload(existing.payload);
+    const status = typeof payload.status === "string" ? payload.status : "";
+    const reason = typeof payload.reason === "string" ? payload.reason : "";
+    if (!shouldClearRecoverablePipelineCircuitBreaker({
+      active: payload.active === true,
+      status,
+      reason,
+    })) {
+      return false;
+    }
+    const unresolvedPublish = await tx.naverDraftJob.findFirst({
+      where: {
+        allowPublish: true,
+        OR: [
+          { status: "publishing" },
+          { status: "publish_failed", updatedAt: { gte: existing.timestamp } },
+        ],
+      },
+      select: { id: true },
+    });
+    if (unresolvedPublish) return false;
 
-  await prisma.eventLog.update({
-    where: { id: PUBLISH_CIRCUIT_BREAKER_EVENT_ID },
-    data: {
-      timestamp: new Date(),
-      summary: "시장 참고자료 사전검증 실패로 잘못 활성화된 자동 발행 차단을 해제했습니다.",
-      payload: {
-        ...payload,
-        active: false,
-        status: "pipeline_recovery_cleared",
-        clearedAt: new Date().toISOString(),
-        recoveredByScheduleKey: scheduleKey,
-      } as Prisma.InputJsonObject,
-    },
-  });
-  return true;
+    const updated = await tx.eventLog.updateMany({
+      where: {
+        id: PUBLISH_CIRCUIT_BREAKER_EVENT_ID,
+        timestamp: existing.timestamp,
+        summary: existing.summary,
+      },
+      data: {
+        timestamp: new Date(),
+        summary: "시장 참고자료 사전검증 실패로 잘못 활성화된 자동 발행 차단을 해제했습니다.",
+        payload: {
+          ...payload,
+          active: false,
+          status: "pipeline_recovery_cleared",
+          clearedAt: new Date().toISOString(),
+          recoveredByScheduleKey: scheduleKey,
+        } as Prisma.InputJsonObject,
+      },
+    });
+    return updated.count === 1;
+  }, { isolationLevel: "Serializable" });
 }
 
 function startOfSchedulerWeek(now: Date, timezone: string) {
