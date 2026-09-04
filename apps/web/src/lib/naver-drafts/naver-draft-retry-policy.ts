@@ -7,9 +7,6 @@ const SAFE_PRE_PUBLISH_RETRY_STATUSES = new Set([
 
 const GLOBAL_PUBLISH_BLOCKING_STATUSES = new Set([
   "publish_failed",
-  "login_required",
-  "captcha_required",
-  "security_check_required",
 ]);
 
 export type NaverDraftSafeRetryDecision = {
@@ -22,12 +19,12 @@ export function getNaverDraftSafeRetryLimit(value?: string) {
   const parsed = Number.parseInt(value ?? "8", 10);
   return Number.isFinite(parsed) ? Math.max(0, Math.min(parsed, 12)) : 8;
 }
-
 export function shouldActivateNaverPublishCircuitBreaker(input: {
   status: string;
   allowPublish: boolean;
+  publishAttemptCount: number;
 }) {
-  return input.allowPublish && GLOBAL_PUBLISH_BLOCKING_STATUSES.has(input.status);
+  return input.allowPublish && input.publishAttemptCount > 0 && GLOBAL_PUBLISH_BLOCKING_STATUSES.has(input.status);
 }
 
 export function evaluateNaverDraftSafeRetry(input: {

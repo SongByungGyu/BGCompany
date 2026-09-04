@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:net";
 import path from "node:path";
 import { runNaverWriter, testNaverBrowser, type NaverDraftJob } from "./naver-writer.js";
@@ -83,6 +83,30 @@ async function saveLocalDraft(job: NaverDraftJob) {
   return file;
 }
 
+async function writeAgentState(cfg: AgentConfig, input: {
+  jobId?: string | null;
+  status: string;
+  publishing?: boolean;
+}) {
+  try {
+    const file = path.resolve(process.env.NAVER_AGENT_STATE_FILE?.trim() || "logs/naver-draft-agent-state.json");
+    await mkdir(path.dirname(file), { recursive: true });
+    const temporaryFile = `${file}.${process.pid}.tmp`;
+    await writeFile(temporaryFile, JSON.stringify({
+      timestamp: new Date().toISOString(),
+      processId: process.pid,
+      agentId: cfg.agentId,
+      buildSha: process.env.BG_COMPANY_BUILD_SHA ?? process.env.NAVER_AGENT_BUILD_SHA ?? null,
+      jobId: input.jobId ?? null,
+      status: input.status,
+      publishing: input.publishing === true,
+    }), "utf8");
+    await rename(temporaryFile, file);
+  } catch (error) {
+    console.error("[naver-agent] state heartbeat warning", error instanceof Error ? error.message : error);
+  }
+}
+
 async function waitForScheduledPublish(
   cfg: AgentConfig,
   job: NaverDraftJob,
@@ -101,18 +125,29 @@ async function waitForScheduledPublish(
 async function processJob(cfg: AgentConfig, job: NaverDraftJob) {
   console.log(`[naver-agent] claiming ${job.id}`);
   const claimed = await claimJob(cfg, job.id);
+  await writeAgentState(cfg, { jobId: claimed.job.id, status: "claimed" });
   await reportStatus(cfg, claimed.job.id, { status: "in_progress" });
   const draftFile = await saveLocalDraft(claimed.job);
   const result = await runNaverWriter(claimed.job, {
     draftFile,
     assetBaseUrl: cfg.baseUrl,
     reportProgress: async (body) => {
-      await reportStatus(cfg, claimed.job.id, body);
+      const response = await reportStatus(cfg, claimed.job.id, body);
+      await writeAgentState(cfg, {
+        jobId: claimed.job.id,
+        status: response.job.status ?? String(body.status ?? "in_progress"),
+        publishing: response.job.status === "publishing",
+      });
     },
     beginPublish: async () => {
       await waitForScheduledPublish(cfg, claimed.job);
       for (let attempt = 0; attempt < 60; attempt += 1) {
         const response = await reportStatus(cfg, claimed.job.id, { status: "publishing" });
+        await writeAgentState(cfg, {
+          jobId: claimed.job.id,
+          status: response.job.status ?? "publish_blocked",
+          publishing: response.job.status === "publishing",
+        });
         const errorCode = response.job.errorCode;
         if (response.job.status === "publish_ready" && errorCode === "NAVER_PUBLISH_CIRCUIT_BREAKER_ACTIVE") {
           return { allowed: false, status: "publish_ready", errorCode };
@@ -129,7 +164,8 @@ async function processJob(cfg: AgentConfig, job: NaverDraftJob) {
       return { allowed: false, status: "publish_ready", errorCode: "NAVER_PUBLISH_NOT_DUE" };
     },
   });
-  await reportStatus(cfg, claimed.job.id, result);
+  const reported = await reportStatus(cfg, claimed.job.id, result);
+  await writeAgentState(cfg, { jobId: claimed.job.id, status: reported.job.status ?? result.status });
   console.log(`[naver-agent] ${claimed.job.id} -> ${result.status}`);
 }
 
@@ -163,6 +199,7 @@ async function main() {
     return;
   }
   const singletonLock = await acquireSingletonLock();
+  await writeAgentState(cfg, { status: "idle" });
   console.log(`[naver-agent] polling ${cfg.baseUrl} every ${cfg.pollIntervalMs}ms`);
   const dryRunSetting = process.env.NAVER_AGENT_DRY_RUN ?? process.env.NAVER_DRAFT_AGENT_DRY_RUN;
   const singleJob = process.env.NAVER_AGENT_SINGLE_JOB === "true";

@@ -18,7 +18,6 @@ test("발행 전 이미지 업로드 실패는 설정 한도 안에서 자동 �
     { allowed: true, nextRetryCount: 2 },
   );
 });
-
 test("발행 전 네이버 이미지 캡션 입력 실패는 안전 재시도한다", () => {
   assert.deepEqual(
     evaluateNaverDraftSafeRetry({
@@ -109,13 +108,15 @@ test("발행 버튼 전 오류는 다음 예약 글을 막는 전역 차단기�
     "reference_failed",
     "market_data_failed",
   ]) {
-    assert.equal(shouldActivateNaverPublishCircuitBreaker({ status, allowPublish: true }), false);
+    assert.equal(shouldActivateNaverPublishCircuitBreaker({ status, allowPublish: true, publishAttemptCount: 0 }), false);
   }
 });
 
-test("발행 결과 불확실 또는 네이버 보안 오류만 전역 차단기를 켠다", () => {
-  for (const status of ["publish_failed", "login_required", "captcha_required", "security_check_required"]) {
-    assert.equal(shouldActivateNaverPublishCircuitBreaker({ status, allowPublish: true }), true);
+test("발행 결과가 불확실한 작업만 전역 차단기를 켠다", () => {
+  assert.equal(shouldActivateNaverPublishCircuitBreaker({ status: "publish_failed", allowPublish: true, publishAttemptCount: 1 }), true);
+  assert.equal(shouldActivateNaverPublishCircuitBreaker({ status: "publish_failed", allowPublish: true, publishAttemptCount: 0 }), false);
+  for (const status of ["login_required", "captcha_required", "security_check_required"]) {
+    assert.equal(shouldActivateNaverPublishCircuitBreaker({ status, allowPublish: true, publishAttemptCount: 0 }), false);
   }
-  assert.equal(shouldActivateNaverPublishCircuitBreaker({ status: "publish_failed", allowPublish: false }), false);
+  assert.equal(shouldActivateNaverPublishCircuitBreaker({ status: "publish_failed", allowPublish: false, publishAttemptCount: 1 }), false);
 });

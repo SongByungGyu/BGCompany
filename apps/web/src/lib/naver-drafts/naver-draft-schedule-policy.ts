@@ -1,9 +1,14 @@
 const KST_OFFSET_MINUTES = 9 * 60;
 const DEFAULT_CLAIM_LEAD_MINUTES = 15;
+const DEFAULT_LATE_TTL_MINUTES = 120;
 
 function parsePositiveInt(value: string | undefined, fallback: number) {
   const parsed = Number.parseInt(value ?? "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export function getNaverDraftLateTtlMinutes(value = process.env.NAVER_DRAFT_LATE_TTL_MINUTES) {
+  return Math.max(15, Math.min(parsePositiveInt(value, DEFAULT_LATE_TTL_MINUTES), 24 * 60));
 }
 
 export function resolveNaverDraftSchedule(input: {
@@ -29,10 +34,20 @@ export function resolveNaverDraftSchedule(input: {
   const configuredLead = parsePositiveInt(process.env.NAVER_DRAFT_CLAIM_LEAD_MINUTES, DEFAULT_CLAIM_LEAD_MINUTES);
   const claimLeadMinutes = input.claimLeadMinutes ?? configuredLead;
   const claimAt = new Date(publishAt.getTime() - Math.max(1, claimLeadMinutes) * 60_000);
+  const publishNotAfter = new Date(publishAt.getTime() + getNaverDraftLateTtlMinutes() * 60_000);
   return {
     publishNotBefore: publishAt,
+    publishNotAfter,
     claimAvailableAt: claimAt,
   };
+}
+
+export function isNaverDraftScheduleExpired(input: {
+  marketDate?: string | null;
+  scheduleSlot?: string | null;
+}, now = new Date()) {
+  const schedule = resolveNaverDraftSchedule(input);
+  return Boolean(schedule && now.getTime() > schedule.publishNotAfter.getTime());
 }
 
 export function isNaverDraftClaimDue(input: {

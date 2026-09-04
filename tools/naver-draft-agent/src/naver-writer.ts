@@ -86,7 +86,6 @@ function classifySecurityPage(url: string, text: string): WriterResult["status"]
 }
 
 
-
 function isExplicitLiveMode() {
   const setting = process.env.NAVER_AGENT_DRY_RUN ?? process.env.NAVER_DRAFT_AGENT_DRY_RUN;
   return setting === "false";
@@ -1316,6 +1315,12 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
         return { status: blockedStatus, externalUrl: page.url(), errorCode: "NAVER_LOGIN_OR_SECURITY_REQUIRED", errorMessage: "Naver login/security verification is required in the local browser." };
       }
     }
+
+    await context.reportProgress?.({
+      status: "in_progress",
+      errorCode: "NAVER_SESSION_READY",
+      externalUrl: page.url(),
+    });
 
     await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => undefined);
     await dismissNaverDraftModal(page).catch(() => undefined);

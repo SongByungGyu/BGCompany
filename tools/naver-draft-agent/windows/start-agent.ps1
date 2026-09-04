@@ -1,64 +1,163 @@
 param(
-  [string]$AgentRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+  [string]$AgentRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
+  [ValidateRange(10, 300)]
+  [int]$HeartbeatSeconds = 30
 )
 
 $ErrorActionPreference = "Stop"
-$packageJson = Join-Path $AgentRoot "package.json"
-$envFile = Join-Path $AgentRoot ".env"
+$resolvedAgentRoot = (Resolve-Path -LiteralPath $AgentRoot).Path.TrimEnd("\")
+$packageJson = Join-Path $resolvedAgentRoot "package.json"
+$envFile = Join-Path $resolvedAgentRoot ".env"
+$runtimeAudit = Join-Path $resolvedAgentRoot "windows\audit-runtime-drift.ps1"
 if (-not (Test-Path -LiteralPath $packageJson)) { throw "package.json not found: $packageJson" }
 if (-not (Test-Path -LiteralPath $envFile)) { throw ".env not found: $envFile" }
+if (-not (Test-Path -LiteralPath $runtimeAudit)) { throw "runtime audit not found: $runtimeAudit" }
 
-$node = (Get-Command node.exe -ErrorAction Stop).Source
-$compiledAgent = Join-Path $AgentRoot "dist\index.js"
-if (-not (Test-Path -LiteralPath $compiledAgent)) { throw "Compiled agent not found: $compiledAgent. Run npm run build first." }
-$agentSingletonPort = 43923
-$logDir = Join-Path $AgentRoot "logs"
+function Get-DotEnvValue {
+  param([string]$Path, [string]$Name)
+  foreach ($line in Get-Content -LiteralPath $Path -ErrorAction Stop) {
+    if ($line -match "^\s*$([regex]::Escape($Name))\s*=\s*(?<value>.*)\s*$") {
+      return $Matches.value.Trim().Trim('"').Trim("'")
+    }
+  }
+  return ""
+}
+$configuredPort = Get-DotEnvValue -Path $envFile -Name "NAVER_AGENT_SINGLETON_PORT"
+$parsedPort = 0
+$agentSingletonPort = if ([int]::TryParse($configuredPort, [ref]$parsedPort) -and $parsedPort -ge 1024 -and $parsedPort -le 65535) { $parsedPort } else { 43923 }
+$npm = (Get-Command npm.cmd -ErrorAction Stop).Source
+$runtimeIdentity = & $runtimeAudit -AgentRoot $resolvedAgentRoot
+$agentBuildSha = [string]$runtimeIdentity.BuildSha
+$runtimeSha256 = [string]$runtimeIdentity.RuntimeSha256
+
+$logDir = Join-Path $resolvedAgentRoot "logs"
+$supervisorLog = Join-Path $logDir "naver-draft-agent-supervisor.log"
+$heartbeatFile = Join-Path $logDir "naver-draft-agent-heartbeat.json"
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-$logFile = Join-Path $logDir "naver-draft-agent.log"
-$browserProfileDir = [System.IO.Path]::GetFullPath((Join-Path $AgentRoot ".naver-profile")).TrimEnd("\")
 
-function Write-AgentLog {
-  param([string]$Message)
-  $Message | Out-File -LiteralPath $logFile -Encoding utf8 -Append
+function Write-SupervisorLog {
+  param([Parameter(Mandatory = $true)][string]$Message)
+  try {
+    "[$(Get-Date -Format o)] $Message" | Add-Content -LiteralPath $supervisorLog -Encoding utf8 -ErrorAction Stop
+  } catch {
+    [Console]::Error.WriteLine("[naver-supervisor] log write failed: $($_.Exception.Message)")
+  }
 }
 
-function Stop-StaleNaverProfileBrowsers {
-  param([string]$ProfileDir)
+function Write-AgentHeartbeat {
+  param(
+    [Parameter(Mandatory = $true)][string]$Status,
+    [Nullable[int]]$ChildProcessId = $null,
+    [Nullable[int]]$ExitCode = $null,
+    [string]$Detail = ""
+  )
   try {
-    $targets = Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe' OR Name = 'msedge.exe'" -ErrorAction Stop |
-      Where-Object {
-        $_.CommandLine -and
-        $_.CommandLine.IndexOf("--user-data-dir", [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and
-        $_.CommandLine.IndexOf($ProfileDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+    $temporaryHeartbeat = "$heartbeatFile.$PID.tmp"
+    $payload = [ordered]@{
+      timestamp = (Get-Date).ToUniversalTime().ToString("o")
+      status = $Status
+      agentRoot = $resolvedAgentRoot
+      singletonPort = $agentSingletonPort
+      buildSha = $agentBuildSha
+      runtimeSha256 = $runtimeSha256
+      supervisorProcessId = $PID
+      childProcessId = $ChildProcessId
+      exitCode = $ExitCode
+      detail = $Detail
+    }
+    $payload | ConvertTo-Json -Compress | Set-Content -LiteralPath $temporaryHeartbeat -Encoding utf8 -ErrorAction Stop
+    Move-Item -LiteralPath $temporaryHeartbeat -Destination $heartbeatFile -Force -ErrorAction Stop
+  } catch {
+    Write-SupervisorLog "Heartbeat write warning: $($_.Exception.Message)"
+  }
+}
+
+function Wait-WithHeartbeat {
+  param([int]$Seconds, [string]$Status)
+  $remainingSeconds = $Seconds
+  while ($remainingSeconds -gt 0) {
+    Write-AgentHeartbeat -Status $Status -Detail "Retrying in ${remainingSeconds}s."
+    $sleepSeconds = [Math]::Min($HeartbeatSeconds, $remainingSeconds)
+    Start-Sleep -Seconds $sleepSeconds
+    $remainingSeconds -= $sleepSeconds
+  }
+}
+
+function Get-SingletonListenerState {
+  $connections = @(Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort $agentSingletonPort -State Listen -ErrorAction SilentlyContinue)
+  if ($connections.Count -eq 0) { return "absent" }
+  foreach ($connection in $connections) {
+    $owner = Get-CimInstance Win32_Process -Filter "ProcessId = $([int]$connection.OwningProcess)" -ErrorAction SilentlyContinue
+    $commandLine = [string]$owner.CommandLine
+    $ownsExpectedRoot = $commandLine.IndexOf($resolvedAgentRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0
+    $isAgentEntry = $commandLine -match '(?:dist[/\\]index\.js|src[/\\]index\.ts)'
+    if ($ownsExpectedRoot -and $isAgentEntry) { return "owned" }
+  }
+  return "foreign"
+}
+
+$rootHashAlgorithm = [System.Security.Cryptography.SHA256]::Create()
+try {
+  $rootHash = ([BitConverter]::ToString($rootHashAlgorithm.ComputeHash([Text.Encoding]::UTF8.GetBytes($resolvedAgentRoot.ToLowerInvariant())))).Replace("-", "").Substring(0, 24)
+} finally {
+  $rootHashAlgorithm.Dispose()
+}
+$mutexName = "Local\BGCompany.NaverDraftAgent.$rootHash"
+$supervisorMutex = [Threading.Mutex]::new($false, $mutexName)
+$mutexAcquired = $false
+try {
+  $mutexAcquired = $supervisorMutex.WaitOne(0)
+  if (-not $mutexAcquired) {
+    Write-SupervisorLog "Supervisor already owns mutex $mutexName for $resolvedAgentRoot."
+    exit 0
+  }
+
+  Set-Location -LiteralPath $resolvedAgentRoot
+  Write-SupervisorLog "BG Company Naver Draft Agent supervisor started. root=$resolvedAgentRoot port=$agentSingletonPort build=$agentBuildSha"
+  Write-AgentHeartbeat -Status "supervisor_started"
+  $restartDelaySeconds = 10
+
+  while ($true) {
+    try {
+      $listenerState = Get-SingletonListenerState
+      if ($listenerState -eq "owned") {
+        Write-AgentHeartbeat -Status "agent_already_running" -Detail "Singleton listener is healthy."
+        $restartDelaySeconds = 10
+        Start-Sleep -Seconds ([Math]::Min($HeartbeatSeconds, 15))
+        continue
       }
-    if (-not $targets) { return }
-    $targetIds = @($targets | Select-Object -ExpandProperty ProcessId -Unique)
-    Write-AgentLog "[$(Get-Date -Format o)] Closing stale Naver profile browser processes: $($targetIds -join ',')."
-    foreach ($targetId in $targetIds) {
-      Stop-Process -Id $targetId -Force -ErrorAction SilentlyContinue
-    }
-    Start-Sleep -Seconds 2
-  } catch {
-    Write-AgentLog "[$(Get-Date -Format o)] Stale Naver profile browser cleanup warning: $($_.Exception.Message)"
-  }
-}
+      if ($listenerState -eq "foreign") {
+        Write-AgentHeartbeat -Status "singleton_port_conflict" -Detail "The configured port belongs to a process outside AgentRoot."
+        Write-SupervisorLog "Singleton port $agentSingletonPort is owned by an unrelated process; refusing to launch."
+        Start-Sleep -Seconds ([Math]::Min($HeartbeatSeconds, 15))
+        continue
+      }
 
-Set-Location -LiteralPath $AgentRoot
-Write-AgentLog "[$(Get-Date -Format o)] BG Company Naver Draft Agent supervisor started."
+      $runStamp = Get-Date -Format "yyyyMMdd-HHmmss-fff"
+      $stdoutLog = Join-Path $logDir "naver-draft-agent-$runStamp.stdout.log"
+      $stderrLog = Join-Path $logDir "naver-draft-agent-$runStamp.stderr.log"
+      $startedAt = Get-Date
+      $agentProcess = Start-Process -FilePath $npm -ArgumentList @("run", "start") -WorkingDirectory $resolvedAgentRoot -WindowStyle Hidden -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog -PassThru
+      Write-SupervisorLog "Agent process $($agentProcess.Id) started. stdout=$stdoutLog stderr=$stderrLog"
+      while (-not $agentProcess.HasExited) {
+        Write-AgentHeartbeat -Status "agent_running" -ChildProcessId $agentProcess.Id
+        Start-Sleep -Seconds $HeartbeatSeconds
+        $agentProcess.Refresh()
+      }
 
-while ($true) {
-  try {
-    $agentAlreadyRunning = [bool](Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort $agentSingletonPort -State Listen -ErrorAction SilentlyContinue)
-    if ($agentAlreadyRunning) {
-      Start-Sleep -Seconds 15
-      continue
+      $exitCode = $agentProcess.ExitCode
+      $runtimeSeconds = [Math]::Max(0, [int]((Get-Date) - $startedAt).TotalSeconds)
+      if ($runtimeSeconds -ge 300) { $restartDelaySeconds = 10 }
+      Write-SupervisorLog "Agent process $($agentProcess.Id) exited with code $exitCode after ${runtimeSeconds}s. Restarting in ${restartDelaySeconds}s."
+      Write-AgentHeartbeat -Status "restart_wait" -ChildProcessId $agentProcess.Id -ExitCode $exitCode -Detail "Restarting in ${restartDelaySeconds}s."
+    } catch {
+      Write-SupervisorLog "Agent supervisor error: $($_.Exception.Message)"
+      Write-AgentHeartbeat -Status "supervisor_error" -Detail $_.Exception.Message
     }
-    Stop-StaleNaverProfileBrowsers -ProfileDir $browserProfileDir
-    & $node $compiledAgent 2>&1 | Out-File -LiteralPath $logFile -Encoding utf8 -Append
-    $exitCode = $LASTEXITCODE
-    Write-AgentLog "[$(Get-Date -Format o)] Agent exited with code $exitCode. Restarting in 10 seconds."
-  } catch {
-    Write-AgentLog "[$(Get-Date -Format o)] Agent supervisor error: $($_.Exception.Message)"
+    Wait-WithHeartbeat -Seconds $restartDelaySeconds -Status "restart_wait"
+    $restartDelaySeconds = [Math]::Min($restartDelaySeconds * 2, 300)
   }
-  Start-Sleep -Seconds 10
+} finally {
+  if ($mutexAcquired) { $supervisorMutex.ReleaseMutex() }
+  $supervisorMutex.Dispose()
 }

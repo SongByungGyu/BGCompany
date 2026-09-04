@@ -24,6 +24,15 @@ import {
   shouldActivateNaverPublishCircuitBreaker,
 } from "@/lib/naver-drafts/naver-draft-retry-policy";
 import {
+  canRequeueNaverAuthHoldJob,
+  evaluateNaverAuthHold,
+  getNaverAuthHoldCooldownMs,
+  isNaverAuthHoldStatus,
+  isNaverSessionReadyProgress,
+  NAVER_AUTH_HOLD_EVENT_ID,
+  parseNaverAuthHoldSnapshot,
+} from "@/lib/naver-drafts/naver-auth-hold-policy";
+import {
   appendRelatedPostSection,
   buildNaverDiscoveryTags,
   inspectPublishedPostSimilarity,
@@ -38,6 +47,7 @@ import {
 import {
   isNaverDraftClaimDue,
   isNaverDraftPublishDue,
+  isNaverDraftScheduleExpired,
   resolveNaverDraftSchedule,
 } from "@/lib/naver-drafts/naver-draft-schedule-policy";
 
@@ -655,7 +665,11 @@ function automaticPublishBlockReasons(pipeline: ContentPipelineRun, body: string
 }
 
 async function activatePublishCircuitBreaker(job: NaverDraftJob, status: NaverDraftJobStatus, reason?: string) {
-  if (!shouldActivateNaverPublishCircuitBreaker({ allowPublish: job.allowPublish, status })) return;
+  if (!shouldActivateNaverPublishCircuitBreaker({
+    allowPublish: job.allowPublish,
+    status,
+    publishAttemptCount: job.publishAttemptCount,
+  })) return;
   await prisma.eventLog.upsert({
     where: { id: PUBLISH_CIRCUIT_BREAKER_EVENT_ID },
     create: {
@@ -787,10 +801,15 @@ export async function cancelNaverDraftJob(jobId: string) {
   const job = await prisma.naverDraftJob.findUnique({ where: { id: jobId } });
   if (!job) return null;
   if (["completed", "draft_saved"].includes(job.status)) throw new Error("NAVER_DRAFT_JOB_ALREADY_FINISHED");
-  return serializeNaverDraftJobWithPipeline(await prisma.naverDraftJob.update({
-    where: { id: jobId },
-    data: { status: "cancelled", completedAt: new Date() },
-  }));
+  const cancelled = await prisma.$transaction(async (tx) => {
+    const updated = await tx.naverDraftJob.update({
+      where: { id: jobId },
+      data: { status: "cancelled", claimedBy: null, claimedAt: null, completedAt: new Date() },
+    });
+    await clearNaverAuthHold(tx, jobId, "AUTH_HOLD_JOB_CANCELLED");
+    return updated;
+  }, { isolationLevel: "Serializable" });
+  return serializeNaverDraftJobWithPipeline(cancelled);
 }
 
 function maxClaimAgeDate() {
@@ -812,6 +831,122 @@ function safeRetryEventPayload(value: Prisma.JsonValue | undefined) {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, Prisma.JsonValue>
     : {};
+}
+
+function isClaimableNaverJob(job: Pick<NaverDraftJob, "status" | "claimedAt" | "allowPublish">, staleBefore: Date) {
+  return job.status === "queued"
+    || (job.allowPublish
+      && reclaimablePrePublishStatuses.includes(job.status)
+      && Boolean(job.claimedAt && job.claimedAt < staleBefore));
+}
+
+async function clearNaverAuthHold(
+  tx: Prisma.TransactionClient,
+  expectedJobId: string | null,
+  reason: string,
+) {
+  const event = await tx.eventLog.findUnique({ where: { id: NAVER_AUTH_HOLD_EVENT_ID } });
+  if (!event) return false;
+  const snapshot = parseNaverAuthHoldSnapshot(event.payload);
+  if (!snapshot.active || (expectedJobId && snapshot.jobId !== expectedJobId)) return false;
+  await tx.eventLog.update({
+    where: { id: NAVER_AUTH_HOLD_EVENT_ID },
+    data: {
+      timestamp: new Date(),
+      summary: "네이버 인증 보류가 해제되었습니다.",
+      payload: {
+        ...safeRetryEventPayload(event.payload),
+        active: false,
+        clearedAt: new Date().toISOString(),
+        clearReason: reason,
+      } as Prisma.InputJsonObject,
+    },
+  });
+  return true;
+}
+
+async function scheduleNaverAuthHold(
+  job: NaverDraftJob,
+  input: Pick<StatusReportInput, "status" | "claimedBy" | "errorCode" | "errorMessage" | "externalUrl">,
+) {
+  const now = new Date();
+  const retryAfter = new Date(now.getTime() + getNaverAuthHoldCooldownMs(process.env.NAVER_AUTH_HOLD_COOLDOWN_SECONDS));
+  return prisma.$transaction(async (tx) => {
+    const current = await tx.naverDraftJob.findUnique({ where: { id: job.id } });
+    if (!current) throw new Error("NAVER_DRAFT_JOB_NOT_FOUND");
+    if (!current.claimedBy || !input.claimedBy || current.claimedBy !== input.claimedBy) {
+      throw new Error("NAVER_AUTH_HOLD_AGENT_MISMATCH");
+    }
+    if (!reclaimablePrePublishStatuses.includes(current.status) || current.publishAttemptCount !== 0) {
+      throw new Error("NAVER_AUTH_HOLD_JOB_NOT_REQUEUEABLE");
+    }
+    const existing = await tx.eventLog.findUnique({ where: { id: NAVER_AUTH_HOLD_EVENT_ID } });
+    const previous = parseNaverAuthHoldSnapshot(existing?.payload);
+    const preserveExistingHold = previous.active && previous.jobId !== current.id;
+    const probeCount = previous.active && previous.jobId === current.id ? previous.probeCount + 1 : 1;
+    const updated = await tx.naverDraftJob.update({
+      where: { id: current.id },
+      data: {
+        status: "queued",
+        claimedBy: null,
+        claimedAt: null,
+        startedAt: null,
+        completedAt: null,
+        externalUrl: input.externalUrl,
+        errorCode: input.errorCode ?? "NAVER_LOGIN_OR_SECURITY_REQUIRED",
+        errorMessage: input.errorMessage,
+      },
+    });
+    if (preserveExistingHold) return updated;
+    const payload = {
+      active: true,
+      jobId: current.id,
+      publishKey: current.publishKey,
+      status: input.status,
+      heldAt: now.toISOString(),
+      retryAfter: retryAfter.toISOString(),
+      probeCount,
+    } as Prisma.InputJsonObject;
+    await tx.eventLog.upsert({
+      where: { id: NAVER_AUTH_HOLD_EVENT_ID },
+      create: {
+        id: NAVER_AUTH_HOLD_EVENT_ID,
+        type: "NaverPublisherAuthHold",
+        timestamp: now,
+        summary: "네이버 로그인 또는 보안 확인이 필요해 발행기만 일시 중지되었습니다.",
+        payload,
+      },
+      update: {
+        timestamp: now,
+        summary: "네이버 로그인 또는 보안 확인이 필요해 발행기만 일시 중지되었습니다.",
+        payload,
+      },
+    });
+    return updated;
+  }, { isolationLevel: "Serializable" });
+}
+
+async function reportNaverSessionReady(job: NaverDraftJob, input: StatusReportInput) {
+  return prisma.$transaction(async (tx) => {
+    const current = await tx.naverDraftJob.findUnique({ where: { id: job.id } });
+    if (!current) throw new Error("NAVER_DRAFT_JOB_NOT_FOUND");
+    if (!current.claimedBy || !input.claimedBy || current.claimedBy !== input.claimedBy) {
+      throw new Error("NAVER_SESSION_READY_AGENT_MISMATCH");
+    }
+    const updated = await tx.naverDraftJob.update({
+      where: { id: current.id },
+      data: {
+        status: "in_progress",
+        startedAt: current.startedAt ?? new Date(),
+        claimedAt: new Date(),
+        completedAt: null,
+        errorCode: null,
+        errorMessage: null,
+      },
+    });
+    await clearNaverAuthHold(tx, current.id, "NAVER_SESSION_READY");
+    return updated;
+  }, { isolationLevel: "Serializable" });
 }
 
 async function scheduleSafeNaverDraftRetry(
@@ -876,44 +1011,135 @@ async function scheduleSafeNaverDraftRetry(
   return updated;
 }
 
-export async function getNextNaverDraftJob() {
-  const staleBefore = maxClaimAgeDate();
-  const publishCircuitBreaker = await getPublishCircuitBreaker();
-  const candidates = await prisma.naverDraftJob.findMany({
-    where: publishCircuitBreaker.active
-      ? { status: "queued", allowPublish: false }
-      : {
-        OR: [
-          { status: "queued" },
-          { allowPublish: true, status: { in: reclaimablePrePublishStatuses }, claimedAt: { lt: staleBefore } },
-        ],
-      },
-    orderBy: { createdAt: "asc" },
-    take: 50,
+async function expireLateNaverDraftJob(job: NaverDraftJob, now: Date) {
+  if (!isNaverDraftScheduleExpired(job, now)) return false;
+  await prisma.naverDraftJob.updateMany({
+    where: { id: job.id, status: job.status },
+    data: {
+      status: "failed",
+      claimedBy: null,
+      claimedAt: null,
+      completedAt: now,
+      errorCode: "NAVER_SCHEDULE_EXPIRED",
+      errorMessage: "The scheduled publishing window expired before the job could be safely leased.",
+    },
   });
-  const now = new Date();
-  const job = candidates.find((candidate) => isNaverDraftClaimDue(candidate, now));
-  return job ? serializeNaverDraftJobWithPipeline(job) : null;
+  return true;
 }
 
-export async function claimNaverDraftJob(jobId: string, claimedBy: string) {
-  const now = new Date();
+export async function getNextNaverDraftJob() {
   const staleBefore = maxClaimAgeDate();
-  const current = await prisma.naverDraftJob.findUnique({ where: { id: jobId } });
-  if (!current || !isNaverDraftClaimDue(current, now)) return null;
-  if (current.allowPublish && (await getPublishCircuitBreaker()).active) return null;
-  const updated = await prisma.naverDraftJob.updateMany({
+  const now = new Date();
+  const publishCircuit = await getPublishCircuitBreaker();
+  const authHoldEvent = await prisma.eventLog.findUnique({ where: { id: NAVER_AUTH_HOLD_EVENT_ID } });
+  const authHold = parseNaverAuthHoldSnapshot(authHoldEvent?.payload);
+  if (authHold.active) {
+    const heldJob = authHold.jobId
+      ? await prisma.naverDraftJob.findUnique({ where: { id: authHold.jobId } })
+      : null;
+    const decision = evaluateNaverAuthHold({
+      snapshot: authHold,
+      nowMs: now.getTime(),
+      heldJob: heldJob ? {
+        id: heldJob.id,
+        status: heldJob.status,
+        publishAttemptCount: heldJob.publishAttemptCount,
+        claimable: isClaimableNaverJob(heldJob, staleBefore) && isNaverDraftClaimDue(heldJob, now),
+      } : null,
+    });
+    if (decision.action === "wait") return null;
+    if (decision.action === "probe" && heldJob) {
+      if (await expireLateNaverDraftJob(heldJob, now)) return null;
+      if (publishCircuit.active && heldJob.allowPublish) return null;
+      return serializeNaverDraftJobWithPipeline(heldJob);
+    }
+    if (decision.action === "clear") {
+      await prisma.$transaction((tx) => clearNaverAuthHold(tx, authHold.jobId, decision.reason), {
+        isolationLevel: "Serializable",
+      });
+    }
+  }
+  const candidates = await prisma.naverDraftJob.findMany({
     where: {
-      id: jobId,
+      ...(publishCircuit.active ? { allowPublish: false } : {}),
       OR: [
         { status: "queued" },
         { allowPublish: true, status: { in: reclaimablePrePublishStatuses }, claimedAt: { lt: staleBefore } },
       ],
     },
-    data: { status: "claimed", claimedBy, claimedAt: now, errorCode: null, errorMessage: null },
+    orderBy: { createdAt: "asc" },
+    take: 50,
   });
-  if (updated.count === 0) return null;
-  return getNaverDraftJob(jobId);
+  for (const candidate of candidates) {
+    if (await expireLateNaverDraftJob(candidate, now)) continue;
+    if (isNaverDraftClaimDue(candidate, now)) return serializeNaverDraftJobWithPipeline(candidate);
+  }
+  return null;
+}
+
+export async function claimNaverDraftJob(jobId: string, claimedBy: string) {
+  const now = new Date();
+  const staleBefore = maxClaimAgeDate();
+  const claimed = await prisma.$transaction(async (tx) => {
+    const current = await tx.naverDraftJob.findUnique({ where: { id: jobId } });
+    if (!current || !isNaverDraftClaimDue(current, now)) return null;
+    if (isNaverDraftScheduleExpired(current, now)) {
+      await tx.naverDraftJob.update({
+        where: { id: current.id },
+        data: {
+          status: "failed",
+          claimedBy: null,
+          claimedAt: null,
+          completedAt: now,
+          errorCode: "NAVER_SCHEDULE_EXPIRED",
+          errorMessage: "The scheduled publishing window expired before the job could be safely claimed.",
+        },
+      });
+      return null;
+    }
+    if (current.allowPublish) {
+      const circuit = await tx.eventLog.findUnique({ where: { id: PUBLISH_CIRCUIT_BREAKER_EVENT_ID } });
+      const payload = circuit && typeof circuit.payload === "object" && !Array.isArray(circuit.payload)
+        ? circuit.payload as Record<string, Prisma.JsonValue>
+        : {};
+      if (payload.active === true) return null;
+    }
+    const authHoldEvent = await tx.eventLog.findUnique({ where: { id: NAVER_AUTH_HOLD_EVENT_ID } });
+    const authHold = parseNaverAuthHoldSnapshot(authHoldEvent?.payload);
+    if (authHold.active) {
+      const heldJob = authHold.jobId
+        ? await tx.naverDraftJob.findUnique({ where: { id: authHold.jobId } })
+        : null;
+      const decision = evaluateNaverAuthHold({
+        snapshot: authHold,
+        nowMs: now.getTime(),
+        heldJob: heldJob ? {
+          id: heldJob.id,
+          status: heldJob.status,
+          publishAttemptCount: heldJob.publishAttemptCount,
+          claimable: isClaimableNaverJob(heldJob, staleBefore) && isNaverDraftClaimDue(heldJob, now),
+        } : null,
+      });
+      if (decision.action === "clear") {
+        await clearNaverAuthHold(tx, authHold.jobId, decision.reason);
+      } else if (decision.action !== "probe" || decision.jobId !== jobId) {
+        return null;
+      }
+    }
+    const updated = await tx.naverDraftJob.updateMany({
+      where: {
+        id: jobId,
+        OR: [
+          { status: "queued" },
+          { allowPublish: true, status: { in: reclaimablePrePublishStatuses }, claimedAt: { lt: staleBefore } },
+        ],
+      },
+      data: { status: "claimed", claimedBy, claimedAt: now, errorCode: null, errorMessage: null },
+    });
+    if (updated.count === 0) return null;
+    return tx.naverDraftJob.findUnique({ where: { id: jobId } });
+  }, { isolationLevel: "Serializable" });
+  return claimed ? serializeNaverDraftJobWithPipeline(claimed) : null;
 }
 
 function parseNonNegativeInt(value: string | undefined, fallback: number) {
@@ -934,6 +1160,19 @@ function isAllowedPublishedUrl(value?: string) {
 async function beginNaverPublish(jobId: string, claimedBy?: string) {
   const current = await prisma.naverDraftJob.findUnique({ where: { id: jobId } });
   if (!current) throw new Error("NAVER_DRAFT_JOB_NOT_FOUND");
+  if (isNaverDraftScheduleExpired(current)) {
+    return prisma.naverDraftJob.update({
+      where: { id: current.id },
+      data: {
+        status: "failed",
+        claimedBy: null,
+        claimedAt: null,
+        completedAt: new Date(),
+        errorCode: "NAVER_SCHEDULE_EXPIRED",
+        errorMessage: "The scheduled publishing window expired before publishing began.",
+      },
+    });
+  }
   if (current.status === "publish_ready" && current.allowPublish && !isNaverDraftPublishDue(current)) {
     return current;
   }
@@ -1038,8 +1277,33 @@ export async function reportNaverDraftJobStatus(jobId: string, input: StatusRepo
   const now = new Date();
   const current = await prisma.naverDraftJob.findUnique({ where: { id: jobId } });
   if (!current) throw new Error("NAVER_DRAFT_JOB_NOT_FOUND");
+  if (current.errorCode === "NAVER_SCHEDULE_EXPIRED") {
+    return serializeNaverDraftJobWithPipeline(current);
+  }
+  if (isNaverSessionReadyProgress(input)) {
+    return serializeNaverDraftJobWithPipeline(await reportNaverSessionReady(current, input));
+  }
   if (input.status === "published" && (current.status !== "publishing" || !isAllowedPublishedUrl(input.publishedUrl))) {
     throw new Error("NAVER_PUBLISHED_RESULT_INVALID");
+  }
+  if (isNaverAuthHoldStatus(input.status)) {
+    if (!current.claimedBy || !input.claimedBy || current.claimedBy !== input.claimedBy) {
+      throw new Error("NAVER_AUTH_HOLD_AGENT_MISMATCH");
+    }
+    if (canRequeueNaverAuthHoldJob(current.publishAttemptCount)) {
+      return serializeNaverDraftJobWithPipeline(await scheduleNaverAuthHold(current, input));
+    }
+    const unsafe = await prisma.naverDraftJob.update({
+      where: { id: current.id },
+      data: {
+        status: "publish_failed",
+        completedAt: now,
+        errorCode: "NAVER_AUTH_AFTER_PUBLISH_ATTEMPT",
+        errorMessage: input.errorMessage ?? "Authentication changed after publishing began; manual duplicate review is required.",
+      },
+    });
+    await activatePublishCircuitBreaker(unsafe, "publish_failed", unsafe.errorMessage ?? undefined);
+    return serializeNaverDraftJobWithPipeline(unsafe);
   }
   const safeRetry = await scheduleSafeNaverDraftRetry(current, input);
   if (safeRetry) return serializeNaverDraftJobWithPipeline(safeRetry);
