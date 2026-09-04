@@ -84,6 +84,7 @@ test("reviewed installer quiesces, verifies the database, captures exact process
   assert.match(script, /deployment_hold/);
   assert.match(script, /Wait-ForDeploymentHold/);
   assert.match(script, /\[AllowEmptyString\(\)\]\[string\]\$Value/);
+  assert.match(script, /\[AllowEmptyCollection\(\)\]\[object\[\]\]\$Captured/);
   assert.match(script, /Assert-FreshIdentityRecord/);
   assert.match(script, /Get-CimInstance Win32_Process/);
   assert.match(script, /ParentProcessId/);
@@ -97,6 +98,7 @@ test("reviewed installer quiesces, verifies the database, captures exact process
   assert.match(script, /Export-ScheduledTask/);
   assert.match(script, /Register-ScheduledTask -TaskName \$TaskName -Xml \$taskXml/);
   assert.match(script, /\.failed-/);
+  assert.match(script, /Unsafe staging cleanup target/);
   assert.match(script, /ACL-protected recoverable backup retained/);
   assert.ok(
     script.indexOf("$captured = @(Get-CapturedAgentProcesses") <

@@ -280,7 +280,7 @@ function Test-SameProcessInstance {
 }
 
 function Stop-CapturedAgentProcesses {
-  param([Parameter(Mandatory = $true)][object[]]$Captured)
+  param([Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Captured)
   if ($Captured.Count -eq 0) { return }
   $parentById = @{}
   foreach ($process in $Captured) { $parentById[[int]$process.ProcessId] = [int]$process.ParentProcessId }
@@ -621,6 +621,18 @@ try {
 } catch {
   $originalError = $_
   $rollbackErrors = [Collections.Generic.List[string]]::new()
+  try {
+    if ($staging -and (Test-Path -LiteralPath $staging -PathType Container)) {
+      $resolvedStaging = (Resolve-Path -LiteralPath $staging).Path
+      if ((Split-Path -Parent $resolvedStaging) -ne $installParent -or
+          -not $resolvedStaging.StartsWith("$installFull.next-", [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Unsafe staging cleanup target: $resolvedStaging"
+      }
+      Remove-Item -LiteralPath $resolvedStaging -Recurse -Force
+    }
+  } catch {
+    $rollbackErrors.Add("staging cleanup: $($_.Exception.Message)")
+  }
   try {
     if ($activeInstalled -and (Test-Path -LiteralPath $installFull -PathType Container)) {
       $rollbackEnv = Join-Path $installFull ".env"
