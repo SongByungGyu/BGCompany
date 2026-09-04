@@ -8,6 +8,10 @@ import {
   STOCK_BLOG_CANONICAL_SOURCE_COUNT,
 } from "./canonical-stock-blog-body.ts";
 import { KIS_SECTOR_DEGRADED_DISCLOSURE } from "./references/kis-sector-degraded-policy.ts";
+import {
+  FRED_DEGRADED_DISCLOSURE,
+  FRED_DEGRADED_LEGACY_DISCLOSURES,
+} from "./references/fred-degraded-policy.ts";
 import type {
   MarketSnapshot,
   ReferenceItem,
@@ -37,6 +41,24 @@ const kisSectorDegradedSnapshot: MarketSnapshot = {
   degradedMode: "kis_sector_unavailable",
   degradedProviders: ["kis-sector"],
   disclosures: [KIS_SECTOR_DEGRADED_DISCLOSURE],
+  freshness: {
+    status: "fresh",
+    checkedAt: "2026-09-04T00:00:00.000Z",
+    staleItems: [],
+  },
+  missingItems: [],
+};
+
+const legacyFredDegradedSnapshot: MarketSnapshot = {
+  provider: "kis-fred",
+  status: "ready",
+  marketDate: "2026-09-04",
+  collectedAt: "2026-09-04T00:00:00.000Z",
+  dataQuality: "partial",
+  fallbackUsed: false,
+  degradedMode: "fred_unavailable",
+  degradedProviders: ["fred"],
+  disclosures: [FRED_DEGRADED_LEGACY_DISCLOSURES[0]],
   freshness: {
     status: "fresh",
     checkedAt: "2026-09-04T00:00:00.000Z",
@@ -102,6 +124,18 @@ test("출처·제한 고지·투자 유의문구를 중복 없이 정해진 순�
   assert.ok(once.indexOf("함께 확인한 기사") < once.indexOf(STOCK_BLOG_INVESTMENT_DISCLAIMER));
   assert.equal(inspectStockBlogTailContract(once, kisSectorDegradedSnapshot).ok, true);
   assert.equal(inspectStockBlogSourceContract(once, references).ok, true);
+});
+
+test("기존 체크포인트의 내부 FRED 문구는 공개용 문구로 바꾼다", () => {
+  const body = canonicalizeStockBlogBody({
+    body: `본문\n\n마무리\n\n정리\n\n${FRED_DEGRADED_LEGACY_DISCLOSURES[0]}`,
+    referenceItems: references,
+    marketSnapshot: legacyFredDegradedSnapshot,
+  });
+
+  assert.equal(body.includes(FRED_DEGRADED_LEGACY_DISCLOSURES[0]), false);
+  assert.equal(body.split(FRED_DEGRADED_DISCLOSURE).length - 1, 1);
+  assert.equal(inspectStockBlogTailContract(body, legacyFredDegradedSnapshot).ok, true);
 });
 
 test("실제 출처가 3건보다 적으면 기존 기사 내용을 지우지 않고 계약 실패로 남긴다", () => {

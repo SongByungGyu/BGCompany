@@ -91,6 +91,7 @@ test("tells the writer the exact reduction needed for an overlong study draft", 
   assert.equal(feedback.currentBodyLength, 3841);
   assert.equal(feedback.targetBodyRange, "2300~2900자");
   assert.equal(feedback.requiredReductionChars, 941);
+  assert.equal(feedback.requiredRevisions.some((item) => /최소 941자를 줄여/.test(item)), true);
 });
 
 test("preserves the latest successful writer and QA pair when a later revision fails", () => {

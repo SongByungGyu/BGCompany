@@ -3,7 +3,10 @@ import type { KisResult } from "./kis-market-data-provider";
 import type { MarketSnapshot, MarketSnapshotFreshness } from "./reference-types";
 
 export const FRED_DEGRADED_MODE = "fred_unavailable" as const;
-export const FRED_DEGRADED_DISCLOSURE = "FRED 거시지표 조회 지연으로 미국 국채금리 또는 경제지표 일정 일부를 이번 브리핑에서 제외했습니다.";
+export const FRED_DEGRADED_DISCLOSURE = "미국 금리와 경제지표는 확인 가능한 최신 공식 수치만 반영했습니다.";
+export const FRED_DEGRADED_LEGACY_DISCLOSURES = [
+  "FRED 거시지표 조회 지연으로 미국 국채금리 또는 경제지표 일정 일부를 이번 브리핑에서 제외했습니다.",
+] as const;
 
 const TRANSIENT_CODES = new Set([
   // Credential failures are degradable only after the official-source
@@ -46,6 +49,10 @@ export function canUseFredDegradedMode(kis: KisResult, fred: FredResult, freshne
 }
 
 export function isAllowedFredDegradedSnapshot(snapshot?: MarketSnapshot) {
+  const hasDisclosure = snapshot?.disclosures?.some((item) => (
+    item === FRED_DEGRADED_DISCLOSURE
+    || FRED_DEGRADED_LEGACY_DISCLOSURES.includes(item as typeof FRED_DEGRADED_LEGACY_DISCLOSURES[number])
+  ));
   return Boolean(
     snapshot
       && snapshot.provider === "kis-fred"
@@ -55,12 +62,15 @@ export function isAllowedFredDegradedSnapshot(snapshot?: MarketSnapshot) {
       && snapshot.degradedProviders?.includes("fred")
       && snapshot.freshness?.status === "fresh"
       && snapshot.freshness.staleItems.length === 0
-      && snapshot.disclosures?.includes(FRED_DEGRADED_DISCLOSURE),
+      && hasDisclosure,
   );
 }
 
 export function ensureFredDegradedDisclosure(body: string, snapshot?: MarketSnapshot) {
-  if (!isAllowedFredDegradedSnapshot(snapshot) || body.includes(FRED_DEGRADED_DISCLOSURE)) return body;
-  const trimmed = body.trimEnd();
+  if (!isAllowedFredDegradedSnapshot(snapshot)) return body;
+  let normalized = body;
+  for (const legacy of FRED_DEGRADED_LEGACY_DISCLOSURES) normalized = normalized.split(legacy).join("");
+  if (normalized.includes(FRED_DEGRADED_DISCLOSURE)) return normalized;
+  const trimmed = normalized.replace(/\n{3,}/g, "\n\n").trimEnd();
   return `${trimmed}${trimmed ? "\n\n" : ""}${FRED_DEGRADED_DISCLOSURE}`;
 }

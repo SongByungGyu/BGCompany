@@ -314,16 +314,21 @@ function horizontalComparisonSvg(input: {
 function ratesAndFxSvg(input: {
   fx: number;
   fxChange: number;
-  twoYear: number;
+  twoYear?: number;
   tenYear: number;
-  spread: number;
+  spread?: number;
   source: string;
 }) {
-  const maxRate = Math.max(input.twoYear, input.tenYear, 0.01);
+  const maxRate = Math.max(input.twoYear ?? 0, input.tenYear, 0.01);
   const rateRows = [
-    { label: "미국 2년물", value: input.twoYear, y: 330 },
-    { label: "미국 10년물", value: input.tenYear, y: 430 },
-  ].map((row) => `<g><text x="650" y="${row.y}" fill="#DDEAF5" font-size="20" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${row.label}</text><rect x="650" y="${row.y + 18}" width="390" height="28" rx="8" fill="#193B5A"/><rect x="650" y="${row.y + 18}" width="${Math.round(row.value / maxRate * 390)}" height="28" rx="8" fill="#9B8CFF"/><text x="1065" y="${row.y + 41}" text-anchor="end" fill="#FFFFFF" font-size="19" font-weight="800" font-family="Arial,sans-serif">${row.value.toFixed(2)}%</text></g>`).join("");
+    ...(input.twoYear === undefined ? [] : [{ label: "미국 2년물", value: input.twoYear }]),
+    { label: "미국 10년물", value: input.tenYear },
+  ].map((row, index, rows) => ({
+    ...row,
+    y: rows.length === 1 ? 370 : 330 + (index * 100),
+  })).map((row) => `<g><text x="650" y="${row.y}" fill="#DDEAF5" font-size="20" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${row.label}</text><rect x="650" y="${row.y + 18}" width="390" height="28" rx="8" fill="#193B5A"/><rect x="650" y="${row.y + 18}" width="${Math.round(row.value / maxRate * 390)}" height="28" rx="8" fill="#9B8CFF"/><text x="1065" y="${row.y + 41}" text-anchor="end" fill="#FFFFFF" font-size="19" font-weight="800" font-family="Arial,sans-serif">${row.value.toFixed(2)}%</text></g>`).join("");
+  const spreadRow = input.spread === undefined ? "" : `<text x="650" y="535" fill="#BFD2E5" font-size="18" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">10년-2년 금리차</text>
+    <text x="1065" y="535" text-anchor="end" fill="#FFFFFF" font-size="22" font-weight="800" font-family="Arial,sans-serif">${input.spread.toFixed(2)}%p</text>`;
   const content = `<g>
     <rect x="72" y="218" width="490" height="335" rx="20" fill="#0A2138" stroke="#75BFFF" stroke-opacity="0.3"/>
     <text x="112" y="273" fill="#BFD2E5" font-size="20" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">원·달러 환율</text>
@@ -331,8 +336,7 @@ function ratesAndFxSvg(input: {
     <text x="112" y="430" fill="#BFD2E5" font-size="21" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">원 · 전일 대비 ${signed(input.fxChange)}%</text>
     <text x="650" y="260" fill="#BFD2E5" font-size="20" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">미국 국채금리 비교</text>
     ${rateRows}
-    <text x="650" y="535" fill="#BFD2E5" font-size="18" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">10년-2년 금리차</text>
-    <text x="1065" y="535" text-anchor="end" fill="#FFFFFF" font-size="22" font-weight="800" font-family="Arial,sans-serif">${input.spread.toFixed(2)}%p</text>
+    ${spreadRow}
   </g>`;
   return chartFrame({ title: "환율과 미국 국채금리 현황", subtitle: "서로 다른 단위는 분리된 영역으로 표시했습니다.", source: input.source, content, accent: "#9B8CFF" });
 }
@@ -1053,9 +1057,13 @@ export async function generateStockBlogImages(input: {
     ) {
       throw new Error("IMAGE_DATA_MISSING_OVERSEAS_CORE");
     }
-    const twoYear = numericMetric(snapshot.macro?.us2Year, "value", "US2Y_VALUE");
+    const twoYear = snapshot.macro?.us2Year
+      ? numericMetric(snapshot.macro.us2Year, "value", "US2Y_VALUE")
+      : undefined;
     const tenYear = numericMetric(snapshot.macro?.us10Year, "value", "US10Y_VALUE");
-    const spread = numericMetric(snapshot.macro?.yieldSpread10Y2Y, "value", "SPREAD_VALUE");
+    const spread = snapshot.macro?.yieldSpread10Y2Y
+      ? numericMetric(snapshot.macro.yieldSpread10Y2Y, "value", "SPREAD_VALUE")
+      : undefined;
     const flows = snapshot.korea?.investorFlows ?? [];
     const kospiFlows = [
       { index: flows.findIndex((metric) => metric.label === "KOSPI 외국인 순매수"), label: "외국인" },
@@ -1167,9 +1175,9 @@ export async function generateStockBlogImages(input: {
         svg: ratesAndFxSvg({
           fx: fx.value,
           fxChange: fxChange.value,
-          twoYear: twoYear.value,
+          twoYear: twoYear?.value,
           tenYear: tenYear.value,
-          spread: spread.value,
+          spread: spread?.value,
           source: macroSource,
         }),
       });
@@ -1259,20 +1267,28 @@ export async function generateStockBlogImages(input: {
         title: "원·달러 환율과 미국 국채금리 현황",
         placementAfterHeading: placements.fxAndUsYields,
         imageUrl: `${relativeDir}/fx-and-us-yields.svg`,
-        caption: "원·달러 환율과 미국 2년물·10년물 국채금리 비교",
+        caption: twoYear
+          ? "원·달러 환율과 미국 2년물·10년물 국채금리 비교"
+          : "원·달러 환율과 미국 10년물 국채금리 비교",
         sourceLabel: macroSource,
         sourceName: "한국투자증권 Open API · FRED",
         sourceUrl: tenYear.metric.url,
         licenseType: "generated-data-chart",
         collectedAt: snapshot.collectedAt,
         usageAllowed: true,
-        dataKeys: ["us.fx.value", "us.fx.changePct", "macro.us2Year.value", "macro.us10Year.value", "macro.yieldSpread10Y2Y.value"],
+        dataKeys: [
+          "us.fx.value",
+          "us.fx.changePct",
+          ...(twoYear ? ["macro.us2Year.value"] : []),
+          "macro.us10Year.value",
+          ...(spread ? ["macro.yieldSpread10Y2Y.value"] : []),
+        ],
         dataPoints: [
           dataPoint("us.fx.value", "USD/KRW", fx.value, "원", fx.metric.asOf!),
           dataPoint("us.fx.changePct", "USD/KRW 등락률", fxChange.value, "%", fxChange.metric.asOf!),
-          dataPoint("macro.us2Year.value", "미국 2년물", twoYear.value, "%", twoYear.metric.asOf!),
+          ...(twoYear ? [dataPoint("macro.us2Year.value", "미국 2년물", twoYear.value, "%", twoYear.metric.asOf!)] : []),
           dataPoint("macro.us10Year.value", "미국 10년물", tenYear.value, "%", tenYear.metric.asOf!),
-          dataPoint("macro.yieldSpread10Y2Y.value", "10Y-2Y", spread.value, "%p", spread.metric.asOf!),
+          ...(spread ? [dataPoint("macro.yieldSpread10Y2Y.value", "10Y-2Y", spread.value, "%p", spread.metric.asOf!)] : []),
         ],
         width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
       });

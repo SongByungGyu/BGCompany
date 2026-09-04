@@ -1,5 +1,6 @@
 import {
   FRED_DEGRADED_DISCLOSURE,
+  FRED_DEGRADED_LEGACY_DISCLOSURES,
   isAllowedFredDegradedSnapshot,
 } from "./references/fred-degraded-policy.ts";
 import {
@@ -141,6 +142,7 @@ function sourceSectionBounds(body: string) {
       isConclusionHeading(value)
       || value === STOCK_BLOG_INVESTMENT_DISCLAIMER
       || value === FRED_DEGRADED_DISCLOSURE
+      || FRED_DEGRADED_LEGACY_DISCLOSURES.includes(value as typeof FRED_DEGRADED_LEGACY_DISCLOSURES[number])
       || value === KIS_SECTOR_DEGRADED_DISCLOSURE
       || value === KIS_OVERSEAS_DEGRADED_DISCLOSURE
     ) {
@@ -252,6 +254,7 @@ function removeExistingSourceSections(body: string) {
         || isConclusionHeading(value)
         || value === STOCK_BLOG_INVESTMENT_DISCLAIMER
         || value === FRED_DEGRADED_DISCLOSURE
+        || FRED_DEGRADED_LEGACY_DISCLOSURES.includes(value as typeof FRED_DEGRADED_LEGACY_DISCLOSURES[number])
         || value === KIS_SECTOR_DEGRADED_DISCLOSURE
         || value === KIS_OVERSEAS_DEGRADED_DISCLOSURE
       ) break;
@@ -279,6 +282,7 @@ export function normalizeStockBlogTail(body: string, snapshot?: MarketSnapshot) 
   for (const tailItem of [
     STOCK_BLOG_INVESTMENT_DISCLAIMER,
     FRED_DEGRADED_DISCLOSURE,
+    ...FRED_DEGRADED_LEGACY_DISCLOSURES,
     KIS_SECTOR_DEGRADED_DISCLOSURE,
     KIS_OVERSEAS_DEGRADED_DISCLOSURE,
   ]) {
@@ -312,6 +316,7 @@ export function inspectStockBlogTailContract(body: string, snapshot?: MarketSnap
   const requiredDisclosures = requiredMarketDataDisclosures(snapshot);
   const knownDisclosures = [
     FRED_DEGRADED_DISCLOSURE,
+    ...FRED_DEGRADED_LEGACY_DISCLOSURES,
     KIS_SECTOR_DEGRADED_DISCLOSURE,
     KIS_OVERSEAS_DEGRADED_DISCLOSURE,
   ];

@@ -48,6 +48,10 @@ function draftLengthRevision(
   if (length === undefined) return undefined;
   const { bodyLength } = getStockBlogEditorialPolicy(contentType);
   if (length >= bodyLength.min && length <= bodyLength.max) return undefined;
+  if (length > bodyLength.max) {
+    const reduction = length - bodyLength.targetMax;
+    return `최종 공개 본문은 현재 ${length}자이므로 최소 ${reduction}자를 줄여 ${bodyLength.targetMin}~${bodyLength.targetMax}자로 다시 작성하세요. 중복 수치와 국내장 설명부터 압축하고 새 문단이나 대체 문구를 덧붙이지 마세요.`;
+  }
   return `최종 공개 본문을 공백 포함 ${bodyLength.min}~${bodyLength.max}자로 작성하고 ${bodyLength.targetMin}~${bodyLength.targetMax}자를 목표로 하세요. 현재 ${length}자입니다. 검증된 참고자료 안에서만 설명을 보강하고 수치·일정은 추정하지 마세요.`;
 }
 
