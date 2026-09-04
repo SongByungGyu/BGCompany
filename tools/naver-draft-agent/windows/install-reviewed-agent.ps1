@@ -23,6 +23,28 @@ Assert-SafeRuntimePath -Path $installFull -Label "InstallRoot"
 if (-not (Test-Path -LiteralPath $installParent -PathType Container)) {
   throw "Install parent not found: $installParent"
 }
+
+function Move-RuntimeDirectoryWithRetry {
+  param(
+    [Parameter(Mandatory = $true)][string]$Source,
+    [Parameter(Mandatory = $true)][string]$Destination,
+    [ValidateRange(5, 120)][int]$TimeoutSeconds = 45
+  )
+  $deadline = [DateTimeOffset]::UtcNow.AddSeconds($TimeoutSeconds)
+  $lastError = ""
+  do {
+    try {
+      Move-Item -LiteralPath $Source -Destination $Destination -ErrorAction Stop
+      return
+    } catch {
+      $lastError = $_.Exception.Message
+      if ([DateTimeOffset]::UtcNow -ge $deadline) { break }
+      Start-Sleep -Milliseconds 500
+    }
+  } while ($true)
+  throw "Timed out moving runtime directory from $Source to $Destination. $lastError"
+}
+
 if ($resolvedSource -eq $installFull -or
     $installFull.StartsWith("$resolvedSource\", [StringComparison]::OrdinalIgnoreCase) -or
     $resolvedSource.StartsWith("$installFull\", [StringComparison]::OrdinalIgnoreCase)) {
@@ -546,11 +568,11 @@ try {
   $stagingIdentity = & (Join-Path $staging "windows\audit-runtime-drift.ps1") -AgentRoot $staging
 
   if ($existing) {
-    Move-Item -LiteralPath $installFull -Destination $backup
+    Move-RuntimeDirectoryWithRetry -Source $installFull -Destination $backup
     $movedExisting = $true
     & $sourceAcl -AgentRoot $backup
   }
-  Move-Item -LiteralPath $staging -Destination $installFull
+  Move-RuntimeDirectoryWithRetry -Source $staging -Destination $installFull
   $activeInstalled = $true
   & (Join-Path $installFull "windows\protect-env-acl.ps1") -AgentRoot $installFull
   $activeIdentity = & (Join-Path $installFull "windows\audit-runtime-drift.ps1") -AgentRoot $installFull
@@ -665,11 +687,11 @@ try {
         -IgnoreForeignListener)
       Stop-CapturedAgentProcesses -Captured $newCaptured
       Assert-NoRootAgentProcess -Root $installFull
-      Move-Item -LiteralPath $installFull -Destination $failed
+      Move-RuntimeDirectoryWithRetry -Source $installFull -Destination $failed
       $activeInstalled = $false
     }
     if ($movedExisting -and (Test-Path -LiteralPath $backup -PathType Container)) {
-      Move-Item -LiteralPath $backup -Destination $installFull
+      Move-RuntimeDirectoryWithRetry -Source $backup -Destination $installFull
       $movedExisting = $false
       & $sourceAcl -AgentRoot $installFull
       if ($temporaryOldHoldCreated) {

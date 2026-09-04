@@ -87,6 +87,8 @@ test("reviewed installer quiesces, verifies the database, captures exact process
   assert.match(script, /\[AllowEmptyCollection\(\)\]\[object\[\]\]\$Captured/);
   assert.match(script, /Assert-FreshIdentityRecord/);
   assert.match(script, /Get-CimInstance Win32_Process/);
+  assert.match(script, /Move-RuntimeDirectoryWithRetry/);
+  assert.match(script, /Timed out moving runtime directory/);
   assert.match(script, /ParentProcessId/);
   assert.match(script, /CreationStamp/);
   assert.match(script, /Test-SameProcessInstance/);
