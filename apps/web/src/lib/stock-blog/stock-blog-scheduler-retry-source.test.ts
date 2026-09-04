@@ -116,7 +116,7 @@ test("발행 회로가 열려도 파이프라인과 큐 조립은 진행하고 �
   assert.doesNotMatch(createImplementation, /getPublishCircuitBreaker/);
   assert.match(createImplementation, /publishKey: \{ in: acceptedPublishKeys \}/);
   assert.match(createImplementation, /acceptedPublishKeys\.includes\(existing\.publishKey \?\? ""\)/);
-  assert.match(naverDraftSource, /publishCircuitBreaker\.active[\s\S]{0,100}\{ status: "queued", allowPublish: false \}/);
+  assert.match(naverDraftSource, /autoPublishLeaseBlocked \? \{ allowPublish: false \} : \{\}/);
   assert.match(naverDraftSource, /status: "publish_ready" as const,[\s\S]{0,150}NAVER_PUBLISH_CIRCUIT_BREAKER_ACTIVE/);
   assert.match(naverAgentSource, /status === "publish_ready" && errorCode === "NAVER_PUBLISH_CIRCUIT_BREAKER_ACTIVE"/);
   assert.match(naverWriterSource, /gateStillWaiting[\s\S]{0,150}\? "publish_ready"/);

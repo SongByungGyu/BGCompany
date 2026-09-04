@@ -48,7 +48,8 @@ test("publish breaker pauses leasing without suppressing content and queue creat
 });
 
 test("breaker keeps publish_ready non-terminal and late scheduled jobs expire explicitly", () => {
-  assert.match(jobsSource, /if \(circuitPayload\.active === true\) \{\s*return job;/);
+  assert.match(jobsSource, /if \(circuitPayload\.active === true\)[\s\S]{0,500}status: "publish_ready" as const/);
+  assert.match(jobsSource, /NAVER_PUBLISH_CIRCUIT_BREAKER_ACTIVE/);
   assert.match(jobsSource, /errorCode:\s*"NAVER_SCHEDULE_EXPIRED"/);
 });
 

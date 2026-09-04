@@ -60,4 +60,3 @@ foreach ($target in Get-ChildItem -LiteralPath $resolvedAgentRoot -Force -Recurs
   Set-RestrictedAcl -Path $target.FullName -IsDirectory $target.PSIsContainer
 }
 Write-Host "Hardened runtime ACL for current user, SYSTEM, and Administrators: $resolvedAgentRoot"
-
