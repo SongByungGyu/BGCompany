@@ -363,6 +363,19 @@ export function asExplicitRequiredRevisions(value: unknown) {
   return value as string[];
 }
 
+export function restoreQaRequiredRevisions(result: Record<string, unknown>) {
+  const explicit = asExplicitRequiredRevisions(result.requiredRevisions);
+  if (explicit !== undefined) return explicit;
+  if (Object.prototype.hasOwnProperty.call(result, "requiredRevisions")) return undefined;
+  return result.ok === true
+    && result.publishReadiness === "ready"
+    && result.finalRecommendation === "approve"
+    && typeof result.qaScore === "number"
+    && result.qaScore >= STOCK_BLOG_EDITORIAL_QUALITY_TARGET
+    ? []
+    : undefined;
+}
+
 function asWriterSections(value: unknown) {
   if (!Array.isArray(value)) return undefined;
   const sections = value
@@ -1426,7 +1439,7 @@ function runFromEvent(event: {
       qualityNotes: asStringArray(qaResult.qualityNotes),
       riskNotes: asStringArray(qaResult.riskNotes),
       typoAndStyleNotes: asStringArray(qaResult.typoAndStyleNotes),
-      requiredRevisions: asExplicitRequiredRevisions(qaResult.requiredRevisions),
+      requiredRevisions: restoreQaRequiredRevisions(qaResult),
       optionalSuggestions: asStringArray(qaResult.optionalSuggestions),
       publishReadiness: qaResult.publishReadiness === "ready" || qaResult.publishReadiness === "needs_revision" || qaResult.publishReadiness === "blocked" ? qaResult.publishReadiness : undefined,
       qaScore: asNumber(qaResult.qaScore),
