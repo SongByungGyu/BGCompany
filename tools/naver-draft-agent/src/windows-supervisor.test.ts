@@ -132,6 +132,10 @@ test("environment ACL hardening protects the complete runtime including profile 
   assert.match(script, /Refusing ACL change outside AgentRoot/);
   assert.match(script, /SetAccessRuleProtection\(\$true, \$false\)/);
   assert.doesNotMatch(script, /SetOwner\(/);
+  assert.doesNotMatch(script, /Set-Acl/);
+  assert.match(script, /System\.IO\.FileSystemAclExtensions/);
+  assert.match(script, /\[IO\.Directory\]::SetAccessControl/);
+  assert.match(script, /\[IO\.File\]::SetAccessControl/);
   assert.match(script, /Get-ChildItem -LiteralPath \$resolvedAgentRoot -Force -Recurse/);
   assert.match(script, /ReparsePoint/);
   assert.match(script, /S-1-5-18/);

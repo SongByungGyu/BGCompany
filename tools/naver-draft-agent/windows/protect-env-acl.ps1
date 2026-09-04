@@ -48,7 +48,23 @@ function Set-RestrictedAcl {
     }
     [void]$acl.AddAccessRule($rule)
   }
-  Set-Acl -LiteralPath $fullPath -AclObject $acl
+  $aclExtensionsType = "System.IO.FileSystemAclExtensions" -as [type]
+  if ($aclExtensionsType) {
+    $item = if ($IsDirectory) { [IO.DirectoryInfo]::new($fullPath) } else { [IO.FileInfo]::new($fullPath) }
+    $securityType = if ($IsDirectory) {
+      [System.Security.AccessControl.DirectorySecurity]
+    } else {
+      [System.Security.AccessControl.FileSecurity]
+    }
+    $itemType = if ($IsDirectory) { [IO.DirectoryInfo] } else { [IO.FileInfo] }
+    $setAccessControl = $aclExtensionsType.GetMethod("SetAccessControl", [type[]]@($itemType, $securityType))
+    if (-not $setAccessControl) { throw "Access-only ACL API was not found for $fullPath" }
+    [void]$setAccessControl.Invoke($null, [object[]]@($item, $acl))
+  } elseif ($IsDirectory) {
+    [IO.Directory]::SetAccessControl($fullPath, $acl)
+  } else {
+    [IO.File]::SetAccessControl($fullPath, $acl)
+  }
 }
 
 Set-RestrictedAcl -Path $resolvedAgentRoot -IsDirectory $true
