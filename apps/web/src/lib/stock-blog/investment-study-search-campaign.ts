@@ -97,10 +97,10 @@ export function getInvestmentStudySearchCampaign(input: {
   angle?: InvestmentStudyEditorialAngle;
   collectedAt: string;
 }): InvestmentStudySearchCampaign | null {
-  if (input.marketDate === "2026-09-08" && input.angle === "upcoming_question") {
+  if (input.marketDate === "2026-09-07" && input.angle === "upcoming_question") {
     return cpiCampaign(input.collectedAt);
   }
-  if (input.marketDate === "2026-09-10" && input.angle === "result_or_practical") {
+  if (input.marketDate === "2026-09-07" && input.angle === "result_or_practical") {
     return broadcomCampaign(input.collectedAt);
   }
   return null;

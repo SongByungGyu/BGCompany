@@ -184,6 +184,7 @@ const PUBLISH_CIRCUIT_BREAKER_EVENT_ID = "event-stock-auto-publish-circuit-break
 type StockBlogSchedulerDefinition = StockBlogScheduleItem & {
   scheduleId: string;
   weekdays: number[];
+  marketDates?: string[];
   scheduledTime: string;
   publishTime?: string;
   maxAttempts?: number;
@@ -251,6 +252,42 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     recommendedRunnerMode: "hermes",
     topic: "이번 주 코스피·나스닥 흐름과 외국인 수급·주도 업종·금리 변동 원인",
     title: (date) => `${date} 이번 주 증시 정리: 코스피·나스닥·주도 업종`,
+  },
+  {
+    scheduleId: "oneoff-investment-study-broadcom-20260907",
+    contentType: "INVESTMENT_STUDY",
+    label: "브로드컴 실적 검색 유입 글",
+    cadence: "2026년 9월 7일 일회성",
+    scheduledTimeKst: "12:10 KST 준비 시작 · 13:00 KST 공개",
+    scheduledTime: "12:10",
+    publishTime: "13:00",
+    weekdays: [1],
+    marketDates: ["2026-09-07"],
+    objective: "브로드컴 공식 실적과 AI 반도체 가이던스를 검색형 질문으로 정리해 당일 공개합니다.",
+    primaryAudience: "브로드컴 실적과 AI 반도체 흐름을 검색하는 투자자",
+    recommendedRunnerMode: "hermes",
+    topic: "브로드컴 공식 실적과 AI 반도체 가이던스의 의미",
+    title: (date) => `${date} 브로드컴 실적과 AI 반도체 가이던스`,
+    investmentStudyMode: "fixed",
+    investmentStudyAngle: "result_or_practical",
+  },
+  {
+    scheduleId: "oneoff-investment-study-cpi-20260907",
+    contentType: "INVESTMENT_STUDY",
+    label: "CPI 발표시간 검색 유입 글",
+    cadence: "2026년 9월 7일 일회성",
+    scheduledTimeKst: "12:20 KST 준비 시작 · 14:30 KST 공개",
+    scheduledTime: "12:20",
+    publishTime: "14:30",
+    weekdays: [1],
+    marketDates: ["2026-09-07"],
+    objective: "미국 CPI 공식 발표시간과 나스닥 영향 경로를 발표 전에 검색형 질문으로 정리합니다.",
+    primaryAudience: "CPI 발표시간과 나스닥 영향을 검색하는 투자자",
+    recommendedRunnerMode: "hermes",
+    topic: "미국 CPI 공식 발표시간과 국채금리·나스닥 영향",
+    title: (date) => `${date} 미국 CPI 발표시간과 나스닥 영향`,
+    investmentStudyMode: "fixed",
+    investmentStudyAngle: "upcoming_question",
   },
   {
     scheduleId: "weekday-fixed-investment-study-tuesday",
@@ -441,6 +478,16 @@ function appliesOnWeekday(definition: StockBlogSchedulerDefinition, weekday: num
   return definition.weekdays.includes(weekday);
 }
 
+function appliesOnDate(
+  definition: StockBlogSchedulerDefinition,
+  parts: ReturnType<typeof getZonedParts>,
+) {
+  if (!appliesOnWeekday(definition, parts.weekday)) return false;
+  if (!definition.marketDates?.length) return true;
+  const marketDate = `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
+  return definition.marketDates.includes(marketDate);
+}
+
 function getScheduledAtForParts(definition: StockBlogSchedulerDefinition, parts: ReturnType<typeof getZonedParts>, timezone: string) {
   const { hour, minute } = parseTime(definition.scheduledTime);
   return zonedDateTimeToUtc(parts.year, parts.month, parts.day, hour, minute, timezone);
@@ -450,7 +497,7 @@ function getNextRunAt(definition: StockBlogSchedulerDefinition, now: Date, timez
   const nowParts = getZonedParts(now, timezone);
   for (let offset = 0; offset < 10; offset += 1) {
     const candidateParts = addDays(nowParts, offset, timezone);
-    if (!appliesOnWeekday(definition, candidateParts.weekday)) continue;
+    if (!appliesOnDate(definition, candidateParts)) continue;
     const scheduledAt = getScheduledAtForParts(definition, candidateParts, timezone);
     if (scheduledAt > now) return scheduledAt;
   }
@@ -459,7 +506,7 @@ function getNextRunAt(definition: StockBlogSchedulerDefinition, now: Date, timez
 
 function isDueToday(definition: StockBlogSchedulerDefinition, now: Date, timezone: string, lookbackMinutes: number) {
   const parts = getZonedParts(now, timezone);
-  if (!appliesOnWeekday(definition, parts.weekday)) return false;
+  if (!appliesOnDate(definition, parts)) return false;
   const scheduledAt = getScheduledAtForParts(definition, parts, timezone);
   const elapsedMs = now.getTime() - scheduledAt.getTime();
   return elapsedMs >= 0 && elapsedMs <= lookbackMinutes * 60 * 1000;

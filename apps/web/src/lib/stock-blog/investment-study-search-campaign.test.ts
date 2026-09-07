@@ -4,9 +4,9 @@ import { getInvestmentStudySearchCampaign } from "./investment-study-search-camp
 
 const collectedAt = "2026-09-07T03:00:00.000Z";
 
-test("9월 8일 화요일 검색 캠페인은 CPI 공식 일정 질문을 고정한다", () => {
+test("9월 7일 일회성 검색 캠페인은 CPI 공식 일정 질문을 고정한다", () => {
   const campaign = getInvestmentStudySearchCampaign({
-    marketDate: "2026-09-08",
+    marketDate: "2026-09-07",
     angle: "upcoming_question",
     collectedAt,
   });
@@ -17,9 +17,9 @@ test("9월 8일 화요일 검색 캠페인은 CPI 공식 일정 질문을 고정
   assert.match(campaign?.referenceItems[0]?.url ?? "", /bls\.gov/);
 });
 
-test("9월 10일 목요일 검색 캠페인은 브로드컴 공식 실적을 고정한다", () => {
+test("9월 7일 일회성 검색 캠페인은 브로드컴 공식 실적을 고정한다", () => {
   const campaign = getInvestmentStudySearchCampaign({
-    marketDate: "2026-09-10",
+    marketDate: "2026-09-07",
     angle: "result_or_practical",
     collectedAt,
   });
@@ -32,5 +32,6 @@ test("9월 10일 목요일 검색 캠페인은 브로드컴 공식 실적을 고
 
 test("다른 날짜와 편집 각도에는 일회성 캠페인을 적용하지 않는다", () => {
   assert.equal(getInvestmentStudySearchCampaign({ marketDate: "2026-09-09", angle: "upcoming_question", collectedAt }), null);
-  assert.equal(getInvestmentStudySearchCampaign({ marketDate: "2026-09-08", angle: "result_or_practical", collectedAt }), null);
+  assert.equal(getInvestmentStudySearchCampaign({ marketDate: "2026-09-08", angle: "upcoming_question", collectedAt }), null);
+  assert.equal(getInvestmentStudySearchCampaign({ marketDate: "2026-09-10", angle: "result_or_practical", collectedAt }), null);
 });
