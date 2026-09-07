@@ -64,6 +64,7 @@ import {
   type InvestmentStudyEditorialAngle,
   type InvestmentStudyTopicSelection,
 } from "@/lib/stock-blog/investment-study-topic";
+import { getInvestmentStudySearchCampaign } from "@/lib/stock-blog/investment-study-search-campaign";
 import { resolveApproval } from "@/lib/repositories/approval-actions";
 import { recordFailureFromPersistedEvent } from "@/lib/operational-learning/operational-learning-service";
 import {
@@ -536,25 +537,32 @@ async function buildInvestmentStudyPipelineInput(
   timezone: string,
 ) {
   const date = briefDateLabel(now, timezone);
-  const discoveryTitle = definition.investmentStudyAngle === "upcoming_question"
+  const parts = getZonedParts(now, timezone);
+  const marketDate = `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
+  const campaign = getInvestmentStudySearchCampaign({
+    marketDate,
+    angle: definition.investmentStudyAngle,
+    collectedAt: now.toISOString(),
+  });
+  const discoveryTitle = campaign?.selection.title ?? (definition.investmentStudyAngle === "upcoming_question"
     ? `${date} 이번 주 미국 경제지표 발표시간과 나스닥 영향`
     : definition.investmentStudyAngle === "result_or_practical"
       ? `${date} 이번 주 경제지표·실적 발표 뒤 주가가 움직인 이유`
-      : `${date} 오늘 코스피·미국장 이슈로 배우는 투자 원리`;
-  const discoveryTopic = definition.investmentStudyAngle === "upcoming_question"
+      : `${date} 오늘 코스피·미국장 이슈로 배우는 투자 원리`);
+  const discoveryTopic = campaign?.selection.topic ?? (definition.investmentStudyAngle === "upcoming_question"
     ? "이번 주 CPI·PPI·FOMC·고용지표 공식 일정과 발표시간, 예상보다 높거나 낮을 때 나스닥·금리 영향"
     : definition.investmentStudyAngle === "result_or_practical"
       ? "이번 주 경제지표·실적 발표 실제값과 예상치 차이, 발표 뒤 코스피·나스닥·금리·수급 반응"
-      : "오늘 코스피·코스닥·나스닥 급등락과 금리·환율·물가·반도체·실적 이슈의 투자 원리";
+      : "오늘 코스피·코스닥·나스닥 급등락과 금리·환율·물가·반도체·실적 이슈의 투자 원리");
   const baseReferenceBundle = await collectStockBlogReferences({
     topic: discoveryTopic,
     title: discoveryTitle,
     channel: "blog",
     contentType: "INVESTMENT_STUDY",
     market: "GLOBAL",
-    keywords: definition.investmentStudyAngle === "upcoming_question"
+    keywords: campaign?.selection.keywords ?? (definition.investmentStudyAngle === "upcoming_question"
       ? ["CPI", "PPI", "FOMC", "발표시간"]
-      : ["코스피", "나스닥", "금리", "실적"],
+      : ["코스피", "나스닥", "금리", "실적"]),
     maxResults: 6,
   });
   const resultScan = definition.investmentStudyAngle === "result_or_practical"
@@ -671,21 +679,22 @@ async function buildInvestmentStudyPipelineInput(
     : [];
   const officialResultItems = [...verifiedReleaseItems, ...filingResultItems];
   const verifiedResultItems = [...officialResultItems, ...verifiedReactionItems];
-  const referenceBundle: ReferenceBundle = verifiedResultItems.length > 0
+  const trustedItems = [...(campaign?.referenceItems ?? []), ...verifiedResultItems];
+  const referenceBundle: ReferenceBundle = trustedItems.length > 0
     ? {
       ...baseReferenceBundle,
       items: [
-        ...verifiedResultItems,
-        ...baseReferenceBundle.items.filter((item) => !verifiedResultItems.some((verified) => verified.url === item.url)),
+        ...trustedItems,
+        ...baseReferenceBundle.items.filter((item) => !trustedItems.some((trusted) => trusted.url === item.url)),
       ],
       keyThemes: Array.from(new Set([
-        ...verifiedResultItems.flatMap((item) => item.keywords ?? []),
+        ...trustedItems.flatMap((item) => item.keywords ?? []),
         ...baseReferenceBundle.keyThemes,
       ])),
-      sourcePolicy: `${baseReferenceBundle.sourcePolicy} 실적 수치는 SEC·OpenDART 공식 제출을 우선 확인합니다.`,
+      sourcePolicy: `${baseReferenceBundle.sourcePolicy} 일정과 실적 수치는 해당 기관·기업의 공식 원문을 우선 확인합니다.`,
     }
     : baseReferenceBundle;
-  const selection = selectInvestmentStudyTopic({
+  const selection = campaign?.selection ?? selectInvestmentStudyTopic({
     now,
     referenceBundle,
     angle: definition.investmentStudyAngle,
@@ -703,24 +712,25 @@ async function buildInvestmentStudyPipelineInput(
     })
     : referenceBundle;
   const selectionText = `${selection.title}\n${selection.topic}\n${selection.keywords.join(" ")}`.toLowerCase();
-  const selectedResultItems = definition.investmentStudyAngle === "result_or_practical" && selection.score >= 5
+  const selectedResultItems = !campaign && definition.investmentStudyAngle === "result_or_practical" && selection.score >= 5
     ? verifiedResultItems
     : verifiedResultItems.filter((item) => (
       (item.keywords ?? []).some((keyword) => selectionText.includes(keyword.toLowerCase()))
       || (item.symbols ?? []).some((symbol) => selectionText.includes(symbol.toLowerCase()))
     ));
-  const selectedReferenceBundle: ReferenceBundle = selectedResultItems.length > 0
+  const selectedTrustedItems = [...(campaign?.referenceItems ?? []), ...selectedResultItems];
+  const selectedReferenceBundle: ReferenceBundle = selectedTrustedItems.length > 0
     ? {
       ...refinedReferenceBundle,
       items: [
-        ...selectedResultItems,
-        ...refinedReferenceBundle.items.filter((item) => !selectedResultItems.some((selected) => selected.url === item.url)),
+        ...selectedTrustedItems,
+        ...refinedReferenceBundle.items.filter((item) => !selectedTrustedItems.some((selected) => selected.url === item.url)),
       ],
       keyThemes: Array.from(new Set([
-        ...selectedResultItems.flatMap((item) => item.keywords ?? []),
+        ...selectedTrustedItems.flatMap((item) => item.keywords ?? []),
         ...refinedReferenceBundle.keyThemes,
       ])),
-      sourcePolicy: `${refinedReferenceBundle.sourcePolicy} 실적 수치는 SEC·OpenDART 공식 제출을 우선 확인합니다.`,
+      sourcePolicy: `${refinedReferenceBundle.sourcePolicy} 일정과 실적 수치는 해당 기관·기업의 공식 원문을 우선 확인합니다.`,
     }
     : refinedReferenceBundle;
   return {
