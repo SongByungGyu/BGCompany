@@ -130,6 +130,25 @@ test("미국장 휴장 검색형 글은 시황 차트 대신 휴장 일정·주�
   }
 });
 
+test("대형주 공시·실적 글은 시황 차트 대신 공식 발표 주제 이미지를 만든다", async () => {
+  const pipelineId = `test-large-cap-topic-${process.pid}`;
+  const outputDir = path.join(process.cwd(), "public", "generated", "stock-blog", pipelineId);
+  const sourceUrl = "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260907000001";
+  const referenceBundle: ReferenceBundle = {
+    provider: "web", mode: "real", status: "ready", contentType: "LARGE_CAP_DISCLOSURE_EARNINGS", generatedAt: AS_OF,
+    marketDate: "2026-09-07", market: "KR", queries: [], keyThemes: [], repeatedKeywords: [], differentiationPoints: [], cautionNotes: [], sourcePolicy: "official",
+    items: [{ id: "official-large-cap-kr-0", sourceType: "disclosure", provider: "opendart", title: "삼성전자 영업실적 등에 대한 전망", url: sourceUrl, reliability: "official", sourceName: "OpenDART", symbols: ["005930"], keywords: ["삼성전자", "005930", "공시"] }],
+  };
+  try {
+    const result = await generateStockBlogImages({ pipelineId, template: "LARGE_CAP_DISCLOSURE_EARNINGS", title: "삼성전자 공시·실적 발표 핵심 숫자", topic: "삼성전자 공식 공시와 업종 영향", marketDate: "2026-09-07", referenceBundle });
+    assert.equal(result.imageStatus, "generated");
+    assert.deepEqual(result.contentImages.map((image) => image.id), ["thumbnail", "large-cap-announcements", "large-cap-impact-path", "large-cap-checklist"]);
+    assert.equal(result.contentImages.some((image) => ["major-index-change", "fx-and-us-yields", "kospi-investor-flow"].includes(image.id)), false);
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
 test("전용 이미지 규칙이 없는 투자공부 글은 시황 차트로 대체하지 않는다", async () => {
   const result = await generateStockBlogImages({ pipelineId: `test-unknown-study-${process.pid}`, template: "INVESTMENT_STUDY", title: "낯선 투자 개념", topic: "별도 주제 이미지가 아직 없는 공부 글", marketDate: "2026-09-07" });
   assert.equal(result.imageStatus, "failed");

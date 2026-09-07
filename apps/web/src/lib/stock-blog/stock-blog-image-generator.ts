@@ -1014,7 +1014,7 @@ export async function generateStockBlogImages(input: {
     }
 
     if (isBroadcomEarningsSubject(input)) {
-      if (input.template !== "INVESTMENT_STUDY") throw new Error("BROADCOM_TEMPLATE_INVALID");
+      if (input.template !== "INVESTMENT_STUDY" && input.template !== "LARGE_CAP_DISCLOSURE_EARNINGS") throw new Error("BROADCOM_TEMPLATE_INVALID");
       const metrics = referenceMetricMap(input.referenceBundle);
       const keys = ["broadcom.fy2026.q3.revenue", "broadcom.fy2026.q3.revenueGrowth", "broadcom.fy2026.q4.revenueGuidance"];
       const missing = keys.filter((key) => !metrics[key]);
@@ -1213,6 +1213,44 @@ export async function generateStockBlogImages(input: {
         inlineImageUrls: contentImages.filter((image) => image.role === "body").map((image) => image.imageUrl),
         contentImages, imageQuality, imageStatus: "generated", imageGeneratedAt: generatedAt,
       };
+    }
+
+    if (input.template === "LARGE_CAP_DISCLOSURE_EARNINGS") {
+      const officialItems = (input.referenceBundle?.items ?? []).filter((item) => (
+        item.sourceType === "disclosure"
+        && item.reliability === "official"
+        && Boolean(item.url)
+      )).slice(0, 3);
+      if (officialItems.length === 0) throw new Error("LARGE_CAP_TOPIC_IMAGE_OFFICIAL_DISCLOSURE_MISSING");
+      const companyLabels = officialItems.map((item, index) => (
+        item.symbols?.[0]
+        ?? item.keywords?.find((keyword) => !/^(?:실적|공시)$/i.test(keyword))
+        ?? `공식 발표 ${index + 1}`
+      ));
+      const sourceNames = Array.from(new Set(officialItems.map((item) => item.sourceName ?? item.publisher ?? item.provider)));
+      const source = `공식 발표 확인 ${input.marketDate ?? generatedAt.slice(0, 10)} | 출처 ${sourceNames.join(" · ")}`;
+      const sourceUrl = officialItems[0].url!;
+      const focus = companyLabels.join(" · ");
+      const files = [
+        { name: "thumbnail.svg", svg: topicThumbnailSvg({ eyebrow: "OFFICIAL DISCLOSURE", title: `${focus} 공시·실적 체크`, subtitle: "공식 원문 · 핵심 발표 · 다음 확인 기준", badge: "IR", footer, accent: "#56D7B0" }) },
+        { name: "large-cap-announcements.svg", svg: metricCardsSvg({ title: "오늘 확인한 대형주 공식 발표", subtitle: "회사별 공식 원문을 먼저 구분했습니다.", source, accent: "#56D7B0", cards: officialItems.map((item, index) => ({ label: `공식 발표 ${index + 1}`, display: companyLabels[index], note: truncate(item.title, 22) })) }) },
+        { name: "large-cap-impact-path.svg", svg: flowCardsSvg({ title: `${focus} 발표를 읽는 순서`, subtitle: "헤드라인보다 공식 수치와 기존 전망의 차이를 먼저 봅니다.", source, accent: "#9B8CFF", steps: ["공식 원문", "핵심 수치", "기존 전망", "업종 영향"], caution: "공시·실적 발표와 실제 주가 반응은 구분해서 확인합니다." }) },
+        { name: "large-cap-checklist.svg", svg: flowCardsSvg({ title: "공시·실적 발표 뒤 체크리스트", subtitle: `${focus}의 다음 판단 기준을 순서대로 확인합니다.`, source, accent: "#56D7B0", steps: ["발표 기준일", "실제·예상", "가이던스", "주가 반응"], caution: "검증된 수치가 없는 항목은 이미지에 추정값을 넣지 않습니다." }) },
+      ];
+      await mkdir(outputDir, { recursive: true });
+      await Promise.all(files.map((file) => writeFile(path.join(outputDir, file.name), file.svg, "utf8")));
+      const sizes = await Promise.all(files.map((file) => stat(path.join(outputDir, file.name))));
+      if (sizes.some((file) => !file.isFile() || file.size < 500)) throw new Error("IMAGE_FILE_VERIFICATION_FAILED");
+      const tags = ["large-cap-disclosure", "earnings", ...companyLabels.map((label) => label.toLowerCase())];
+      const contentImages: StockBlogContentImage[] = [
+        { id: "thumbnail", role: "thumbnail", type: "thumbnail", title: `${focus} 공시·실적 체크`, placementAfterHeading: "__thumbnail__", imageUrl: `${relativeDir}/thumbnail.svg`, caption: `${focus} 공식 공시·실적 핵심`, sourceLabel: "BG Market Note 자체 제작", sourceName: "BG Market Note", relevanceTags: tags, licenseType: "generated", collectedAt: generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [], width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true },
+        { id: "large-cap-announcements", role: "body", type: "related-image", title: "오늘 확인한 대형주 공식 발표", placementAfterHeading: placements.majorIndexChange, imageUrl: `${relativeDir}/large-cap-announcements.svg`, caption: `${focus} 공식 발표 원문 구분`, sourceLabel: source, sourceName: sourceNames.join(" · "), sourceUrl, relevanceTags: tags, licenseType: "generated", collectedAt: generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [], width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true },
+        { id: "large-cap-impact-path", role: "body", type: "related-image", title: "공식 발표를 읽는 순서", placementAfterHeading: placements.kospiInvestorFlow, imageUrl: `${relativeDir}/large-cap-impact-path.svg`, caption: "공식 원문에서 핵심 수치와 업종 영향까지 확인하는 순서", sourceLabel: source, sourceName: sourceNames.join(" · "), sourceUrl, relevanceTags: tags, licenseType: "generated", collectedAt: generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [], width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true },
+        { id: "large-cap-checklist", role: "body", type: "related-image", title: "공시·실적 발표 뒤 체크리스트", placementAfterHeading: placements.fxAndUsYields, imageUrl: `${relativeDir}/large-cap-checklist.svg`, caption: `${focus} 발표 뒤 실제·예상·가이던스·주가 반응 확인`, sourceLabel: source, sourceName: sourceNames.join(" · "), sourceUrl, relevanceTags: tags, licenseType: "generated", collectedAt: generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [], width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true },
+      ];
+      const imageQuality = evaluateStockBlogImageQuality(contentImages, snapshot, { referenceBundle: input.referenceBundle, requiredRelevanceTags: ["large-cap-disclosure"], minimumRelevantBodyImages: 3 });
+      if (imageQuality.status !== "passed") throw new Error(imageQuality.issues.map((issue) => `${issue.code}:${issue.message}`).join(" | "));
+      return { thumbnailImageUrl: `${relativeDir}/thumbnail.svg`, inlineImageUrls: contentImages.filter((image) => image.role === "body").map((image) => image.imageUrl), contentImages, imageQuality, imageStatus: "generated", imageGeneratedAt: generatedAt };
     }
 
     if (input.template === "INVESTMENT_STUDY") {
