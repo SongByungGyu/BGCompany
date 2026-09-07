@@ -759,6 +759,11 @@ export function isCpiScheduleSubject(input: { title: string; topic: string }) {
     && /발표시간|발표\s*시각|공식\s*일정|release\s*(?:time|schedule)/i.test(text);
 }
 
+export function isMarketHolidayStudySubject(input: { title: string; topic: string }) {
+  const text = `${input.title}\n${input.topic}`;
+  return /휴장/.test(text) && /다음\s*(?:정규\s*)?개장일|주문\s*가능|거래시간/.test(text);
+}
+
 export function isUsMarketStudySubject(input: { title: string; topic: string }) {
   return /미국(?:장|증시)|뉴욕증시|나스닥|S&P\s*500|다우(?:존스)?|Wall\s*Street|U\.S\.\s*market/i
     .test(`${input.title}\n${input.topic}`);
@@ -1069,6 +1074,47 @@ export async function generateStockBlogImages(input: {
         { id: "cpi-check-order", role: "body", type: "related-image", title: "CPI 발표 전후 확인 순서", placementAfterHeading: placements.fxAndUsYields, imageUrl: `${relativeDir}/cpi-check-order.svg`, caption: "발표 시각·예상과 실제·2년물 금리·지수 선물 확인 순서", sourceLabel: source, sourceName: "미국 노동통계국(BLS) · BG Market Note", sourceUrl: releaseFact.sourceUrl, relevanceTags: ["cpi", "release-schedule", "nasdaq"], licenseType: "generated", collectedAt: generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [], width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true },
       ];
       const imageQuality = evaluateStockBlogImageQuality(contentImages, snapshot, { referenceBundle: input.referenceBundle, requiredRelevanceTags: ["cpi"], minimumRelevantBodyImages: 3 });
+      if (imageQuality.status !== "passed") throw new Error(imageQuality.issues.map((issue) => `${issue.code}:${issue.message}`).join(" | "));
+      return { thumbnailImageUrl: `${relativeDir}/thumbnail.svg`, inlineImageUrls: contentImages.filter((image) => image.role === "body").map((image) => image.imageUrl), contentImages, imageQuality, imageStatus: "generated", imageGeneratedAt: generatedAt };
+    }
+
+    if (isMarketHolidayStudySubject(input)) {
+      if (input.template !== "INVESTMENT_STUDY") throw new Error("MARKET_HOLIDAY_STUDY_TEMPLATE_INVALID");
+      const text = `${input.title}\n${input.topic}`;
+      const isUs = /미국장|미국\s*증시|NYSE|나스닥|프리마켓|애프터마켓/i.test(text);
+      const closedDate = input.marketDate ?? text.match(/\b20\d{2}-\d{2}-\d{2}\b/)?.[0];
+      const nextOpenDate = text.match(/다음\s*정규\s*개장일은\s*(20\d{2}-\d{2}-\d{2})/)?.[1]
+        ?? text.match(/다음\s*개장일[^0-9]*(20\d{2}-\d{2}-\d{2})/)?.[1];
+      if (!closedDate || !nextOpenDate) throw new Error("MARKET_HOLIDAY_STUDY_DATES_MISSING");
+      const marketLabel = isUs ? "미국 증시" : "국내 증시";
+      const sourceName = isUs ? "NYSE" : "한국거래소(KRX)";
+      const sourceUrl = isUs
+        ? "https://www.nyse.com/markets/hours-calendars"
+        : "https://global.krx.co.kr/contents/GLB/06/0602/0602020204/GLB0602020204T1.jsp";
+      const source = `휴장일 ${closedDate} | 출처 ${sourceName}`;
+      const marketHours = isUs ? "한국시간 정규장" : "정규장 09:00~15:30";
+      const files = [
+        { name: "thumbnail.svg", svg: topicThumbnailSvg({ eyebrow: "MARKET HOLIDAY GUIDE", title: `오늘 ${marketLabel} 휴장?`, subtitle: "다음 개장일과 주문 가능 여부 확인", badge: isUs ? "US" : "KR", footer, accent: "#9B8CFF" }) },
+        { name: "market-holiday-status.svg", svg: metricCardsSvg({ title: `${marketLabel} 휴장일 핵심 정리`, subtitle: "휴장일과 다음 정규 개장일을 구분했습니다.", source, accent: "#9B8CFF", cards: [
+          { label: "확인 시장", display: marketLabel, note: "정규시장 기준" },
+          { label: "휴장일", display: closedDate, note: "정규장 휴장" },
+          { label: "다음 개장일", display: nextOpenDate, note: "공식 일정 확인" },
+        ] }) },
+        { name: "market-holiday-order.svg", svg: flowCardsSvg({ title: "휴장일에 주문을 확인하는 순서", subtitle: "주문 접수와 실제 체결 가능 여부를 나눠 봅니다.", source, accent: "#56D7B0", steps: ["휴장 여부", "주문 접수", "실제 체결", "다음 개장일"], caution: "증권사별 예약주문 접수 방식은 다를 수 있습니다." }) },
+        { name: "market-holiday-checklist.svg", svg: flowCardsSvg({ title: "다음 개장 전 확인할 네 가지", subtitle: `${marketHours}과 함께 시장 변수를 순서대로 확인합니다.`, source, accent: "#9B8CFF", steps: isUs ? ["선물 흐름", "국채금리", "달러 방향", "경제일정"] : ["원·달러", "미국장", "공시 일정", "주문 상태"], caution: "휴장 중 움직인 변수는 다음 개장일에 한꺼번에 반영될 수 있습니다." }) },
+      ];
+      await mkdir(outputDir, { recursive: true });
+      await Promise.all(files.map((file) => writeFile(path.join(outputDir, file.name), file.svg, "utf8")));
+      const sizes = await Promise.all(files.map((file) => stat(path.join(outputDir, file.name))));
+      if (sizes.some((file) => !file.isFile() || file.size < 500)) throw new Error("IMAGE_FILE_VERIFICATION_FAILED");
+      const tags = ["market-holiday", isUs ? "us-market" : "kr-market", "next-open-date"];
+      const contentImages: StockBlogContentImage[] = [
+        { id: "thumbnail", role: "thumbnail", type: "thumbnail", title: `오늘 ${marketLabel} 휴장?`, placementAfterHeading: "__thumbnail__", imageUrl: `${relativeDir}/thumbnail.svg`, caption: `오늘 ${marketLabel} 휴장 여부와 다음 개장일`, sourceLabel: "BG Market Note 자체 제작", sourceName: "BG Market Note", relevanceTags: tags, licenseType: "generated", collectedAt: generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [], width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true },
+        { id: "market-holiday-status", role: "body", type: "related-image", title: `${marketLabel} 휴장일 핵심 정리`, placementAfterHeading: placements.majorIndexChange, imageUrl: `${relativeDir}/market-holiday-status.svg`, caption: `${closedDate} 휴장 여부와 ${nextOpenDate} 다음 개장일`, sourceLabel: source, sourceName, sourceUrl, relevanceTags: tags, licenseType: "generated", collectedAt: generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [], width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true },
+        { id: "market-holiday-order", role: "body", type: "related-image", title: "휴장일 주문 확인 순서", placementAfterHeading: placements.kospiInvestorFlow, imageUrl: `${relativeDir}/market-holiday-order.svg`, caption: "휴장 여부부터 다음 개장일까지 주문 확인 순서", sourceLabel: source, sourceName, sourceUrl, relevanceTags: tags, licenseType: "generated", collectedAt: generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [], width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true },
+        { id: "market-holiday-checklist", role: "body", type: "related-image", title: "다음 개장 전 체크리스트", placementAfterHeading: placements.fxAndUsYields, imageUrl: `${relativeDir}/market-holiday-checklist.svg`, caption: `다음 ${marketLabel} 개장 전에 확인할 시장 변수`, sourceLabel: source, sourceName, sourceUrl, relevanceTags: tags, licenseType: "generated", collectedAt: generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [], width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true },
+      ];
+      const imageQuality = evaluateStockBlogImageQuality(contentImages, snapshot, { referenceBundle: input.referenceBundle, requiredRelevanceTags: ["market-holiday"], minimumRelevantBodyImages: 3 });
       if (imageQuality.status !== "passed") throw new Error(imageQuality.issues.map((issue) => `${issue.code}:${issue.message}`).join(" | "));
       return { thumbnailImageUrl: `${relativeDir}/thumbnail.svg`, inlineImageUrls: contentImages.filter((image) => image.role === "body").map((image) => image.imageUrl), contentImages, imageQuality, imageStatus: "generated", imageGeneratedAt: generatedAt };
     }

@@ -8,6 +8,7 @@ import {
   getStockBlogImageThemeMarketLabels,
   isBroadcomEarningsSubject,
   isCpiScheduleSubject,
+  isMarketHolidayStudySubject,
   isNvidiaEarningsSubject,
   isUsMarketStudySubject,
   selectGenericOverseasIndexChanges,
@@ -50,6 +51,17 @@ test("브로드컴 실적과 CPI 발표시간은 각각 주제 전용 이미지 
   assert.equal(isCpiScheduleSubject({ title: "미국 CPI 발표시간은 언제", topic: "BLS 공식 일정과 나스닥 영향" }), true);
 });
 
+test("휴장일 검색형 글은 휴장 전용 이미지 대상으로 분류한다", () => {
+  assert.equal(isMarketHolidayStudySubject({
+    title: "오늘 미국장 휴장인가요? 다음 개장일과 한국시간 거래시간",
+    topic: "미국 증시 휴장이 확인됐고 다음 정규 개장일은 2026-09-08입니다.",
+  }), true);
+  assert.equal(isMarketHolidayStudySubject({
+    title: "나스닥 마감과 금리 흐름",
+    topic: "전일 미국장 등락을 복기합니다.",
+  }), false);
+});
+
 test("브로드컴 투자공부 글은 시황 차트 대신 실적 전용 이미지만 만든다", async () => {
   const pipelineId = `test-broadcom-topic-${process.pid}`;
   const outputDir = path.join(process.cwd(), "public", "generated", "stock-blog", pipelineId);
@@ -87,6 +99,32 @@ test("CPI 발표시간 투자공부 글은 시황 차트 대신 일정 전용 �
     assert.equal(result.imageStatus, "generated");
     assert.deepEqual(result.contentImages.map((image) => image.id), ["thumbnail", "cpi-release-time", "cpi-market-path", "cpi-check-order"]);
     assert.equal(result.contentImages.some((image) => ["major-index-change", "fx-and-us-yields"].includes(image.id)), false);
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+test("미국장 휴장 검색형 글은 시황 차트 대신 휴장 일정·주문·체크 이미지를 만든다", async () => {
+  const pipelineId = `test-us-holiday-topic-${process.pid}`;
+  const outputDir = path.join(process.cwd(), "public", "generated", "stock-blog", pipelineId);
+  const referenceBundle: ReferenceBundle = {
+    provider: "web", mode: "real", status: "ready", contentType: "INVESTMENT_STUDY", generatedAt: AS_OF,
+    marketDate: "2026-09-07", market: "US", queries: [], keyThemes: [], repeatedKeywords: [], differentiationPoints: [], cautionNotes: [], sourcePolicy: "official",
+    items: [],
+  };
+  try {
+    const result = await generateStockBlogImages({
+      pipelineId,
+      template: "INVESTMENT_STUDY",
+      title: "오늘 미국장 휴장인가요? 다음 개장일과 한국시간 거래시간",
+      topic: "2026-09-07 미국 증시 휴장이 확인됐습니다. 미국 거래소 정규 휴장일입니다. 다음 정규 개장일은 2026-09-08로 확인됐습니다.",
+      marketDate: "2026-09-07",
+      referenceBundle,
+    });
+    assert.equal(result.imageStatus, "generated");
+    assert.deepEqual(result.contentImages.map((image) => image.id), ["thumbnail", "market-holiday-status", "market-holiday-order", "market-holiday-checklist"]);
+    assert.equal(result.contentImages.some((image) => ["major-index-change", "fx-and-us-yields", "kospi-investor-flow"].includes(image.id)), false);
+    assert.ok(result.contentImages.filter((image) => image.role === "body").every((image) => image.relevanceTags?.includes("market-holiday")));
   } finally {
     await rm(outputDir, { recursive: true, force: true });
   }

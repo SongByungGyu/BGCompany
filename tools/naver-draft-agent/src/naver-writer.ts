@@ -375,7 +375,17 @@ export function validateJobImageManifest(job: NaverDraftJob) {
   if (bodyImages.some((image) => !image.placementAfterHeading || !job.body.includes(image.placementAfterHeading))) issues.push("IMAGE_PLACEMENT_HEADING_MISSING");
   if (images.some((image) => !image.usageAllowed || !image.fileVerified || !image.caption || !image.sourceLabel)) issues.push("IMAGE_METADATA_INCOMPLETE");
   if (images.some((image) => image.fileFormat === "image/svg+xml" && image.uploadFormat !== "image/png")) issues.push("IMAGE_UPLOAD_FORMAT_INVALID");
-  if (bodyImages.every((image) => image.type !== "chart" || image.dataKeys.length === 0)) issues.push("IMAGE_VERIFIED_CHART_REQUIRED");
+  const hasVerifiedChart = bodyImages.some((image) => image.type === "chart" && image.dataKeys.length > 0);
+  const hasVettedInfographicSet = job.imageQuality?.status === "passed"
+    && bodyImages.length >= 3
+    && bodyImages.every((image) => image.type === "related-image"
+      && image.dataKeys.length === 0
+      && image.licenseType === "generated"
+      && image.usageAllowed
+      && image.fileVerified
+      && Boolean(image.caption.trim())
+      && Boolean(image.sourceLabel.trim()));
+  if (!hasVerifiedChart && !hasVettedInfographicSet) issues.push("IMAGE_VERIFIED_CHART_REQUIRED");
   return { ok: issues.length === 0, issues, thumbnail: thumbnail[0], bodyImages };
 }
 

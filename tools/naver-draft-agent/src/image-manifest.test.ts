@@ -53,3 +53,28 @@ test("manifest blocks decorative-only or misplaced body images", () => {
   assert.ok(result.issues.includes("IMAGE_PLACEMENT_HEADING_MISSING"));
   assert.ok(result.issues.includes("IMAGE_VERIFIED_CHART_REQUIRED"));
 });
+
+test("server-vetted three-image topic infographic set can publish without a numeric chart", () => {
+  const job = jobFixture();
+  job.body = "1. Market review\nBody\n\n2. Korea outlook\nBody\n\n3. Checklist\nBody";
+  const headings = ["1. Market review", "2. Korea outlook", "3. Checklist"];
+  const thumbnail = job.contentImages?.[0];
+  if (!thumbnail) throw new Error("thumbnail fixture missing");
+  const bodyImages = headings.map((heading, index) => ({
+    ...thumbnail,
+    id: `topic-${index + 1}`,
+    role: "body" as const,
+    type: "related-image" as const,
+    placementAfterHeading: heading,
+    imageUrl: `/generated/stock-blog/p/topic-${index + 1}.svg`,
+    licenseType: "generated",
+    dataKeys: [],
+  }));
+  job.contentImages = [thumbnail, ...bodyImages];
+  job.inlineImageUrls = bodyImages.map((image) => image.imageUrl);
+  job.imageQuality = { status: "passed" };
+
+  const result = validateJobImageManifest(job);
+  assert.equal(result.ok, true);
+  assert.ok(!result.issues.includes("IMAGE_VERIFIED_CHART_REQUIRED"));
+});
