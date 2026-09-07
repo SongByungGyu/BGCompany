@@ -421,12 +421,25 @@ export function inspectStockBlogImagePublishReadiness(pipeline: ContentPipelineR
   if ((pipeline.inlineImageUrls ?? pipeline.naverBlogPublishPrep?.inlineImageUrls ?? []).length < 1) reasons.push("inlineImageUrls 1개 이상 필요");
   const contentImages = pipeline.contentImages ?? [];
   const bodyImages = contentImages.filter((image) => image.role === "body");
+  const referenceBundle = pipeline.referenceBundle ?? pipeline.writerResult?.referenceBundle ?? pipeline.qaResult?.referenceBundle;
+  const hasReferenceMetrics = (referenceBundle?.items ?? []).some((item) => (item.metrics?.length ?? 0) > 0);
+  const hasVerifiedFactInfographicSet = referenceBundle?.contentType === "INVESTMENT_STUDY"
+    && !hasReferenceMetrics
+    && bodyImages.length >= 3
+    && bodyImages.every((image) => (
+      image.type === "related-image"
+      && image.licenseType === "generated"
+      && Boolean(image.sourceUrl)
+      && (image.relevanceTags?.length ?? 0) > 0
+    ));
   if (pipeline.imageQuality?.status !== "passed") reasons.push("imageQuality=passed 필요");
   if (bodyImages.length < 2 || bodyImages.length > 4) reasons.push("본문 이미지 2~4장 필요");
   if (bodyImages.some((image) => !image.fileVerified || !image.usageAllowed || !image.placementAfterHeading || !image.caption || !image.sourceLabel)) {
     reasons.push("본문 이미지 파일·라이선스·섹션 연결 검증 필요");
   }
-  if (bodyImages.every((image) => image.type !== "chart")) reasons.push("검증 수치 기반 본문 차트 1장 이상 필요");
+  if (bodyImages.every((image) => image.type !== "chart") && !hasVerifiedFactInfographicSet) {
+    reasons.push("검증 수치 기반 본문 차트 1장 이상 필요");
+  }
   return reasons;
 }
 

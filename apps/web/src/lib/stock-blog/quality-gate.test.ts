@@ -167,6 +167,28 @@ test("공용 이미지 발행 검사는 정상 썸네일·본문 차트 세트�
   assert.deepEqual(inspectStockBlogImagePublishReadiness(imageReadyPipeline()), []);
 });
 
+test("공식 일정처럼 숫자 차트가 없는 투자공부 글은 주제 일치 인포그래픽 3장을 허용한다", () => {
+  const pipeline = imageReadyPipeline();
+  const bodyImages = ["schedule", "path", "checklist"].map((id) => ({
+    ...pipeline.contentImages![1],
+    id,
+    type: "related-image" as const,
+    licenseType: "generated" as const,
+    sourceUrl: "https://www.bls.gov/schedule/2026/09_sched_list.htm",
+    relevanceTags: ["cpi"],
+  }));
+  pipeline.inlineImageUrls = bodyImages.map((image) => image.imageUrl);
+  pipeline.contentImages = [pipeline.contentImages![0], ...bodyImages];
+  pipeline.referenceBundle = {
+    provider: "web", mode: "real", contentType: "INVESTMENT_STUDY", generatedAt: "2026-09-07", market: "US", queries: [], items: [{
+      id: "bls", sourceType: "calendar", provider: "bls", title: "CPI schedule", url: "https://www.bls.gov/schedule/2026/09_sched_list.htm", reliability: "official",
+      facts: [{ key: "cpi.release", label: "발표 시각", value: "21:30", asOf: "2026-09-07", sourceName: "BLS", sourceUrl: "https://www.bls.gov/schedule/2026/09_sched_list.htm" }],
+    }], keyThemes: [], repeatedKeywords: [], differentiationPoints: [], cautionNotes: [], sourcePolicy: "official",
+  };
+
+  assert.deepEqual(inspectStockBlogImagePublishReadiness(pipeline), []);
+});
+
 test("공용 이미지 발행 검사는 빈 이미지와 검증되지 않은 배치를 생성 단계에서 차단한다", () => {
   const pipeline = imageReadyPipeline();
   pipeline.imageStatus = "failed";
