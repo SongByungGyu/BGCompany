@@ -70,7 +70,8 @@ export function evaluateStockBlogImageQuality(
   if (images.some((image) => !image.fileVerified || image.width < 1080 || image.height < 675)) {
     issues.push({ code: "image_file_missing", message: "이미지 파일 또는 모바일 가독성 규격을 확인하지 못했습니다." });
   }
-  if (bodyImages.length > 0 && charts.length === 0 && relatedImages.length === bodyImages.length) {
+  const hasReferenceMetrics = (context.referenceBundle?.items ?? []).some((item) => (item.metrics?.length ?? 0) > 0);
+  if (bodyImages.length > 0 && charts.length === 0 && relatedImages.length === bodyImages.length && hasReferenceMetrics) {
     issues.push({ code: "image_quality_failed", message: "검증 수치가 있는데 본문 이미지가 모두 장식용 이미지입니다." });
   }
 

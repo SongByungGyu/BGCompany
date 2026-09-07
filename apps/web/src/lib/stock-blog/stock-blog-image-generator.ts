@@ -595,6 +595,57 @@ function nvidiaHbmPathSvg(source: string) {
   });
 }
 
+function topicThumbnailSvg(input: {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  badge: string;
+  footer: string;
+  accent: string;
+}) {
+  const lines = splitTitle(input.title, 17);
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675">
+  <defs><linearGradient id="topicBg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#061427"/><stop offset="1" stop-color="#12334B"/></linearGradient><pattern id="topicGrid" width="42" height="42" patternUnits="userSpaceOnUse"><path d="M42 0H0V42" fill="none" stroke="${input.accent}" stroke-opacity="0.08"/></pattern></defs>
+  <rect width="1200" height="675" rx="28" fill="url(#topicBg)"/><rect width="1200" height="675" rx="28" fill="url(#topicGrid)"/>
+  <text x="92" y="72" fill="#FFFFFF" font-size="24" font-weight="800" letter-spacing="2" font-family="Georgia,'Times New Roman',serif">BG MARKET NOTE</text>
+  <text x="92" y="116" fill="${input.accent}" font-size="18" font-weight="800" letter-spacing="3" font-family="Arial,sans-serif">${xmlEscape(input.eyebrow)}</text>
+  <rect x="92" y="136" width="96" height="6" rx="3" fill="${input.accent}"/>
+  <text x="92" y="206" fill="#C8D9E8" font-size="21" font-weight="600" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${xmlEscape(truncate(input.subtitle, 46))}</text>
+  ${lines.map((line, index) => `<text x="92" y="300" dy="${index * 66}" fill="#FFFFFF" font-size="50" font-weight="800" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${xmlEscape(line)}</text>`).join("")}
+  <g transform="translate(820 176)"><rect width="260" height="260" rx="44" fill="#081C30" stroke="${input.accent}" stroke-width="4"/><circle cx="130" cy="104" r="65" fill="none" stroke="${input.accent}" stroke-width="8"/><path d="M130 62V108L166 132" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><text x="130" y="215" text-anchor="middle" fill="#FFFFFF" font-size="29" font-weight="800" font-family="Arial,'Noto Sans KR',sans-serif">${xmlEscape(input.badge)}</text></g>
+  <rect x="0" y="611" width="1200" height="64" fill="#041120" opacity="0.94"/><text x="92" y="652" fill="#AFC5DA" font-size="17" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${xmlEscape(input.footer)}</text><text x="1108" y="652" text-anchor="end" fill="#FFFFFF" font-size="18" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">주제에 맞는 공식 자료만 시각화</text>
+</svg>`;
+}
+
+function metricCardsSvg(input: {
+  title: string;
+  subtitle: string;
+  source: string;
+  accent: string;
+  cards: Array<{ label: string; display: string; note: string }>;
+}) {
+  const content = `<g>${input.cards.map((card, index) => {
+    const x = 72 + index * 350;
+    return `<rect x="${x}" y="235" width="316" height="250" rx="24" fill="#0A2138" stroke="${input.accent}" stroke-opacity="0.5"/><text x="${x + 28}" y="286" fill="#BDD1E3" font-size="20" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${xmlEscape(card.label)}</text><text x="${x + 28}" y="370" fill="#FFFFFF" font-size="45" font-weight="800" font-family="Arial,'Noto Sans KR',sans-serif">${xmlEscape(card.display)}</text><text x="${x + 28}" y="430" fill="${input.accent}" font-size="18" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${xmlEscape(card.note)}</text>`;
+  }).join("")}</g>`;
+  return chartFrame({ ...input, content });
+}
+
+function flowCardsSvg(input: { title: string; subtitle: string; source: string; accent: string; steps: string[]; caution?: string }) {
+  const content = `<g>${input.steps.map((step, index) => {
+    const x = 60 + index * 285;
+    const arrow = index < input.steps.length - 1 ? `<path d="M${x + 230} 350H${x + 270}" stroke="${input.accent}" stroke-width="7" stroke-linecap="round"/><path d="M${x + 258} 338L${x + 272} 350L${x + 258} 362" fill="none" stroke="${input.accent}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>` : "";
+    return `<rect x="${x}" y="265" width="225" height="170" rx="22" fill="#0A2138" stroke="${input.accent}" stroke-opacity="0.48"/><circle cx="${x + 32}" cy="302" r="17" fill="${input.accent}"/><text x="${x + 32}" y="309" text-anchor="middle" fill="#071426" font-size="17" font-weight="800" font-family="Arial,sans-serif">${index + 1}</text><text x="${x + 112}" y="360" text-anchor="middle" fill="#FFFFFF" font-size="20" font-weight="800" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${xmlEscape(step)}</text>${arrow}`;
+  }).join("")}</g>${input.caution ? `<rect x="190" y="500" width="820" height="62" rx="18" fill="#2A2030" stroke="#F0B46A" stroke-opacity="0.48"/><text x="600" y="539" text-anchor="middle" fill="#FFE0B2" font-size="19" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">${xmlEscape(input.caution)}</text>` : ""}`;
+  return chartFrame({ ...input, content });
+}
+
+function cpiReleaseTimeSvg(releaseValue: string, source: string) {
+  const content = `<g><rect x="110" y="235" width="450" height="265" rx="28" fill="#0A2138" stroke="#9B8CFF" stroke-opacity="0.55"/><text x="335" y="292" text-anchor="middle" fill="#CFC9FF" font-size="21" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">미국 동부시간</text><text x="335" y="370" text-anchor="middle" fill="#FFFFFF" font-size="42" font-weight="800" font-family="Arial,'Noto Sans KR',sans-serif">9월 11일 08:30</text><text x="335" y="430" text-anchor="middle" fill="#BFD2E5" font-size="18" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">BLS 공식 발표 일정</text><rect x="640" y="235" width="450" height="265" rx="28" fill="#151D3B" stroke="#56D7B0" stroke-opacity="0.6"/><text x="865" y="292" text-anchor="middle" fill="#B9F3E2" font-size="21" font-weight="700" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">한국시간</text><text x="865" y="370" text-anchor="middle" fill="#FFFFFF" font-size="42" font-weight="800" font-family="Arial,'Noto Sans KR',sans-serif">9월 11일 21:30</text><text x="865" y="430" text-anchor="middle" fill="#BFD2E5" font-size="18" font-family="'Noto Sans KR','Malgun Gothic',Arial,sans-serif">발표 전 실제값은 미확정</text></g>`;
+  return chartFrame({ title: "9월 미국 CPI 발표시간", subtitle: releaseValue, source, content, accent: "#9B8CFF" });
+}
+
 const LEGACY_NVIDIA_METRICS: Record<string, ReferenceMetric[]> = {
   "official-nvidia-q2-fy2027-results": [
     { key: "nvidia.fy2027.q2.revenue", label: "매출", value: 96.2, unit: "십억달러", asOf: "2026-08-26", sourceName: "NVIDIA Newsroom", sourceUrl: "https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-second-quarter-fiscal-2027" },
@@ -622,6 +673,10 @@ function withLegacyNvidiaMetrics(bundle?: ReferenceBundle): ReferenceBundle | un
 
 function referenceMetricMap(bundle?: ReferenceBundle): Record<string, ReferenceMetric> {
   return Object.fromEntries((bundle?.items ?? []).flatMap((item) => item.metrics ?? []).map((metric) => [metric.key, metric]));
+}
+
+function referenceFactMap(bundle?: ReferenceBundle): Record<string, ReferenceFact> {
+  return Object.fromEntries((bundle?.items ?? []).flatMap((item) => item.facts ?? []).map((fact) => [fact.key, fact]));
 }
 
 function isOfficialYouthSavingsUrl(value: string) {
@@ -690,6 +745,18 @@ export function isNvidiaEarningsSubject(input: { title: string; topic: string })
   const text = `${input.title}\n${input.topic}`;
   return /NVIDIA|엔비디아|\bNVDA\b/i.test(text)
     && /실적|earnings?|매출|revenue|EPS|가이던스|guidance|FY20\d{2}|분기\s*(?:실적|매출)|데이터센터\s*매출/i.test(text);
+}
+
+export function isBroadcomEarningsSubject(input: { title: string; topic: string }) {
+  const text = `${input.title}\n${input.topic}`;
+  return /Broadcom|브로드컴|\bAVGO\b/i.test(text)
+    && /실적|earnings?|매출|revenue|가이던스|guidance|AI\s*반도체/i.test(text);
+}
+
+export function isCpiScheduleSubject(input: { title: string; topic: string }) {
+  const text = `${input.title}\n${input.topic}`;
+  return /\bCPI\b|소비자물가(?:지수)?/i.test(text)
+    && /발표시간|발표\s*시각|공식\s*일정|release\s*(?:time|schedule)/i.test(text);
 }
 
 export function isUsMarketStudySubject(input: { title: string; topic: string }) {
@@ -941,6 +1008,71 @@ export async function generateStockBlogImages(input: {
       };
     }
 
+    if (isBroadcomEarningsSubject(input)) {
+      if (input.template !== "INVESTMENT_STUDY") throw new Error("BROADCOM_TEMPLATE_INVALID");
+      const metrics = referenceMetricMap(input.referenceBundle);
+      const keys = ["broadcom.fy2026.q3.revenue", "broadcom.fy2026.q3.revenueGrowth", "broadcom.fy2026.q4.revenueGuidance"];
+      const missing = keys.filter((key) => !metrics[key]);
+      if (missing.length > 0) throw new Error(`BROADCOM_TOPIC_IMAGE_METRICS_MISSING:${missing.join(",")}`);
+      const officialItem = input.referenceBundle?.items.find((item) => item.id === "official-broadcom-q3-fy2026-results");
+      if (!officialItem?.url || officialItem.reliability !== "official") throw new Error("BROADCOM_TOPIC_IMAGE_SOURCE_MISSING");
+      const source = "기준일 2026.09.02 | 출처 Broadcom Investor Relations";
+      const files = [
+        { name: "thumbnail.svg", svg: topicThumbnailSvg({ eyebrow: "BROADCOM EARNINGS", title: "브로드컴 실적과 AI 반도체 가이던스", subtitle: "3분기 매출 · 성장률 · 4분기 회사 전망", badge: "AVGO", footer, accent: "#56D7B0" }) },
+        { name: "broadcom-results.svg", svg: metricCardsSvg({ title: "브로드컴 실적에서 볼 세 숫자", subtitle: "확정 실적과 다음 분기 회사 가이던스를 구분했습니다.", source, accent: "#56D7B0", cards: [
+          { label: "3분기 매출", display: "$29.6B", note: "확정 실적" },
+          { label: "전년 동기 대비", display: "+86%", note: "매출 증가율" },
+          { label: "4분기 매출 전망", display: "$34.8B", note: "회사 가이던스" },
+        ] }) },
+        { name: "broadcom-guidance.svg", svg: metricCardsSvg({ title: "확정 매출과 다음 분기 가이던스", subtitle: "같은 십억달러 단위로 두 숫자를 비교했습니다.", source, accent: "#9B8CFF", cards: [
+          { label: "2026회계연도 3분기", display: "$29.6B", note: "발표된 매출" },
+          { label: "2026회계연도 4분기", display: "$34.8B", note: "회사 전망" },
+        ] }) },
+        { name: "broadcom-ai-path.svg", svg: flowCardsSvg({ title: "브로드컴 실적에서 AI 반도체를 읽는 순서", subtitle: "한 분기 매출보다 수요가 다음 분기로 이어지는지 확인합니다.", source, accent: "#56D7B0", steps: ["AI 인프라 투자", "맞춤형 가속기", "네트워크 수요", "다음 분기 매출"], caution: "가이던스는 회사 전망이며 확정 실적이 아닙니다." }) },
+      ];
+      await mkdir(outputDir, { recursive: true });
+      await Promise.all(files.map((file) => writeFile(path.join(outputDir, file.name), file.svg, "utf8")));
+      const sizes = await Promise.all(files.map((file) => stat(path.join(outputDir, file.name))));
+      if (sizes.some((file) => !file.isFile() || file.size < 500)) throw new Error("IMAGE_FILE_VERIFICATION_FAILED");
+      const point = (key: string) => dataPoint(`reference.${key}`, metrics[key].label, metrics[key].value, metrics[key].unit, metrics[key].asOf);
+      const contentImages: StockBlogContentImage[] = [
+        { id: "thumbnail", role: "thumbnail", type: "thumbnail", title: "브로드컴 실적과 AI 반도체 가이던스", placementAfterHeading: "__thumbnail__", imageUrl: `${relativeDir}/thumbnail.svg`, caption: "브로드컴 실적과 AI 반도체 가이던스", sourceLabel: "BG Market Note 자체 제작", sourceName: "BG Market Note", relevanceTags: ["broadcom", "earnings", "ai-semiconductor"], licenseType: "generated", collectedAt: generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [], width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true },
+        { id: "broadcom-results", role: "body", type: "chart", title: "브로드컴 실적에서 볼 세 숫자", placementAfterHeading: placements.majorIndexChange, imageUrl: `${relativeDir}/broadcom-results.svg`, caption: "3분기 매출·증가율·4분기 매출 가이던스", sourceLabel: source, sourceName: "Broadcom Investor Relations", sourceUrl: officialItem.url, relevanceTags: ["broadcom", "earnings", "ai-semiconductor"], licenseType: "generated-data-chart", collectedAt: officialItem.collectedAt ?? generatedAt, usageAllowed: true, dataKeys: keys.map((key) => `reference.${key}`), dataPoints: keys.map(point), width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true },
+        { id: "broadcom-guidance", role: "body", type: "chart", title: "확정 매출과 다음 분기 가이던스", placementAfterHeading: placements.kospiInvestorFlow, imageUrl: `${relativeDir}/broadcom-guidance.svg`, caption: "3분기 확정 매출과 4분기 회사 전망 비교", sourceLabel: source, sourceName: "Broadcom Investor Relations", sourceUrl: officialItem.url, relevanceTags: ["broadcom", "earnings", "guidance"], licenseType: "generated-data-chart", collectedAt: officialItem.collectedAt ?? generatedAt, usageAllowed: true, dataKeys: [keys[0], keys[2]].map((key) => `reference.${key}`), dataPoints: [keys[0], keys[2]].map(point), width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true },
+        { id: "broadcom-ai-path", role: "body", type: "related-image", title: "AI 반도체 수요를 읽는 순서", placementAfterHeading: placements.fxAndUsYields, imageUrl: `${relativeDir}/broadcom-ai-path.svg`, caption: "AI 인프라 투자에서 다음 분기 매출까지 이어지는 확인 경로", sourceLabel: source, sourceName: "Broadcom Investor Relations", sourceUrl: officialItem.url, relevanceTags: ["broadcom", "ai-semiconductor", "guidance"], licenseType: "generated", collectedAt: officialItem.collectedAt ?? generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [], width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true },
+      ];
+      const imageQuality = evaluateStockBlogImageQuality(contentImages, snapshot, { referenceBundle: input.referenceBundle, requiredRelevanceTags: ["broadcom"], minimumRelevantBodyImages: 3 });
+      if (imageQuality.status !== "passed") throw new Error(imageQuality.issues.map((issue) => `${issue.code}:${issue.message}`).join(" | "));
+      return { thumbnailImageUrl: `${relativeDir}/thumbnail.svg`, inlineImageUrls: contentImages.filter((image) => image.role === "body").map((image) => image.imageUrl), contentImages, imageQuality, imageStatus: "generated", imageGeneratedAt: generatedAt };
+    }
+
+    if (isCpiScheduleSubject(input)) {
+      if (input.template !== "INVESTMENT_STUDY") throw new Error("CPI_SCHEDULE_TEMPLATE_INVALID");
+      const facts = referenceFactMap(input.referenceBundle);
+      const releaseFact = facts["bls.cpi.releaseAt.2026-09"];
+      if (!releaseFact?.sourceUrl || !/bls\.gov/i.test(releaseFact.sourceUrl)) throw new Error("CPI_SCHEDULE_FACT_MISSING");
+      const source = "발표 일정 확인 2026.09.07 | 출처 미국 노동통계국(BLS)";
+      const files = [
+        { name: "thumbnail.svg", svg: topicThumbnailSvg({ eyebrow: "US CPI SCHEDULE", title: "9월 미국 CPI 발표시간", subtitle: "미국 동부시간과 한국시간을 함께 확인", badge: "CPI", footer, accent: "#9B8CFF" }) },
+        { name: "cpi-release-time.svg", svg: cpiReleaseTimeSvg(releaseFact.value, source) },
+        { name: "cpi-market-path.svg", svg: flowCardsSvg({ title: "CPI가 나스닥에 전달되는 경로", subtitle: "예상과 실제의 차이가 금리 기대를 거쳐 성장주에 반영됩니다.", source, accent: "#9B8CFF", steps: ["CPI 실제값", "예상치와 차이", "국채금리 반응", "나스닥 반응"], caution: "발표 전에는 실제 CPI 수치가 확정되지 않았습니다." }) },
+        { name: "cpi-check-order.svg", svg: flowCardsSvg({ title: "CPI 발표 전후 확인 순서", subtitle: "방향을 단정하지 않고 네 항목을 순서대로 봅니다.", source, accent: "#56D7B0", steps: ["발표 시각", "예상·실제", "2년물 금리", "지수 선물"], caution: "한 숫자만 보고 매수·매도를 결정하지 않습니다." }) },
+      ];
+      await mkdir(outputDir, { recursive: true });
+      await Promise.all(files.map((file) => writeFile(path.join(outputDir, file.name), file.svg, "utf8")));
+      const sizes = await Promise.all(files.map((file) => stat(path.join(outputDir, file.name))));
+      if (sizes.some((file) => !file.isFile() || file.size < 500)) throw new Error("IMAGE_FILE_VERIFICATION_FAILED");
+      const contentImages: StockBlogContentImage[] = [
+        { id: "thumbnail", role: "thumbnail", type: "thumbnail", title: "9월 미국 CPI 발표시간", placementAfterHeading: "__thumbnail__", imageUrl: `${relativeDir}/thumbnail.svg`, caption: "9월 미국 CPI 발표시간", sourceLabel: "BG Market Note 자체 제작", sourceName: "BG Market Note", relevanceTags: ["cpi", "release-schedule", "inflation"], licenseType: "generated", collectedAt: generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [], width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true },
+        { id: "cpi-release-time", role: "body", type: "related-image", title: "9월 미국 CPI 발표시간", placementAfterHeading: placements.majorIndexChange, imageUrl: `${relativeDir}/cpi-release-time.svg`, caption: "미국 동부시간과 한국시간으로 확인한 BLS 공식 발표 일정", sourceLabel: source, sourceName: "미국 노동통계국(BLS)", sourceUrl: releaseFact.sourceUrl, relevanceTags: ["cpi", "release-schedule", "inflation"], licenseType: "generated", collectedAt: generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [], width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true },
+        { id: "cpi-market-path", role: "body", type: "related-image", title: "CPI가 나스닥에 전달되는 경로", placementAfterHeading: placements.kospiInvestorFlow, imageUrl: `${relativeDir}/cpi-market-path.svg`, caption: "CPI 실제값에서 국채금리와 나스닥으로 이어지는 확인 경로", sourceLabel: source, sourceName: "미국 노동통계국(BLS) · BG Market Note", sourceUrl: releaseFact.sourceUrl, relevanceTags: ["cpi", "inflation", "nasdaq"], licenseType: "generated", collectedAt: generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [], width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true },
+        { id: "cpi-check-order", role: "body", type: "related-image", title: "CPI 발표 전후 확인 순서", placementAfterHeading: placements.fxAndUsYields, imageUrl: `${relativeDir}/cpi-check-order.svg`, caption: "발표 시각·예상과 실제·2년물 금리·지수 선물 확인 순서", sourceLabel: source, sourceName: "미국 노동통계국(BLS) · BG Market Note", sourceUrl: releaseFact.sourceUrl, relevanceTags: ["cpi", "release-schedule", "nasdaq"], licenseType: "generated", collectedAt: generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [], width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true },
+      ];
+      const imageQuality = evaluateStockBlogImageQuality(contentImages, snapshot, { referenceBundle: input.referenceBundle, requiredRelevanceTags: ["cpi"], minimumRelevantBodyImages: 3 });
+      if (imageQuality.status !== "passed") throw new Error(imageQuality.issues.map((issue) => `${issue.code}:${issue.message}`).join(" | "));
+      return { thumbnailImageUrl: `${relativeDir}/thumbnail.svg`, inlineImageUrls: contentImages.filter((image) => image.role === "body").map((image) => image.imageUrl), contentImages, imageQuality, imageStatus: "generated", imageGeneratedAt: generatedAt };
+    }
+
     if (isNvidiaEarningsSubject(input)) {
       const subjectReferenceBundle = withLegacyNvidiaMetrics(input.referenceBundle);
       const metrics = referenceMetricMap(subjectReferenceBundle);
@@ -1035,6 +1167,10 @@ export async function generateStockBlogImages(input: {
         inlineImageUrls: contentImages.filter((image) => image.role === "body").map((image) => image.imageUrl),
         contentImages, imageQuality, imageStatus: "generated", imageGeneratedAt: generatedAt,
       };
+    }
+
+    if (input.template === "INVESTMENT_STUDY") {
+      throw new Error("INVESTMENT_STUDY_TOPIC_IMAGE_TEMPLATE_MISSING");
     }
 
     if (

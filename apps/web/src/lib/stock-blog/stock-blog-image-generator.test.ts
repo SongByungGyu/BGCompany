@@ -6,12 +6,14 @@ import {
   generateStockBlogImages,
   getGenericMarketImagePolicy,
   getStockBlogImageThemeMarketLabels,
+  isBroadcomEarningsSubject,
+  isCpiScheduleSubject,
   isNvidiaEarningsSubject,
   isUsMarketStudySubject,
   selectGenericOverseasIndexChanges,
   usesUsFocusedGenericImages,
 } from "./stock-blog-image-generator";
-import type { MarketSnapshot, MarketSnapshotMetric } from "./references/reference-types";
+import type { MarketSnapshot, MarketSnapshotMetric, ReferenceBundle } from "./references/reference-types";
 import { FRED_DEGRADED_DISCLOSURE } from "./references/fred-degraded-policy";
 
 const AS_OF = "2026-09-02T20:00:00.000Z";
@@ -41,6 +43,60 @@ test("엔비디아 실적·매출·가이던스 분석은 실적 전용 이미�
     title: "엔비디아 실적 발표 뒤 시간외 주가는 왜 올랐을까",
     topic: "분기 매출과 EPS, 다음 분기 가이던스를 공식 자료로 분석한다.",
   }), true);
+});
+
+test("브로드컴 실적과 CPI 발표시간은 각각 주제 전용 이미지 대상으로 분류한다", () => {
+  assert.equal(isBroadcomEarningsSubject({ title: "브로드컴 실적 발표", topic: "AVGO 매출과 AI 반도체 가이던스" }), true);
+  assert.equal(isCpiScheduleSubject({ title: "미국 CPI 발표시간은 언제", topic: "BLS 공식 일정과 나스닥 영향" }), true);
+});
+
+test("브로드컴 투자공부 글은 시황 차트 대신 실적 전용 이미지만 만든다", async () => {
+  const pipelineId = `test-broadcom-topic-${process.pid}`;
+  const outputDir = path.join(process.cwd(), "public", "generated", "stock-blog", pipelineId);
+  const sourceUrl = "https://investors.broadcom.com/news-releases/broadcom-results";
+  const referenceBundle: ReferenceBundle = {
+    provider: "web", mode: "real", status: "ready", contentType: "INVESTMENT_STUDY", generatedAt: AS_OF,
+    marketDate: "2026-09-07", market: "US", queries: [], keyThemes: [], repeatedKeywords: [], differentiationPoints: [], cautionNotes: [], sourcePolicy: "official",
+    items: [{ id: "official-broadcom-q3-fy2026-results", sourceType: "company", provider: "broadcom-ir", title: "Broadcom results", url: sourceUrl, reliability: "official", collectedAt: AS_OF, metrics: [
+      { key: "broadcom.fy2026.q3.revenue", label: "3분기 매출", value: 29.6, unit: "십억달러", asOf: "2026-09-02", sourceName: "Broadcom IR", sourceUrl },
+      { key: "broadcom.fy2026.q3.revenueGrowth", label: "매출 증가율", value: 86, unit: "%", asOf: "2026-09-02", sourceName: "Broadcom IR", sourceUrl },
+      { key: "broadcom.fy2026.q4.revenueGuidance", label: "4분기 매출 가이던스", value: 34.8, unit: "십억달러", asOf: "2026-09-02", sourceName: "Broadcom IR", sourceUrl },
+    ] }],
+  };
+  try {
+    const result = await generateStockBlogImages({ pipelineId, template: "INVESTMENT_STUDY", title: "브로드컴 실적 발표", topic: "AVGO 매출과 AI 반도체 가이던스", marketDate: "2026-09-07", referenceBundle });
+    assert.equal(result.imageStatus, "generated");
+    assert.deepEqual(result.contentImages.map((image) => image.id), ["thumbnail", "broadcom-results", "broadcom-guidance", "broadcom-ai-path"]);
+    assert.equal(result.contentImages.some((image) => ["major-index-change", "fx-and-us-yields"].includes(image.id)), false);
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+test("CPI 발표시간 투자공부 글은 시황 차트 대신 일정 전용 이미지만 만든다", async () => {
+  const pipelineId = `test-cpi-topic-${process.pid}`;
+  const outputDir = path.join(process.cwd(), "public", "generated", "stock-blog", pipelineId);
+  const sourceUrl = "https://www.bls.gov/schedule/2026/09_sched_list.htm";
+  const referenceBundle: ReferenceBundle = {
+    provider: "web", mode: "real", status: "ready", contentType: "INVESTMENT_STUDY", generatedAt: AS_OF,
+    marketDate: "2026-09-07", market: "US", queries: [], keyThemes: [], repeatedKeywords: [], differentiationPoints: [], cautionNotes: [], sourcePolicy: "official",
+    items: [{ id: "official-bls-september-2026-cpi-schedule", sourceType: "calendar", provider: "bls", title: "CPI schedule", url: sourceUrl, reliability: "official", facts: [{ key: "bls.cpi.releaseAt.2026-09", label: "CPI 발표 시각", value: "2026-09-11 08:30 ET · 한국시간 21:30", asOf: "2026-09-07", sourceName: "BLS", sourceUrl }] }],
+  };
+  try {
+    const result = await generateStockBlogImages({ pipelineId, template: "INVESTMENT_STUDY", title: "9월 미국 CPI 발표시간은?", topic: "BLS 공식 일정과 나스닥 영향", marketDate: "2026-09-07", referenceBundle });
+    assert.equal(result.imageStatus, "generated");
+    assert.deepEqual(result.contentImages.map((image) => image.id), ["thumbnail", "cpi-release-time", "cpi-market-path", "cpi-check-order"]);
+    assert.equal(result.contentImages.some((image) => ["major-index-change", "fx-and-us-yields"].includes(image.id)), false);
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+test("전용 이미지 규칙이 없는 투자공부 글은 시황 차트로 대체하지 않는다", async () => {
+  const result = await generateStockBlogImages({ pipelineId: `test-unknown-study-${process.pid}`, template: "INVESTMENT_STUDY", title: "낯선 투자 개념", topic: "별도 주제 이미지가 아직 없는 공부 글", marketDate: "2026-09-07" });
+  assert.equal(result.imageStatus, "failed");
+  assert.match(result.imageErrorMessage ?? "", /INVESTMENT_STUDY_TOPIC_IMAGE_TEMPLATE_MISSING/);
+  assert.equal(result.contentImages.length, 0);
 });
 
 test("미국증시·나스닥 복기 글은 미국시장 중심 이미지 대상으로 분류한다", () => {
