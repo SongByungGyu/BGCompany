@@ -24,3 +24,17 @@ test("출처 밖 URL과 문단 간격은 바꾸지 않음", () => {
   const body="첫 문단\n\nhttps://example.com\n\n둘째 문단";
   assert.equal(buildNaverArticleLayout(body).body,body);
 });
+
+test("데이터 누락 고지문은 기사로 오인하지 않고 원문 그대로 유지", () => {
+  const disclosures = [
+    "미국 금리와 경제지표는 확인 가능한 최신 공식 수치만 반영했습니다.",
+    "FRED 거시지표 조회 지연으로 미국 국채금리 또는 경제지표 일정 일부를 이번 브리핑에서 제외했습니다.",
+    "KIS 업종 등락 자료가 일시적으로 비어 있어 강세·약세 업종 항목은 제외하고, 검증된 지수·수급·환율·거시자료만 사용했습니다.",
+    "※ 확인되지 않은 해외지수·환율 수치와 관련 그래프는 제외하고, 검증된 국내 지수·수급·미국 금리 자료만 사용했습니다.",
+  ];
+  for (const disclosure of disclosures) {
+    const result = buildNaverArticleLayout(`함께 확인한 기사\n\n1. 미국 국채금리 동향\n- 원문: https://example.com/rates\n\n${disclosure}\n\n본 글은 투자 참고 자료입니다.`);
+    assert.equal(result.links.length, 1);
+    assert.ok(result.body.endsWith(`${disclosure}\n\n본 글은 투자 참고 자료입니다.`));
+  }
+});
