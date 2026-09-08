@@ -48,6 +48,7 @@ NAVER_ALLOW_DRAFT_SAVE=false
 - If the Playwright browser opens as a tiny grey WSLg window, set `NAVER_BROWSER_CHANNEL=chrome` when Chrome is installed inside WSL.
 - If Chrome is only installed on Windows, set `NAVER_BROWSER_EXECUTABLE_PATH` to the Chrome executable path and keep `NAVER_BROWSER_CHANNEL` empty.
 - When Naver login/security appears, complete it manually in the opened browser and press Enter in the agent terminal.
+- The writer keeps its Naver browser open after a job by default and reuses that session for the next job. Set `NAVER_KEEP_BROWSER_OPEN=false` only when each job must close its browser.
 
 - If WSLg Chromium is not visible, launch a normal Windows Chrome with remote debugging and set `NAVER_CDP_ENDPOINT=http://127.0.0.1:9222`.
 
