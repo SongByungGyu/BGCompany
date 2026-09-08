@@ -16,8 +16,15 @@ import {
   selectNaverArticleUrls,
   selectNaverEmphasisParagraphs,
   selectNaverSectionHeadings,
+  shouldKeepNaverBrowserOpen,
   waitForVerificationClear,
 } from "./naver-writer.js";
+
+test("발행 뒤 네이버 브라우저는 기본 유지하고 명시적으로 끈 경우만 닫는다", () => {
+  assert.equal(shouldKeepNaverBrowserOpen(undefined), true);
+  assert.equal(shouldKeepNaverBrowserOpen("true"), true);
+  assert.equal(shouldKeepNaverBrowserOpen("false"), false);
+});
 
 test("네이버 공개 성공은 대상 블로그의 숫자형 게시글 URL만 인정한다", () => {
   const writeUrl = "https://blog.naver.com/PostWriteForm.naver";

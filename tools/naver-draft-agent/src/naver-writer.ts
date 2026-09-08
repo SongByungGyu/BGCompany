@@ -75,6 +75,7 @@ type WriterContext = {
 };
 
 const openBrowserContexts = new Set<unknown>();
+let retainedPersistentContext: import("playwright").BrowserContext | undefined;
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
 
@@ -90,6 +91,22 @@ function classifySecurityPage(url: string, text: string): WriterResult["status"]
 function isExplicitLiveMode() {
   const setting = process.env.NAVER_AGENT_DRY_RUN ?? process.env.NAVER_DRAFT_AGENT_DRY_RUN;
   return setting === "false";
+}
+
+export function shouldKeepNaverBrowserOpen(value = process.env.NAVER_KEEP_BROWSER_OPEN) {
+  return value !== "false";
+}
+
+async function reusablePersistentBrowserPage() {
+  if (!retainedPersistentContext) return null;
+  try {
+    const page = retainedPersistentContext.pages().find((candidate) => !candidate.isClosed())
+      ?? await retainedPersistentContext.newPage();
+    return { context: retainedPersistentContext, page };
+  } catch {
+    retainedPersistentContext = undefined;
+    return null;
+  }
 }
 
 function describeBrowserConfig(profileDir: string, browserChannel?: string, browserExecutablePath?: string, cdpEndpoint?: string) {
@@ -1305,6 +1322,7 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
   const browserChannel = process.env.NAVER_BROWSER_CHANNEL?.trim();
   const browserExecutablePath = process.env.NAVER_BROWSER_EXECUTABLE_PATH?.trim();
   const cdpEndpoint = process.env.NAVER_CDP_ENDPOINT?.trim();
+  const keepBrowserOpen = shouldKeepNaverBrowserOpen();
 
   console.log(`[naver-agent] opening browser (${describeBrowserConfig(profileDir, browserChannel, browserExecutablePath, cdpEndpoint)})`);
 
@@ -1319,9 +1337,17 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
     page = contextBrowser.pages()[0] ?? await contextBrowser.newPage();
     openBrowserContexts.add(browser);
   } else {
-    contextBrowser = await launchPersistentBrowserContext(chromium, profileDir, browserChannel, browserExecutablePath);
-    openBrowserContexts.add(contextBrowser);
-    page = contextBrowser.pages()[0] ?? await contextBrowser.newPage();
+    const retained = keepBrowserOpen ? await reusablePersistentBrowserPage() : null;
+    if (retained) {
+      contextBrowser = retained.context;
+      page = retained.page;
+      console.log("[naver-agent] reusing retained Naver browser session");
+    } else {
+      contextBrowser = await launchPersistentBrowserContext(chromium, profileDir, browserChannel, browserExecutablePath);
+      openBrowserContexts.add(contextBrowser);
+      page = contextBrowser.pages()[0] ?? await contextBrowser.newPage();
+      if (keepBrowserOpen) retainedPersistentContext = contextBrowser;
+    }
   }
 
   await page.bringToFront().catch(() => undefined);
@@ -1573,6 +1599,9 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
   } catch (error) {
     return { status: "failed", errorCode: "NAVER_WRITER_FAILED", errorMessage: error instanceof Error ? error.message : String(error) };
   } finally {
-    await contextBrowser.close().catch(() => undefined);
+    if (!cdpEndpoint && !keepBrowserOpen) {
+      openBrowserContexts.delete(contextBrowser);
+      await contextBrowser.close().catch(() => undefined);
+    }
   }
 }
