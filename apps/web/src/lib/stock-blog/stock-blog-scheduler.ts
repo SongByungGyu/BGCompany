@@ -1929,6 +1929,9 @@ async function runOneSchedule(
       seedState: logicalExisting ? undefined : retryV2,
       seedCheckpoint: logicalExisting ? undefined : retryCheckpoint,
       forceReferenceRefresh: retryV2.completed.reference_preflight,
+      maxAttempts: dataFailureStudyFallback
+        ? (definition.referenceMaxAttempts ?? STOCK_BLOG_RETRY_PHASE_LIMITS.reference_preflight) + 2
+        : undefined,
     });
     retryV2 = claim.state;
     retryCheckpoint = claim.checkpoint;
