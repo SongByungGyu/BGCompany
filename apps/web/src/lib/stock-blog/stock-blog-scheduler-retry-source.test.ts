@@ -106,6 +106,8 @@ test("이미지 발행 조건은 생성 품질 게이트와 네이버 사전검�
   assert.match(qualitySource, /reasons\.push\(\.\.\.imagePublishReadinessReasons\)/);
   assert.match(naverDraftSource, /inspectStockBlogImagePublishReadiness\(pipeline\)/);
   assert.doesNotMatch(naverDraftSource, /if \(pipeline\.imageStatus !== "generated"\)/);
+  assert.match(naverDraftSource, /referenceOnlyEvidence = bundle\?\.contentType === "INVESTMENT_STUDY"[\s\S]{0,120}reference-only-study-fallback/);
+  assert.match(naverDraftSource, /if \(!referenceOnlyEvidence\) \{[\s\S]{0,550}MarketSnapshot fallbackUsed=false 필요/);
 });
 
 test("발행 회로가 열려도 파이프라인과 큐 조립은 진행하고 실제 publish 단계에서만 차단한다", async () => {

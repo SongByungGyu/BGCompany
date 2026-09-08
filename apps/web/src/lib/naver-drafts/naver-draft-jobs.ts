@@ -663,6 +663,8 @@ export function getNaverDraftPolicy() {
 function automaticPublishBlockReasons(pipeline: ContentPipelineRun, body: string) {
   const bundle = collectReferenceBundle(pipeline);
   const snapshot = bundle?.marketSnapshot;
+  const referenceOnlyEvidence = bundle?.contentType === "INVESTMENT_STUDY"
+    && bundle.evidencePolicy === "reference-only-study-fallback";
   const qaApproval = inspectStockBlogQaApproval(pipeline.qaResult);
   const allowedDegradedSnapshot = isAllowedFredDegradedSnapshot(snapshot)
     || isAllowedKisSectorDegradedSnapshot(snapshot)
@@ -682,10 +684,12 @@ function automaticPublishBlockReasons(pipeline: ContentPipelineRun, body: string
   if (!qaApproval.ok) reasons.push(...qaApproval.reasons);
   if ((bundle?.missingItems?.length ?? 0) > 0 && !allowedDegradedSnapshot) reasons.push("Reference missingItems 존재");
   if ((bundle?.competitorAnalysis?.analyzedCount ?? 0) < 1) reasons.push("경쟁 블로그 심층 구조 분석 PASS 필요");
-  if (snapshot?.status !== "ready") reasons.push("MarketSnapshot status=ready 필요");
-  if (snapshot?.dataQuality !== "verified" && !allowedDegradedSnapshot) reasons.push("MarketSnapshot dataQuality=verified 필요");
-  if (snapshot?.freshness?.status !== "fresh") reasons.push("MarketSnapshot freshness=fresh 필요");
-  if (snapshot?.fallbackUsed !== false) reasons.push("MarketSnapshot fallbackUsed=false 필요");
+  if (!referenceOnlyEvidence) {
+    if (snapshot?.status !== "ready") reasons.push("MarketSnapshot status=ready 필요");
+    if (snapshot?.dataQuality !== "verified" && !allowedDegradedSnapshot) reasons.push("MarketSnapshot dataQuality=verified 필요");
+    if (snapshot?.freshness?.status !== "fresh") reasons.push("MarketSnapshot freshness=fresh 필요");
+    if (snapshot?.fallbackUsed !== false) reasons.push("MarketSnapshot fallbackUsed=false 필요");
+  }
   reasons.push(...inspectStockBlogImagePublishReadiness(pipeline));
   return Array.from(new Set(reasons));
 }
