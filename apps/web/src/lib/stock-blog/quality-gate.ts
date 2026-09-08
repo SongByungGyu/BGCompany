@@ -1,4 +1,5 @@
 import type { ContentPipelineRun } from "@/features/content-pipeline/content-pipeline-types";
+import { inspectNaturalStockBlogLayout } from "./stock-blog-natural-style.ts";
 import {
   inspectStockBlogSourceContract,
   inspectStockBlogTailContract,
@@ -220,7 +221,8 @@ export function inspectNextWeekEditorialContract(body: string) {
   const disclaimerCount = body.split(NEXT_WEEK_DISCLAIMER).length - 1;
   let cursor = -1;
   const missingOrOutOfOrderHeadings: string[] = [];
-  for (const heading of NEXT_WEEK_HEADINGS) {
+  const requiredHeadings = inspectNaturalStockBlogLayout(body).active ? ["마무리", "함께 확인한 기사"] : NEXT_WEEK_HEADINGS;
+  for (const heading of requiredHeadings) {
     const nextIndex = body.indexOf(heading, cursor + 1);
     if (nextIndex < 0) missingOrOutOfOrderHeadings.push(heading);
     else cursor = nextIndex;
@@ -332,6 +334,7 @@ function diagnostics(input: {
   const marketSnapshotDegraded = fredDegraded || kisSectorDegraded || kisOverseasDegraded;
   const sourceContract = inspectStockBlogSourceContract(body, realRefs);
   const tailContract = inspectStockBlogTailContract(body, marketSnapshot);
+  const narrative = inspectNaturalStockBlogLayout(body);
   return {
     referenceProvider: input.bundle?.provider,
     referenceMode: input.bundle?.mode,
@@ -347,12 +350,12 @@ function diagnostics(input: {
     writerNewlineCount: (writerText.match(/\n/g) ?? []).length,
     pasteReadyNewlineCount: (body.match(/\n/g) ?? []).length,
     doubleNewlineBlockCount: body.split(/\n{2,}/).filter((part) => part.trim().length >= 20).length,
-    sectionHeadingCount: countSectionHeadings(body),
+    sectionHeadingCount: narrative.active ? narrative.headingCount : countSectionHeadings(body),
     paragraphCount,
     bulletItemCount: body.split("\n").filter((line) => line.trim().startsWith("- ")).length,
     bodyLength: body.length,
     duplicateSentenceCount: countDuplicateSentences(body),
-    hasBgMarketNoteJudgment: BG_MARKET_NOTE_JUDGMENT_PATTERN.test(body),
+    hasBgMarketNoteJudgment: narrative.active ? narrative.hasJudgment : BG_MARKET_NOTE_JUDGMENT_PATTERN.test(body),
     hasDisclaimer: DISCLAIMER_PATTERNS.some((pattern) => pattern.test(body)),
     hasMockPhrase: MOCK_TEXT_PATTERNS.some((pattern) => pattern.test(body)) || FORBIDDEN_SOURCE_NAMES.some((name) => body.includes(name)),
     hasImagePromptLeak: IMAGE_PROMPT_PATTERNS.some((pattern) => pattern.test(body)),

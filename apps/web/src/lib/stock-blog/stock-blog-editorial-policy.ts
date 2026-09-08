@@ -1,6 +1,7 @@
 import type { StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
+import { inspectNaturalStockBlogLayout, STOCK_BLOG_NATURAL_STYLE_GUIDELINES } from "./stock-blog-natural-style.ts";
 
-export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 7;
+export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 8;
 
 export const STOCK_BLOG_INVESTMENT_DISCLAIMER = "본 글은 시장 정보를 정리한 투자 참고 자료이며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 최종 투자 판단과 책임은 투자자 본인에게 있습니다.";
 
@@ -161,7 +162,7 @@ export function getStockBlogEditorialPolicy(contentType: StockReferenceBriefingT
     contentType,
     bodyLength: weekly ? WEEKLY_LENGTH : DAILY_LENGTH,
     bodyStructure: [...BODY_STRUCTURES[contentType]],
-    minimumHeadingCount: weekly ? 8 : 7,
+    minimumHeadingCount: 2,
     minimumParagraphCount: 10,
     checklistItemCount: 3,
     coreNumberMin: 4,
@@ -179,24 +180,24 @@ export function getStockBlogEditorialGuidelines(contentType: StockReferenceBrief
   const templateFocusGuidelines = contentType === "KOREA_DAILY_PREVIEW"
     ? [
       "오전 한국장 전망 글에서는 전일 한국장 마감을 2~3문장 코멘트로만 복기하고, 간밤 미국 지수·금리·환율을 오늘 한국장 전망의 근거로 사용합니다. 본문의 70% 이상은 오늘 한국장 변수·조건·확인 항목에 배정합니다.",
-      "제목과 30초 요약은 오늘 코스피·한국장 전망을 중심으로 쓰며, 전일 한국장 마감 원인을 메인 제목으로 다시 소비하지 않습니다.",
+      "제목과 도입은 오늘 코스피·한국장 전망을 중심으로 쓰며, 전일 한국장 마감 원인을 메인 제목으로 다시 소비하지 않습니다.",
       "투자자별 순매수 금액은 직전 거래일의 확정값으로만 설명하고 반드시 전일 수급이라고 밝힙니다. 오늘 수급 금액을 예측하지 말고, 원·달러 환율 안정과 외국인 선물 흐름 같은 관찰 조건에 따라 전일 흐름의 연속·반전 가능성을 시나리오로 씁니다.",
       "오전 한국장 전망에는 별도의 경제 일정·검증 일정 섹션을 만들지 않습니다. 일정이 핵심 변수라면 검증된 항목 하나만 관련 문단에 짧게 연결하고, 그렇지 않으면 생략합니다.",
     ]
     : contentType === "KOREA_MARKET_CLOSE_US_PREVIEW"
       ? [
         "17시 미국장 전망 글에서는 전일 S&P500·나스닥·다우 흐름을 검증 숫자로 먼저 짧게 복기하고, 오늘 한국장 마감은 미국장과 연결되는 신호를 2~3문장으로만 언급합니다. 본문의 70% 이상은 오늘 밤 미국장 변수·조건·확인 항목에 배정합니다.",
-        "제목과 30초 요약의 1차 검색 의도는 오늘 미국장·나스닥 전망입니다. 오늘 코스피 마감 원인이나 외국인 수급을 메인 제목과 결론으로 사용하지 않습니다.",
+        "제목과 도입의 1차 검색 의도는 오늘 미국장·나스닥 전망입니다. 오늘 코스피 마감 원인이나 외국인 수급을 메인 제목과 결론으로 사용하지 않습니다.",
       ]
       : contentType === "WEEKLY_MARKET_REVIEW"
         ? [
           "토요일 주간 복기 글은 본문의 70% 이상을 이번 주 한국·미국 지수, 수급, 주도 업종, 금리·환율, 실제 변동 원인에 배정합니다. 다음 주 내용은 이번 주에 확인된 신호가 이어지는지 볼 항목 3개로만 제한합니다.",
-          "제목과 30초 요약의 1차 검색 의도는 이번 주 증시 정리입니다. 다음 주 일정·전망·상승 조건을 메인 제목이나 별도 일정 섹션으로 확장하지 않습니다.",
+          "제목과 도입의 1차 검색 의도는 이번 주 증시 정리입니다. 다음 주 일정·전망·상승 조건을 메인 제목이나 별도 일정 섹션으로 확장하지 않습니다.",
         ]
         : contentType === "NEXT_WEEK_MARKET_PREVIEW"
           ? [
             "일요일 글은 지난주 복기를 2~3문장으로 끝내고, 본문의 70% 이상을 다음 주 주요 이슈 3개·영향 섹터·경제 및 실적 일정·대응 조건에 배정합니다.",
-            "제목과 30초 요약의 1차 검색 의도는 다음 주 주요 이슈와 수혜·주의 섹터입니다. 이슈마다 영향 경로와 확인할 공식 일정을 연결하고 단순 테마 나열은 금지합니다.",
+            "제목과 도입의 1차 검색 의도는 다음 주 주요 이슈와 수혜·주의 섹터입니다. 이슈마다 영향 경로와 확인할 공식 일정을 연결하고 단순 테마 나열은 금지합니다.",
           ]
           : contentType === "INVESTMENT_STUDY"
             ? [
@@ -213,12 +214,12 @@ export function getStockBlogEditorialGuidelines(contentType: StockReferenceBrief
   return [
     `BG MARKET NOTE 편집 정책 v${BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION}: 기존 API·데이터 계산·이미지 생성·JSON 필드·카테고리·예약 발행 구조는 바꾸지 않고 공개 글의 구성과 문체만 개선합니다.`,
     "제목은 실제 검색어와 오늘의 결론을 앞부분에 두고 핵심 변수는 1~2개만 사용합니다. 공포·확정·수익 보장 표현과 최근 제목의 중심 문구 반복을 금지합니다.",
-    `최종 공개 본문은 공백 포함 ${bodyLength.min.toLocaleString("ko-KR")}~${bodyLength.max.toLocaleString("ko-KR")}자이며 ${bodyLength.targetMin.toLocaleString("ko-KR")}~${bodyLength.targetMax.toLocaleString("ko-KR")}자를 목표로 합니다. 한 문단에는 한 가지 생각만 담고 모바일 기준 2~4문장으로 씁니다.`,
-    "첫 섹션 '30초 요약'에는 판단·상방 조건·하방 조건·다음 확인 지표를 각각 한 줄로 적습니다.",
+    `최종 공개 본문은 공백 포함 ${bodyLength.min.toLocaleString("ko-KR")}~${bodyLength.max.toLocaleString("ko-KR")}자이며 ${bodyLength.targetMin.toLocaleString("ko-KR")}~${bodyLength.targetMax.toLocaleString("ko-KR")}자를 목표로 합니다. 한 문단에는 한 가지 생각만 담으며 문장 수를 고정하지 않습니다.`,
+    "도입은 검색 질문의 답이나 검증된 장면에서 바로 시작합니다. 판단과 그 판단이 달라지는 조건은 관련 문단에 설명하고, 별도의 30초 요약 4줄을 강제하지 않습니다.",
     `핵심 숫자는 검증된 기준일·단위가 있는 값 ${policy.coreNumberMin}~${policy.coreNumberMax}개만 고르고, 숫자의 반복 설명 대신 각각이 시장에 갖는 의미를 한 문장으로 설명합니다.`,
-    "핵심 변수 섹션은 반드시 '변수 1:'과 '변수 2:' 두 개만 사용합니다. 상승·하락 시나리오는 예측을 단정하지 말고 관찰 가능한 조건으로 구분합니다.",
-    "초보자 설명은 오늘 시장과 직접 연결된 개념 하나만 3~5문장으로 설명하고, 독자를 가르치려는 말투나 같은 설명의 반복을 피합니다.",
-    `체크 섹션은 실제로 확인할 시간·지표·조건 ${policy.checklistItemCount}개만 제시합니다. 댓글·공감·이웃·투표를 요구하거나 질문형 참여를 유도하지 않습니다.`,
+    "핵심 변수는 1~2개에 집중하고 관찰 가능한 조건으로 해석합니다. 변수 1·변수 2나 상승·하락 표를 고정 서식으로 출력하지 않습니다.",
+    "초보자 설명은 오늘 자료에 필요한 개념 하나를 관련 문단에서 풀고, 문장 수를 맞추기 위한 반복을 피합니다.",
+    "실제로 확인할 시간·지표·조건을 관련 문단에 넣습니다. 체크리스트가 도움이 될 때만 사용하며 항목 수를 억지로 맞추지 않습니다. 댓글·공감·이웃·투표 요구는 금지합니다.",
     "'어제 전망 확인'은 이전 글의 구조화된 판단과 실제 결과가 입력으로 함께 제공된 경우에만 작성합니다. 근거가 없으면 섹션 자체를 생략하고 맞았다고 추정하지 않습니다.",
     ...templateFocusGuidelines,
     "검증된 referenceBundle과 MarketSnapshot에 있는 자료만 사실 근거로 사용합니다. 누락값은 생략하고 전망치와 실제치를 구분하며, 확인되지 않은 원인은 '영향을 줬을 가능성'처럼 범위를 제한합니다.",
@@ -229,6 +230,7 @@ export function getStockBlogEditorialGuidelines(contentType: StockReferenceBrief
     "'이는 ○○를 시사합니다·투자자들은 주목해야 합니다·○○로 이어질 것으로 예상됩니다'처럼 AI가 자주 쓰는 결론형 문장을 금지합니다. 확인된 사실 뒤에는 그 숫자가 왜 중요한지를 짧고 직접적으로 설명합니다.",
     "증권사 보고서식 과장, 같은 문장 시작과 어미 반복, '결론부터 말씀드리면·쉽게 말하면·살펴보겠습니다·알아보겠습니다' 같은 AI 상투어를 사용하지 않습니다.",
     "문장 중간 강제 줄바꿈, 내용 없는 빈 문단, 연속된 세 줄 이상의 개행, 특수 공백으로 만든 여백을 금지합니다. 문단 사이는 한 번만 구분합니다.",
+    ...STOCK_BLOG_NATURAL_STYLE_GUIDELINES,
   ];
 }
 
@@ -327,7 +329,16 @@ export function inspectStockBlogEditorialContract(
     && /(?:하락|하방)/.test(scenarios);
   const hasBgMarketNoteJudgment = /(?:^|\n)\s*\d+\.\s*BG\s*Market\s*Note\s*(?:의\s*)?판단\s*$/im.test(body);
   const violations: string[] = [];
+  const narrative = inspectNaturalStockBlogLayout(body);
 
+  if (narrative.active) {
+    if (narrative.headingCount < policy.minimumHeadingCount) violations.push("내용에 맞는 소제목 2개 이상 필요");
+    if (narrative.openingLength < 40 || narrative.openingLength > 450) violations.push("검증된 장면 또는 질문의 답으로 시작하는 간결한 도입 필요");
+    if (narrative.explanationSentenceCount < 1) violations.push("자료의 이유·의미·차이를 풀어주는 설명 필요");
+    if (narrative.conditionalSentenceCount < 1) violations.push("판단이 달라지는 관찰 가능한 조건 필요");
+    if (narrative.observationSentenceCount < 1) violations.push("독자가 실제로 비교·확인할 내용 필요");
+    if (!narrative.hasJudgment) violations.push("자료에서 도출한 글쓴이의 해석·판단 필요");
+  } else {
   if (!hasThirtySecondSummary) violations.push("30초 요약의 판단·상방 조건·하방 조건·다음 확인 4줄 필요");
   if (coreNumberCount < policy.coreNumberMin || coreNumberCount > policy.coreNumberMax) {
     violations.push(`핵심 숫자 ${policy.coreNumberMin}~${policy.coreNumberMax}개 필요`);
@@ -354,6 +365,7 @@ export function inspectStockBlogEditorialContract(
     if (/^\s*\d+\.\s*다음 주.*(?:핵심 변수|주요 일정|상승·하락 조건)/m.test(body)) {
       violations.push("토요일 글의 다음 주 전망·일정 섹션 금지");
     }
+  }
   }
   if (forbiddenPhraseMatches.length > 0) violations.push(`금지 표현 포함: ${forbiddenPhraseMatches.join(", ")}`);
   if (hasForbiddenEngagementCta) violations.push("댓글·공감·이웃·투표형 CTA 금지");

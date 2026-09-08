@@ -3,6 +3,15 @@ import test from "node:test";
 import type { StockBriefingTemplate } from "@/features/content-pipeline/content-pipeline-types";
 import { getStockBlogImagePlacementHeadings } from "./stock-blog-image-placements.ts";
 
+test("내용형 소제목으로 쓴 글은 실제 존재하는 제목에만 이미지를 연결한다", () => {
+  const body = ["충분히 긴 도입 문장입니다. 시장 자료의 기준일을 구분해서 설명하고 오늘 흐름에서 무엇이 달라졌는지 비교합니다.", "코스피가 밀린 자리", "장중 고점과 종가를 비교합니다.", "외국인은 무엇을 샀을까", "순매수 합계의 의미를 설명합니다.", "유가와 국채금리가 만나는 지점", "두 수치를 확인합니다."].join("\n\n");
+  assert.deepEqual(getStockBlogImagePlacementHeadings("KOREA_MARKET_CLOSE_US_PREVIEW", body), {
+    majorIndexChange: "코스피가 밀린 자리",
+    kospiInvestorFlow: "외국인은 무엇을 샀을까",
+    fxAndUsYields: "유가와 국채금리가 만나는 지점",
+  });
+});
+
 test("다음 주 전망 이미지를 숫자·변수·시나리오 섹션에 배치한다", () => {
   assert.deepEqual(getStockBlogImagePlacementHeadings("NEXT_WEEK_MARKET_PREVIEW"), {
     majorIndexChange: "2. 다음 주 주요 이슈와 핵심 숫자",

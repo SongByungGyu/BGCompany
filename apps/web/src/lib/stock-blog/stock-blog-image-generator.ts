@@ -837,6 +837,7 @@ function blockedImageResult(generatedAt: string, message: string): GeneratedStoc
 }
 
 export async function generateStockBlogImages(input: {
+  body?: string;
   pipelineId: string;
   template: StockBriefingTemplate;
   title: string;
@@ -851,7 +852,7 @@ export async function generateStockBlogImages(input: {
   const relativeDir = `/generated/stock-blog/${id}`;
   const outputDir = path.join(process.cwd(), "public", "generated", "stock-blog", id);
   const theme = THEMES[input.template];
-  const placements = getStockBlogImagePlacementHeadings(input.template);
+  const placements = getStockBlogImagePlacementHeadings(input.template, input.body);
   const footer = `${input.marketDate || generatedAt.slice(0, 10)} · BG Market Note original graphic`;
   const editorialTitle = buildStockBlogEditorialTitle({
     template: input.template,

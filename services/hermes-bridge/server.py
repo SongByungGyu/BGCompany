@@ -571,6 +571,7 @@ def build_content_writer_prompt(payload: dict[str, Any]) -> str:
             "함께 확인한 기사",
         ]
     body_structure_json = compact_json(body_structure)
+    natural_style = int(input_data.get("editorialPolicyVersion") or 0) >= 8
     section_schema_json = json.dumps([
         {
             "heading": heading,
@@ -582,11 +583,17 @@ def build_content_writer_prompt(payload: dict[str, Any]) -> str:
         }
         for heading in body_structure
     ], ensure_ascii=False, indent=2)
+    if natural_style:
+        section_schema_json = json.dumps([
+            {"heading": "이 단락의 내용으로 직접 지은 소제목", "body": "검증 사실·의미·관찰 조건을 자연스럽게 연결한 문단들"},
+            {"heading": "앞 단락과 다른 내용형 소제목", "body": "새 근거와 설명을 담은 문단들. 본문 섹션은 내용에 맞춰 2~5개"},
+            {"heading": "함께 확인한 기사", "body": "실제 기사 3개의 정확한 제목·발행처·원문 URL. 공개 간격은 서버와 업로더가 정리"},
+        ], ensure_ascii=False, indent=2)
     benchmark_guidelines_json = compact_json(input_data.get("editorialBenchmarkGuidelines") or [])
     approved_lessons_json = compact_json(compact_approved_lessons(input_data))
     reference_bundle = input_data.get("referenceBundle") if isinstance(input_data.get("referenceBundle"), dict) else {}
     content_type = str(reference_bundle.get("contentType") or "KOREA_DAILY_PREVIEW")
-    editorial_policy_v2 = "1. 30초 요약" in body_structure
+    editorial_policy_v2 = not natural_style and "1. 30초 요약" in body_structure
     weekly_editorial = content_type in {
         "WEEKLY_MARKET_REVIEW",
         "NEXT_WEEK_MARKET_PREVIEW",
@@ -633,6 +640,15 @@ def build_content_writer_prompt(payload: dict[str, Any]) -> str:
 - 발표 시각이 입력에 없으면 임의로 만들지 않는다. 입력에 없는 일정을 억지로 추가하지 않는다.
 - "오늘"처럼 기준일을 흐리는 표현 대신 "최근 거래일 기준" 또는 입력에 확인된 날짜를 사용한다.
 """.strip()
+    heading_rule = (
+        '- sections의 본문 소제목은 내용에 맞게 2~5개 직접 짓고 번호를 강제하지 않는다. required body structure는 내용 범위 안내이며 문구를 그대로 제목으로 복사하지 않는다. 마지막 출처 heading만 "함께 확인한 기사"로 유지한다.'
+        if natural_style else '- sections는 required body structure의 heading을 한 글자도 바꾸지 말고 정확한 순서로 모두 작성한다. introduction, conclusion, cta는 sections에 중복해서 넣지 않는다.'
+    )
+    paragraph_rule = (
+        '- 문단은 생각과 설명량에 맞춰 나눈다. 짧은 판단은 한 문장이어도 되고 같은 문장 수를 반복하지 않는다. 전체 내용 있는 문단 10개 이상을 유지하되 분량을 채우려고 같은 결론을 반복하지 않는다.'
+        if natural_style else '- introduction과 각 sections의 body는 2~4문장 단위 문단을 빈 줄(\\n\\n)로 나눠 전체에 내용 있는 문단 블록을 10개 이상 만든다.'
+    )
+    bullet_rule = '- 확인할 자료·조건을 관련 문단에 연결하고 목록이 유용할 때만 쓴다. 불릿 수를 강제하지 않는다.' if natural_style else '- 목록형 섹션의 각 항목은 새 줄의 "- "로 시작하고 공개 본문 전체의 "- " 불릿은 최소 5개다.'
     writer_policy = f"""
 - 개인 투자자가 운영하는 네이버 주식 블로그의 전문 에디터처럼, 꾸준히 시장을 본 사람이 독자에게 설명하는 자연스러운 존댓말로 쓴다.
 - finalTitle은 날짜가 아니라 검증된 핵심 검색어·이슈로 시작하고 날짜는 끝에 둔다. 포괄적인 장전·마감 브리핑만으로 제목을 만들지 않는다.
@@ -648,9 +664,9 @@ def build_content_writer_prompt(payload: dict[str, Any]) -> str:
 - degradedMode가 kis_sector_unavailable이면 서버가 넣는 "KIS 업종 등락 자료가 일시적으로 비어 있어 강세·약세 업종 항목은 제외하고, 검증된 지수·수급·환율·거시자료만 사용했습니다." 문장은 독자용 데이터 범위 고지이므로 삭제하거나 내부 과정 표현으로 바꾸지 않는다.
 - 신뢰할 수 있고 전망과 직접 관련된 뉴스 기사 정확히 3개만 선택해 핵심 내용을 본문에 재서술한다. 기사 제목·설명을 그대로 복사하지 않는다.
 - URL은 마지막 "함께 확인한 기사" 섹션의 기사 3개에만 각각 1개씩 표시한다. 일정·시장 데이터·본문 중간에는 URL을 쓰지 않는다.
-- sections는 required body structure의 heading을 한 글자도 바꾸지 말고 정확한 순서로 모두 작성한다. introduction, conclusion, cta는 sections에 중복해서 넣지 않는다.
-- introduction과 각 sections의 body는 한 덩어리 장문으로 쓰지 않는다. 2~4문장 단위 문단을 빈 줄(\\n\\n)로 나눠 공개 본문 전체에 내용 있는 문단 블록을 10개 이상 만든다.
-- 목록형 섹션의 각 항목은 새 줄의 "- "로 시작하고 공개 본문 전체의 "- " 불릿은 최소 5개다.
+{heading_rule}
+{paragraph_rule}
+{bullet_rule}
 - 한국 시장은 수급·원달러 환율·반도체 대형주·코스닥 성장주를 상승 조건과 하락 위험으로 나누어 연결한다.
 - 미국 시장의 실적·대형 기술주 가이던스·금리·달러·연준 기대 중 ReferenceBundle이나 verified market snapshot에 실제 근거가 있는 변수만 해석한다. 입력에 실적·가이던스 근거가 없으면 이를 전망 근거로 언급하지 않는다.
 - 핵심 일정은 검증된 일정만 쓰고 각 일정 아래에 중요한 이유를 한 문장으로 덧붙인다. 일정을 억지로 채우지 않는다.
@@ -671,6 +687,13 @@ def build_content_writer_prompt(payload: dict[str, Any]) -> str:
 - 초보자 설명은 한 개념, 한 문단, 문장부호로 끝나는 정확히 4문장이어야 한다.
 - "함께 확인한 기사" 외부의 URL은 0개이고, 해당 섹션에는 서로 다른 실제 기사 URL이 정확히 3개다.
 - 지정 투자 유의문구는 cta에 정확히 한 번만 있으며 sections나 conclusion에 반복하지 않는다.
+""".strip()
+    if natural_style:
+        strict_writer_rules = f"""
+- sections는 내용형 본문 소제목 2~5개와 마지막 '함께 확인한 기사'로 구성한다. 도입·결론·유의문구를 중복하지 않는다.
+- 초안은 공백 포함 {body_min:,}~{body_max:,}자, 내용 있는 문단 10개 이상이다. 문단별 문장 수나 불릿 수는 고정하지 않는다.
+- 검증된 자료의 뜻과 판단이 바뀌는 조건, 독자가 비교할 내용을 포함한다. 개인 경험·매매·감정을 창작하지 않는다.
+- 기사 3개의 정확한 제목과 원문 URL을 보존하고 cta에는 지정 투자 유의문구만 한 번 둔다.
 """.strip()
     return f"""
 너는 BG Company의 content-writer AI 직원이다.
@@ -778,7 +801,8 @@ def build_qa_audit_prompt(payload: dict[str, Any]) -> str:
         "LARGE_CAP_DISCLOSURE_EARNINGS",
     }
     body_min, body_max = (2000, 3200) if weekly_editorial else (1800, 2800)
-    editorial_policy_v2 = int(quality_diagnostics.get("editorialPolicyVersion") or 0) >= 2
+    natural_style = int(quality_diagnostics.get("editorialPolicyVersion") or 0) >= 8
+    editorial_policy_v2 = 2 <= int(quality_diagnostics.get("editorialPolicyVersion") or 0) < 8
     checklist_item_count = int(quality_diagnostics.get("requiredChecklistItemCount") or 3)
     qa_contract_policy = ""
     if editorial_policy_v2:
@@ -798,9 +822,15 @@ def build_qa_audit_prompt(payload: dict[str, Any]) -> str:
 - scheduleValidation.ok가 true이면 서버가 market snapshot의 upcoming으로 날짜와 이벤트를 대조한 결과다. 요일 추론이나 발표 관행으로 날짜를 임의 보정하지 않는다.
 - 입력에 없는 발표 시각이나 한국 일정을 새로 만들라고 요구하지 않는다.
 """.strip()
+    qa_structure_rule = (
+        f'- 본문은 공백 포함 {body_min:,}~{body_max:,}자, 내용형 소제목 2개 이상과 내용 있는 문단 10개 이상이다. 고정 번호·4줄 요약·변수 1/2·불릿 개수를 요구하지 않는다. 서술형으로 제시된 개념 설명·조건·판단을 인정한다.'
+        if natural_style else f'- 공개 본문이 공백 포함 {body_min:,}~{body_max:,}자, section heading 6개 이상, 내용 있는 문단 10개 이상, 줄바꿈 15개 이상, "- " 불릿 5개 이상인지 확인한다.'
+    )
+    if natural_style:
+        qa_contract_policy = '- 의미 반복·문단 리듬·번역투·상투적 구성·판단의 구체성을 실제 문장으로 검토한다. 결론의 3회 이상 반복과 허위 경험은 필수 수정이다. AI 탐지 확률이나 점수를 만들지 않는다.'
     qa_policy = f"""
 - 글이 최근 움직임 → 근거에 기반한 이유 → 이어질 시장 영향 → 투자자 확인사항의 흐름으로 자연스럽게 이어지는지 확인한다.
-- 공개 본문이 공백 포함 {body_min:,}~{body_max:,}자, section heading 6개 이상, 내용 있는 문단 10개 이상, 줄바꿈 15개 이상, "- " 불릿 5개 이상인지 확인한다.
+{qa_structure_rule}
 - "함께 확인한 기사"에 실제 활용한 신뢰 가능한 기사 정확히 3개와 서로 다른 원문 링크 3개만 있고, 링크가 본문 중간·일정·시장 데이터 문단에 노출되지 않았는지 확인한다.
 - "함께 확인한 기사"의 제목을 ReferenceBundle item.title과 직접 대조한다. 세 제목이 각각 정확히 일치하고 말줄임표로 끝나지 않으면 제목 정확성에 대해 추가 확인을 요구하거나 감점하지 않는다.
 - API 주소, JSON 필드명, asOf, 데이터 수집·내부 분석 과정, AI 설정, 이미지 설명 문구, 기계적인 "시장 영향" 항목명이 노출되면 필수 수정으로 판정한다.

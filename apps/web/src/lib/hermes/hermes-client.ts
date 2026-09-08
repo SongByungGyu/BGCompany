@@ -19,7 +19,7 @@ import { FRED_DEGRADED_DISCLOSURE } from "@/lib/stock-blog/references/fred-degra
 import { KIS_OVERSEAS_DEGRADED_DISCLOSURE } from "@/lib/stock-blog/references/kis-overseas-degraded-policy";
 import {
   BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION,
-  getStockBlogEditorialPolicy,
+  getStockBlogEditorialGuidelines,
 } from "@/lib/stock-blog/stock-blog-editorial-policy";
 import { STOCK_BLOG_EDITORIAL_QUALITY_TARGET } from "@/lib/stock-blog/stock-blog-editorial-benchmark";
 
@@ -296,7 +296,6 @@ export function buildMarketingReviewHermesPayload(input: MarketingReviewHermesIn
 
 export function buildContentWriterHermesPayload(input: ContentWriterHermesInput): HermesContentWriterPayload {
   const contentType = input.referenceBundle?.contentType ?? input.contentType ?? "KOREA_DAILY_PREVIEW";
-  const editorialPolicy = getStockBlogEditorialPolicy(contentType);
   return {
     agentId: "content-writer",
     role: "content_writer",
@@ -312,8 +311,14 @@ export function buildContentWriterHermesPayload(input: ContentWriterHermesInput)
       realReferences: getRealStockReferences(input.referenceBundle),
       marketSnapshot: input.referenceBundle?.marketSnapshot,
       competitorBlogReferences: input.referenceBundle?.competitorBlogReferences,
-      editorialBenchmarkGuidelines: input.editorialBenchmarkGuidelines,
-      bodyStructure: editorialPolicy.bodyStructure,
+      editorialBenchmarkGuidelines: [...(input.editorialBenchmarkGuidelines ?? []), ...getStockBlogEditorialGuidelines(contentType)],
+      bodyStructure: [
+        "검증된 장면 또는 검색 질문의 답으로 시작하는 도입",
+        "내용에 맞게 직접 지은 소제목 2~5개: 사실·해석·개념 설명·관찰 조건을 관련 문단에 연결",
+        "앞의 결론을 반복하지 않는 짧은 판단",
+        "함께 확인한 기사",
+      ],
+      editorialPolicyVersion: BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION,
       publicBodyEndingOrder: ["마무리", "함께 확인한 기사", "투자 유의문구"],
       omitStandaloneScheduleSection: contentType === "KOREA_DAILY_PREVIEW",
       prohibitedPhrases: input.prohibitedPhrases,
@@ -372,8 +377,9 @@ export function buildQaAuditHermesPayload(input: QaAuditHermesInput): HermesQaAu
         ],
         doNotAddServerStructuralChecksToRequiredRevisions: true,
         instruction: "출처 개수·기사 제목과 URL 순서·고지문과 투자 유의문구 위치·본문 구조 개수는 서버가 결정론적으로 검사합니다. 이를 requiredRevisions에 넣지 말고, 사실 오류·근거 없는 수치·과장 또는 투자 권유 오해·부자연스러운 한국어만 필수 수정으로 평가하세요.",
+        naturalStyleReview: "의미 반복, 문단 리듬, 번역투, 상투적인 구성, 판단의 구체성을 각각 실제 문장 근거로 검토하세요. 같은 결론이 세 군데 이상 반복되거나 근거 없는 개인 경험이 있으면 필수 수정으로 돌리세요. 내용형 소제목·서술형 조건을 과거의 30초 요약·변수 1/2·번호형 판단으로 되돌리라고 요구하지 마세요. AI 작성 확률이나 객관적인 AI 탐지 점수를 지어내지 마세요.",
       },
-      editorialBenchmarkGuidelines: input.editorialBenchmarkGuidelines,
+      editorialBenchmarkGuidelines: [...(input.editorialBenchmarkGuidelines ?? []), ...getStockBlogEditorialGuidelines(input.referenceBundle?.contentType ?? "KOREA_DAILY_PREVIEW")],
       finalPasteReadyBody: typeof input.writerResult?.fullDraft === "string" ? input.writerResult.fullDraft : undefined,
       prohibitedPhrases: input.prohibitedPhrases,
       blogImagePrompts: input.blogImagePrompts,

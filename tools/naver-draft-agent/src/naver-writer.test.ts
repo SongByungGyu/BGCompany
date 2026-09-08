@@ -80,6 +80,13 @@ function reconstruct(steps: ReturnType<typeof buildMultilineEditorInputSteps>) {
   return steps.map((step) => step.type === "enter" ? "\n" : step.value).join("");
 }
 
+test("내용형 소제목을 서식 대상으로 잡고 기사 목록에는 이중 Enter를 넣지 않는다", () => {
+  const raw = "검증된 수치를 근거로 작성한 도입 문장입니다.\n\n코스피가 밀린 자리\n\n본문 해석입니다.\n\n유가와 금리의 반응\n\n조건을 비교합니다.\n\n함께 확인한 기사\n\n1. 첫 기사\n- 원문: https://example.com/one\n\n2. 둘째 기사\n- 원문: https://example.com/two\n\n본 글은 시장 정보입니다.";
+  const prepared = prepareNaverPublicationBody(raw);
+  assert.deepEqual(selectNaverSectionHeadings(prepared), ["코스피가 밀린 자리", "유가와 금리의 반응", "함께 확인한 기사"]);
+  assert.ok(reconstruct(buildMultilineEditorInputSteps(prepared)).includes("함께 확인한 기사\n첫 기사\n둘째 기사\n\n본 글은"));
+});
+
 test("여러 문단을 줄바꿈 없는 텍스트 조각과 Enter 단계로 분해한다", () => {
   const steps = buildMultilineEditorInputSteps("첫 번째 문단\r\n\r\n두 번째 문단\n세 번째 줄");
 
@@ -145,7 +152,8 @@ https://example.com/one`;
   const prepared = prepareNaverPublicationBody(body);
 
   assert.ok(prepared.includes("5.\u00a0이번 주에 눈여겨볼 기회와 위험"));
-  assert.ok(prepared.includes("원문 보기"));
+  assert.ok(prepared.includes("기사 제목 – 언론사, 2026년 7월 19일"));
+  assert.ok(!prepared.includes("원문 보기"));
   assert.ok(!prepared.includes("https://example.com/one"));
   assert.deepEqual(selectNaverArticleUrls(body), ["https://example.com/one"]);
   assert.deepEqual(selectNaverEmphasisParagraphs(prepared), ["기회 요인", "위험 요인"]);

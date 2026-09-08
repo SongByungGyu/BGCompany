@@ -1668,6 +1668,7 @@ export async function regenerateContentPipelineImages(pipelineId: string) {
   const generatedImages = await generateStockBlogImages({
     pipelineId,
     template: bundle.contentType,
+    body: pipeline.writerResult?.fullDraft,
     title: pipeline.writerResult?.finalTitle ?? pipeline.outputTitle ?? pipeline.title,
     topic: pipeline.topic,
     marketDate: bundle.marketDate,
@@ -1810,6 +1811,7 @@ async function startValidatedContentPipeline(baseData: ContentPipelineInput): Pr
   const generatedImages = await generateStockBlogImages({
     pipelineId,
     template: data.referenceBundle?.contentType ?? inferReferenceTemplate(data),
+    body: typeof writer.result.fullDraft === "string" ? writer.result.fullDraft : undefined,
     title: outputTitle,
     topic: data.topic,
     marketDate: data.referenceBundle?.marketDate,

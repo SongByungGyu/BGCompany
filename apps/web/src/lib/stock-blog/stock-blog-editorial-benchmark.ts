@@ -8,21 +8,23 @@ import {
   inspectStockBlogEditorialContract,
 } from "@/lib/stock-blog/stock-blog-editorial-policy";
 import { STOCK_BLOG_EDITORIAL_QUALITY_TARGET } from "@/lib/stock-blog/stock-blog-quality-target";
+import { inspectNaturalStockBlogLayout, STOCK_BLOG_NATURAL_STYLE_GUIDELINES } from "./stock-blog-natural-style.ts";
 
 export { STOCK_BLOG_EDITORIAL_QUALITY_TARGET } from "@/lib/stock-blog/stock-blog-quality-target";
 
 const SAFE_BASELINE_GUIDELINES = [
   "경쟁 글의 문장·비유·체크리스트를 복사하지 않고 구조 지표만 참고합니다.",
   "제목 앞부분에는 실제 검색어와 시장 판단을 두고 날짜는 시의성이 필요할 때 끝에 배치합니다.",
-  "도입부는 30초 요약으로 시작해 판단·상방 조건·하방 조건·다음 확인 지표를 먼저 제시합니다.",
+  "도입부는 검증된 장면이나 검색 질문의 답에서 시작하고, 판단·조건·확인할 내용은 해당 문단에 연결합니다.",
   "일일 본문은 공백 포함 1,800~2,800자, 주간 본문은 2,000~3,200자 안에서 문단 10개 이상으로 구성합니다.",
-  "문단은 모바일에서 읽기 쉽도록 2~4문장으로 나누고 같은 어미와 상투적 표현을 반복하지 않습니다.",
+  "문단은 설명량에 맞게 나누고 문장 수를 고정하거나 같은 어미와 상투적 표현을 반복하지 않습니다.",
   "검증된 시장 데이터와 실제 기사 출처를 사용하고 확인되지 않은 수치·일정은 만들지 않습니다.",
-  "핵심 변수는 두 개, 투자자가 바로 확인할 항목은 세 개만 제공하고 투자 유의문구는 한 번만 표시합니다.",
+  "핵심 변수에 집중하고 독자가 비교할 자료·조건을 구체적으로 제시하며 투자 유의문구는 한 번만 표시합니다.",
   "대표 이미지 1장과 본문 이미지 2~3장을 관련 섹션에 배치하며 실제 수치가 있으면 차트를 우선합니다.",
 ] as const;
 
 export type OwnStockBlogStructure = {
+  narrative?: ReturnType<typeof inspectNaturalStockBlogLayout>;
   titleLength: number;
   bodyLength: number;
   introLength: number;
@@ -133,12 +135,14 @@ export function inspectOwnStockBlogStructure(input: {
     .filter((part) => part.length >= 20 && !/^https?:\/\//.test(part));
   const proseParagraphs = paragraphs.filter((part) => !/^\d+\.\s+\S+/.test(part) && !/^(?:함께 확인한 기사|마무리)$/.test(part));
   const bodyLength = body.length;
+  const narrative = inspectNaturalStockBlogLayout(input.body);
   return {
+    narrative,
     titleLength: input.title.replace(/\s/g, "").length,
     bodyLength,
     introLength: proseParagraphs[0]?.length ?? Math.min(bodyLength, 350),
     paragraphCount: paragraphs.length,
-    headingCount: countHeadings(input.body),
+    headingCount: narrative.active ? narrative.headingCount : countHeadings(input.body),
     imageCount: Math.max(0, input.imageCount ?? 0),
     bulletItemCount: countBullets(input.body),
     averageParagraphLength: proseParagraphs.length > 0
@@ -176,6 +180,19 @@ export function assessStockBlogEditorialQuality(input: QualityAssessmentInput): 
   else failedChecks.push(`문단 ${policy.minimumParagraphCount}개 이상`);
   if (input.structure.averageParagraphLength >= 35 && input.structure.averageParagraphLength <= 260) structure += 4;
   else failedChecks.push("모바일 가독성 문단 길이");
+  const narrative = input.structure.narrative?.active ? input.structure.narrative : undefined;
+  if (narrative) {
+    if (narrative.openingLength >= 40 && narrative.openingLength <= 450) structure += 4;
+    else failedChecks.push("구체적이고 간결한 도입");
+    if (narrative.numericFactCount > 0 || narrative.explanationSentenceCount >= 2) structure += 3;
+    else failedChecks.push("숫자 또는 근거를 풀이한 설명");
+    if (narrative.observationSentenceCount > 0) structure += 3;
+    else failedChecks.push("비교·확인할 자료의 구체성");
+    if (narrative.conditionalSentenceCount > 0) structure += 2;
+    else failedChecks.push("판단이 달라지는 조건");
+    if (narrative.explanationSentenceCount > 0) structure += 2;
+    else failedChecks.push("독자를 위한 이유·의미 설명");
+  } else {
   if (input.structure.hasThirtySecondSummary) structure += 4;
   else failedChecks.push("30초 요약 4줄");
   if (input.structure.coreNumberCount >= policy.coreNumberMin && input.structure.coreNumberCount <= policy.coreNumberMax) structure += 3;
@@ -186,6 +203,7 @@ export function assessStockBlogEditorialQuality(input: QualityAssessmentInput): 
   else failedChecks.push("상승·하락 조건별 시나리오");
   if (input.structure.beginnerExplanationSentenceCount >= 3 && input.structure.beginnerExplanationSentenceCount <= 5) structure += 2;
   else failedChecks.push("초보자 설명 3~5문장");
+  }
 
   if (input.verifiedMarketSnapshot
     || (input.allowReferenceOnlyEvidence && input.realReferenceCount >= 5 && input.publisherCount >= 3)) evidence += 10;
@@ -197,13 +215,13 @@ export function assessStockBlogEditorialQuality(input: QualityAssessmentInput): 
   if (input.structure.hasSourceSection) evidence += 3;
   else failedChecks.push("출처·기사 확인 섹션");
 
-  if (input.structure.hasChecklist && input.structure.checklistItemCount === policy.checklistItemCount) readerValue += 5;
+  if (narrative ? narrative.observationSentenceCount > 0 : input.structure.hasChecklist && input.structure.checklistItemCount === policy.checklistItemCount) readerValue += 5;
   else failedChecks.push(`실행 가능한 확인 항목 정확히 ${policy.checklistItemCount}개`);
   if (input.structure.imageCount >= policy.totalImageMin && input.structure.imageCount <= policy.totalImageMax) readerValue += 4;
   else failedChecks.push(`대표·본문 이미지 총 ${policy.totalImageMin}~${policy.totalImageMax}장`);
   if (input.structure.hasDisclaimer) readerValue += 4;
   else failedChecks.push("투자 유의문구");
-  if (input.structure.hasBgMarketNoteJudgment) readerValue += 4;
+  if (narrative ? narrative.hasJudgment : input.structure.hasBgMarketNoteJudgment) readerValue += 4;
   else failedChecks.push("BG Market Note 판단");
   if (!input.structure.hasForbiddenEngagementCta && input.structure.forbiddenPhraseCount === 0) readerValue += 2;
   else failedChecks.push("AI 상투어·참여 유도 CTA 제거");
@@ -232,7 +250,7 @@ export function selectSafeEditorialBenchmarkGuidelines(analysis?: CompetitorBlog
   if (analysis?.commonPatterns.some((item) => item.includes("이미지"))) selected.push("경쟁 글의 이미지 사용 패턴을 참고하되 검증 데이터 차트와 자체 제작 이미지만 사용합니다.");
   if (analysis?.differentiationOpportunities.some((item) => item.includes("출처"))) selected.push("경쟁 글과 구분되도록 실제 활용 기사 3개와 기준일을 명확히 표시합니다.");
   if (analysis?.differentiationOpportunities.some((item) => item.includes("체크리스트"))) selected.push("글의 결론과 중복되지 않는 개인 투자자 체크리스트를 제공합니다.");
-  return Array.from(new Set(selected)).slice(0, 10);
+  return [...Array.from(new Set(selected)).slice(0, 10), ...STOCK_BLOG_NATURAL_STYLE_GUIDELINES];
 }
 
 export function buildStockBlogEditorialBenchmark(input: {

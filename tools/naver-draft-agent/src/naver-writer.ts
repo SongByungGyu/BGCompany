@@ -2,6 +2,7 @@ import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { buildNaverArticleLayout, type NaverArticleLink } from "./article-layout.js";
 
 export type NaverDraftJob = {
   id: string;
@@ -230,6 +231,8 @@ export function buildMultilineEditorInputSteps(value: string): EditorInputStep[]
 }
 
 export function selectNaverArticleUrls(value: string) {
+  const layout = buildNaverArticleLayout(value);
+  if (layout.links.length) return layout.links.map(item => item.url);
   return normalizeEditorText(value)
     .split("\n")
     .map((line) => line.trim())
@@ -251,7 +254,7 @@ export function resolveNaverPublishCategory(category?: string | null, scheduleSl
 }
 
 export function prepareNaverPublicationBody(value: string) {
-  return normalizeEditorText(value)
+  return normalizeEditorText(buildNaverArticleLayout(value).body)
     .replace(
       "확인되지 않은 국내 일정은 별도로 넣지 않았습니다. 새 일정은 날짜와 공식 내용을 확인한 뒤 시장 반응을 판단할 필요가 있습니다.",
       "추가 일정은 공식 발표 여부를 확인한 뒤 시장 반응과 함께 살펴볼 필요가 있습니다.",
@@ -276,10 +279,11 @@ export function selectNaverEmphasisParagraphs(value: string) {
 export function selectNaverSectionHeadings(value: string) {
   const headings: string[] = [];
   let reachedArticleSection = false;
-  for (const rawLine of normalizeEditorText(value).split("\n")) {
+  const lines = normalizeEditorText(value).split("\n");
+  for (const [index, rawLine] of lines.entries()) {
     const line = rawLine.replace(/\s+/g, " ").trim();
     if (!line) continue;
-    if (line === "함께 확인한 기사") {
+    if (/^(?:함께 확인한 기사|참고한 기사와 자료|기사[·\s]*자료)$/.test(line)) {
       reachedArticleSection = true;
       headings.push(line);
       continue;
@@ -289,6 +293,9 @@ export function selectNaverSectionHeadings(value: string) {
       continue;
     }
     if (!reachedArticleSection && /^\d+\.\s+/.test(line)) headings.push(line);
+    else if (!reachedArticleSection && line.length >= 6 && line.length <= 72
+      && index > 0 && !lines[index - 1].trim() && index + 1 < lines.length && !lines[index + 1].trim()
+      && !/^[-*•]|^https?:\/\//.test(line) && !/[.!。]$|(?:니다|어요|아요|죠|겁니다)[.?]?$/.test(line)) headings.push(line);
   }
   return headings;
 }
@@ -725,7 +732,8 @@ async function applyNaverEmphasisParagraphs(page: import("playwright").Page, bod
   }
 }
 
-async function applyNaverArticleLinks(page: import("playwright").Page, urls: string[]) {
+async function applyNaverArticleLinks(page: import("playwright").Page, articles: NaverArticleLink[]) {
+  const urls = articles.map(item => item.url);
   if (urls.length === 0) return;
   const targets = [];
   const scopes = [page, ...page.frames().filter((frame) => frame !== page.mainFrame())];
@@ -734,13 +742,16 @@ async function applyNaverArticleLinks(page: import("playwright").Page, urls: str
     for (let index = 0; index < await paragraphs.count().catch(() => 0); index += 1) {
       const paragraph = paragraphs.nth(index);
       const text = (await paragraph.innerText().catch(() => "")).replace(/\s+/g, " ").trim();
-      if (text === "원문 보기") targets.push({ scope, paragraph });
+      if (articles.some(item => item.title === text)) targets.push({ scope, paragraph, text });
     }
   }
   if (targets.length !== urls.length) throw new Error(`NAVER_ARTICLE_LINK_TARGET_COUNT_${targets.length}_${urls.length}`);
   for (let index = 0; index < urls.length; index += 1) {
     const { scope, paragraph } = targets[index];
-    await paragraph.click({ clickCount: 3, delay: 80, timeout: 5000 });
+    if (targets[index].text !== articles[index].title) throw new Error(`NAVER_ARTICLE_LINK_TITLE_ORDER_${index + 1}`);
+    await paragraph.scrollIntoViewIfNeeded();
+    const firstLineY = await paragraph.evaluate(node => Math.min(node.getBoundingClientRect().height / 2, (parseFloat(getComputedStyle(node).lineHeight) || 28) / 2));
+    await paragraph.click({ clickCount: 3, delay: 80, position: { x: 12, y: firstLineY }, timeout: 5000 });
     await scope.locator(".se-link-toolbar-button:visible").first().click({ timeout: 5000 });
     const linkInput = scope.locator("input.se-custom-layer-link-input:visible").first();
     await linkInput.fill(urls[index], { timeout: 5000 });
@@ -1436,7 +1447,7 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
     }
 
     const naverBody = prepareNaverPublicationBody(job.body);
-    const articleUrls = selectNaverArticleUrls(job.body);
+    const articleLinks = buildNaverArticleLayout(job.body).links;
     const bodyFilled = await fillMultilineEditorTarget(page, bodySelectors, naverBody, "body");
 
     if (!bodyFilled) {
@@ -1461,7 +1472,7 @@ export async function runNaverWriter(job: NaverDraftJob, context: WriterContext)
     if (thumbnailUploaded) {
       try {
         await removeNaverOglinkPreviews(page);
-        await applyNaverArticleLinks(page, articleUrls);
+        await applyNaverArticleLinks(page, articleLinks);
         await applyNaverSectionTitles(page, naverBody);
         await applyNaverEmphasisParagraphs(page, naverBody);
         for (const [index, image] of imageManifest.bodyImages.entries()) {

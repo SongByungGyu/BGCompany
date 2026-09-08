@@ -1,4 +1,5 @@
 import type { StockBriefingTemplate } from "@/features/content-pipeline/content-pipeline-types";
+import { inspectNaturalStockBlogLayout } from "./stock-blog-natural-style.ts";
 
 export type StockBlogImagePlacementHeadings = {
   majorIndexChange: string;
@@ -41,6 +42,19 @@ const EDITORIAL_PLACEMENTS: Record<StockBriefingTemplate, StockBlogImagePlacemen
 
 export function getStockBlogImagePlacementHeadings(
   template: StockBriefingTemplate,
+  body?: string,
 ): StockBlogImagePlacementHeadings {
+  if (body) {
+    const layout = inspectNaturalStockBlogLayout(body);
+    if (layout.active && layout.headings.length >= 2) {
+      const pick = (pattern: RegExp, fallback: number) => layout.headings.find(heading => pattern.test(heading))
+        ?? layout.headings[Math.min(fallback, layout.headings.length - 1)];
+      return {
+        majorIndexChange: pick(/지수|코스피|코스닥|나스닥|종가|실적|숫자/, 0),
+        kospiInvestorFlow: pick(/수급|외국인|기관|매수|매도|쏠림|사례/, 1),
+        fxAndUsYields: pick(/금리|국채|환율|달러|유가|조건/, 2),
+      };
+    }
+  }
   return EDITORIAL_PLACEMENTS[template];
 }
