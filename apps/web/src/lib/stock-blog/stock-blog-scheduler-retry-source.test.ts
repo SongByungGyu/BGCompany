@@ -92,9 +92,9 @@ test("수동 복구는 본문 생성 claim에만 제한된 추가 상한을 전�
   assert.equal(overrides.length, 2);
 });
 
-test("시장자료 지연 대체 글은 기본 사전검수 한도 뒤에도 두 번만 추가 시도한다", async () => {
+test("시장자료 지연 대체 글은 품질 수정 뒤 최종 재수집을 포함해 세 번만 추가 시도한다", async () => {
   const source = await readFile(sourceUrl, "utf8");
-  assert.match(source, /maxAttempts: dataFailureStudyFallback[\s\S]{0,180}referenceMaxAttempts[\s\S]{0,100}\+ 2/);
+  assert.match(source, /maxAttempts: dataFailureStudyFallback[\s\S]{0,180}referenceMaxAttempts[\s\S]{0,100}\+ 3/);
   assert.match(source, /continuingDataFailureStudyFallback \|\| isStockReferencePreflightFailure\(previousReason\)/);
   assert.match(source, /continuingDataFailureStudyFallback && isStockContentQualityFailure\(previousReason\)[\s\S]{0,100}retryCheckpoint = \{\}/);
 });
