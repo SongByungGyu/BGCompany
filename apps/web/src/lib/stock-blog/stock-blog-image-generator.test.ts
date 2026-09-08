@@ -9,6 +9,7 @@ import {
   isBroadcomEarningsSubject,
   isCpiScheduleSubject,
   isMarketHolidayStudySubject,
+  isMarketBreadthStudySubject,
   isNvidiaEarningsSubject,
   isUsMarketStudySubject,
   selectGenericOverseasIndexChanges,
@@ -60,6 +61,13 @@ test("휴장일 검색형 글은 휴장 전용 이미지 대상으로 분류한�
     title: "나스닥 마감과 금리 흐름",
     topic: "전일 미국장 등락을 복기합니다.",
   }), false);
+});
+
+test("코스피와 내 종목의 온도차 글은 시장 넓이 전용 이미지 대상으로 분류한다", () => {
+  assert.equal(isMarketBreadthStudySubject({
+    title: "코스피는 올랐는데 내 종목은 왜 안 오를까",
+    topic: "시가총액 가중과 대형주 쏠림, 상승 종목 수를 확인한다.",
+  }), true);
 });
 
 test("브로드컴 투자공부 글은 시황 차트 대신 실적 전용 이미지만 만든다", async () => {
@@ -154,6 +162,27 @@ test("전용 이미지 규칙이 없는 투자공부 글은 시황 차트로 대
   assert.equal(result.imageStatus, "failed");
   assert.match(result.imageErrorMessage ?? "", /INVESTMENT_STUDY_TOPIC_IMAGE_TEMPLATE_MISSING/);
   assert.equal(result.contentImages.length, 0);
+});
+
+test("시장 넓이 투자공부 글은 시황 숫자 없이 주제 전용 이미지 세 장을 만든다", async () => {
+  const pipelineId = `test-market-breadth-${process.pid}`;
+  const outputDir = path.join(process.cwd(), "public", "generated", "stock-blog", pipelineId);
+  const sourceUrl = "https://market.example.com/kospi-breadth";
+  const referenceBundle: ReferenceBundle = {
+    provider: "naver-search", mode: "real", status: "ready", contentType: "INVESTMENT_STUDY", generatedAt: AS_OF,
+    marketDate: "2026-09-08", market: "KR", queries: [], keyThemes: [], repeatedKeywords: [], differentiationPoints: [], cautionNotes: [], sourcePolicy: "news only",
+    evidencePolicy: "reference-only-study-fallback",
+    items: [{ id: "breadth-news", sourceType: "news", provider: "naver-search", title: "코스피 상승과 대형주 쏠림", url: sourceUrl, reliability: "major_media", sourceName: "테스트경제", publisher: "테스트경제", publishedAt: AS_OF, collectedAt: AS_OF, summary: "상승 종목 수와 거래대금 확산을 설명합니다." }],
+  };
+  try {
+    const result = await generateStockBlogImages({ pipelineId, template: "INVESTMENT_STUDY", title: "코스피는 올랐는데 내 종목은 왜 안 오를까", topic: "시가총액 가중과 대형주 쏠림, 상승 종목 수로 시장 넓이를 읽는다.", marketDate: "2026-09-08", referenceBundle });
+    assert.equal(result.imageStatus, "generated");
+    assert.equal(result.imageQuality.status, "passed");
+    assert.deepEqual(result.contentImages.map((image) => image.id), ["thumbnail", "market-breadth-structure", "market-breadth-check-order", "market-breadth-checklist"]);
+    assert.ok(result.contentImages.filter((image) => image.role === "body").every((image) => image.type === "related-image" && image.sourceUrl === sourceUrl && image.relevanceTags?.includes("market-breadth")));
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
 });
 
 test("미국증시·나스닥 복기 글은 미국시장 중심 이미지 대상으로 분류한다", () => {

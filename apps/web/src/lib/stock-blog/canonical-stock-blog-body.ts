@@ -106,7 +106,8 @@ export function selectCanonicalStockBlogReferences(
   for (const item of referenceItems) {
     if (item.sourceType !== "news") continue;
     const title = normalizeInline(item.title);
-    const url = normalizeInline(item.url);
+    const originalUrl = normalizeInline(item.originalUrl);
+    const url = isValidHttpUrl(originalUrl) ? originalUrl : normalizeInline(item.url);
     if (!title || !isValidHttpUrl(url) || seenUrls.has(url)) continue;
     selected.push({ ...item, title, url });
     seenUrls.add(url);

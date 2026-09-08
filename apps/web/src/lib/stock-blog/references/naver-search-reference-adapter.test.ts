@@ -6,6 +6,7 @@ import {
   isRelevantNextWeekNews,
   selectCompleteNewsReferences,
   selectDiverseNextWeekNews,
+  selectRelevantInvestmentStudyNews,
 } from "./naver-search-reference-adapter";
 
 function item(title: string, publisher: string, summary: string): ReferenceItem {
@@ -67,5 +68,24 @@ test("잘린 제목은 제외하고 뒤의 정상 기사로 채운다", () => {
   assert.deepEqual(selected.map((entry) => entry.title), [
     "세 번째 정상 기사",
     "네 번째 정상 기사",
+  ]);
+});
+
+test("투자공부 검색 결과는 금시세 같은 무관한 기사를 빼고 주제 일치 순으로 고른다", () => {
+  const selected = selectRelevantInvestmentStudyNews([
+    item("금시세(금값)", "gold.example.com", "오늘 금 가격과 국제 금 시세"),
+    item("채권시장 마감", "bond.example.com", "국고채 금리 흐름"),
+    item("코스피 상승에도 내 종목은 하락", "market.example.com", "대형주 쏠림과 상승 종목 수를 확인한다"),
+    item("삼성전자·SK하이닉스가 지수 견인", "semi.example.com", "시가총액 가중지수의 특징"),
+  ], 3, {
+    title: "코스피는 올랐는데 내 종목은 왜 안 오를까",
+    topic: "시가총액 가중과 대형주 쏠림으로 시장 넓이를 읽는다",
+    keywords: ["코스피 상승 내 종목 하락", "대형주 쏠림", "상승 종목 수", "시가총액 가중지수"],
+  });
+
+  assert.deepEqual(selected.map((entry) => entry.publisher), [
+    "market.example.com",
+    "semi.example.com",
+    "bond.example.com",
   ]);
 });

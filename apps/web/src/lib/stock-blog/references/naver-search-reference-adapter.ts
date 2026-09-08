@@ -28,6 +28,9 @@ const NEXT_WEEK_NEWS_DRIVER_PATTERN = /다음\s*주|전망|금리|국채|환율|
 const NEXT_WEEK_NEWS_EXCLUDED_TITLE_PATTERN = /뉴스브리핑|코인|가상자산|암호화폐|비트코인|BONK|금시세|금값|금가격/i;
 const NEXT_WEEK_NEWS_EXCLUDED_PUBLISHERS = new Set(["tokenpost.kr"]);
 const TRUNCATED_NEWS_TITLE_PATTERN = /(?:\.{3,}|…|&hellip;|&#8230;|&#x2026;)\s*$/i;
+const INVESTMENT_STUDY_STOP_WORDS = new Set([
+  "오늘", "이번", "기준", "투자", "공부", "주식", "이유", "방법", "어떻게", "확인", "핵심", "읽는", "보기",
+]);
 
 export function isRelevantNextWeekNews(item: Pick<ReferenceItem, "title" | "summary" | "publisher" | "publishedAt">, nowMs = Date.now()) {
   const title = stripHtml(item.title || "");
@@ -70,6 +73,40 @@ export function selectDiverseNextWeekNews(items: ReferenceItem[], limit: number,
     }
   }
   return selected;
+}
+
+function investmentStudyTerms(input: Pick<ReferenceSearchInput, "title" | "topic" | "keywords">) {
+  return Array.from(new Set([
+    ...(input.keywords ?? []),
+    input.title,
+    input.topic,
+  ].flatMap((value) => stripHtml(value || "").split(/[\s,·/|()[\]?!:]+/))))
+    .map((value) => value.trim())
+    .filter((value) => value.length >= 2 && !INVESTMENT_STUDY_STOP_WORDS.has(value));
+}
+
+export function selectRelevantInvestmentStudyNews(
+  items: ReferenceItem[],
+  limit: number,
+  input: Pick<ReferenceSearchInput, "title" | "topic" | "keywords">,
+) {
+  const terms = investmentStudyTerms(input);
+  return items
+    .filter((item) => {
+      const title = stripHtml(item.title || "");
+      const publisher = (item.publisher || "").toLowerCase();
+      return !NEXT_WEEK_NEWS_EXCLUDED_TITLE_PATTERN.test(title)
+        && !NEXT_WEEK_NEWS_EXCLUDED_PUBLISHERS.has(publisher);
+    })
+    .map((item, index) => {
+      const searchable = stripHtml(`${item.title}\n${item.summary || ""}`).toLowerCase();
+      const termMatches = terms.filter((term) => searchable.includes(term.toLowerCase())).length;
+      const queryMatches = (item.keywords ?? []).filter((term) => searchable.includes(term.toLowerCase())).length;
+      return { item, index, score: termMatches * 10 + queryMatches * 3 + (item.relevanceScore ?? 0) };
+    })
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .slice(0, limit)
+    .map(({ item }) => item);
 }
 
 function parseNaverDate(value?: string) {
@@ -175,7 +212,9 @@ export const naverSearchReferenceAdapter: ReferenceAdapter = {
     const completeItems = selectCompleteNewsReferences(deduped, deduped.length);
     const dedupedItems = input.contentType === "NEXT_WEEK_MARKET_PREVIEW"
       ? selectDiverseNextWeekNews(completeItems, maxResults)
-      : completeItems.slice(0, maxResults);
+      : input.contentType === "INVESTMENT_STUDY"
+        ? selectRelevantInvestmentStudyNews(completeItems, maxResults, input)
+        : completeItems.slice(0, maxResults);
 
     const competitorBlogReferences: CompetitorBlogReference[] = [];
     if (process.env.COMPETITOR_BLOG_SEARCH_ENABLED === "true") {

@@ -95,6 +95,8 @@ test("수동 복구는 본문 생성 claim에만 제한된 추가 상한을 전�
 test("시장자료 지연 대체 글은 기본 사전검수 한도 뒤에도 두 번만 추가 시도한다", async () => {
   const source = await readFile(sourceUrl, "utf8");
   assert.match(source, /maxAttempts: dataFailureStudyFallback[\s\S]{0,180}referenceMaxAttempts[\s\S]{0,100}\+ 2/);
+  assert.match(source, /continuingDataFailureStudyFallback \|\| isStockReferencePreflightFailure\(previousReason\)/);
+  assert.match(source, /continuingDataFailureStudyFallback && isStockContentQualityFailure\(previousReason\)[\s\S]{0,100}retryCheckpoint = \{\}/);
 });
 
 test("이미지 발행 조건은 생성 품질 게이트와 네이버 사전검증이 같은 공용 검사를 쓴다", async () => {

@@ -155,6 +155,7 @@ function withVerifiedSchedule(writer: WriterExecution, referenceBundle?: Referen
   const applied = applyVerifiedSchedule(writer.result, referenceBundle?.marketSnapshot, {
     contentType: referenceBundle?.contentType,
     references: getRealStockReferences(referenceBundle),
+    allowMissingMarketSnapshot: referenceBundle?.evidencePolicy === "reference-only-study-fallback",
   });
   if (applied.validation.ok) return { ...writer, result: applied.result };
 

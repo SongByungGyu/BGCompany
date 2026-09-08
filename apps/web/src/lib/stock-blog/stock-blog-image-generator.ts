@@ -764,6 +764,12 @@ export function isMarketHolidayStudySubject(input: { title: string; topic: strin
   return /휴장/.test(text) && /다음\s*(?:정규\s*)?개장일|주문\s*가능|거래시간/.test(text);
 }
 
+export function isMarketBreadthStudySubject(input: { title: string; topic: string }) {
+  const text = `${input.title}\n${input.topic}`;
+  return /코스피|코스닥|지수/.test(text)
+    && /내\s*종목|시가총액\s*가중|대형주\s*쏠림|상승\s*종목\s*수|시장\s*(?:폭|넓이)|거래대금\s*확산/.test(text);
+}
+
 export function isUsMarketStudySubject(input: { title: string; topic: string }) {
   return /미국(?:장|증시)|뉴욕증시|나스닥|S&P\s*500|다우(?:존스)?|Wall\s*Street|U\.S\.\s*market/i
     .test(`${input.title}\n${input.topic}`);
@@ -1117,6 +1123,50 @@ export async function generateStockBlogImages(input: {
       const imageQuality = evaluateStockBlogImageQuality(contentImages, snapshot, { referenceBundle: input.referenceBundle, requiredRelevanceTags: ["market-holiday"], minimumRelevantBodyImages: 3 });
       if (imageQuality.status !== "passed") throw new Error(imageQuality.issues.map((issue) => `${issue.code}:${issue.message}`).join(" | "));
       return { thumbnailImageUrl: `${relativeDir}/thumbnail.svg`, inlineImageUrls: contentImages.filter((image) => image.role === "body").map((image) => image.imageUrl), contentImages, imageQuality, imageStatus: "generated", imageGeneratedAt: generatedAt };
+    }
+
+    if (isMarketBreadthStudySubject(input)) {
+      if (input.template !== "INVESTMENT_STUDY") throw new Error("MARKET_BREADTH_STUDY_TEMPLATE_INVALID");
+      const relatedSource = (input.referenceBundle?.items ?? []).find((item) => (
+        item.sourceType === "news"
+        && Boolean(item.url)
+        && /코스피|코스닥|대형주|시가총액|쏠림|상승\s*종목|거래대금|반도체|삼성전자|SK하이닉스/i
+          .test(`${item.title}\n${item.summary ?? ""}`)
+      ));
+      if (!relatedSource?.url) throw new Error("MARKET_BREADTH_STUDY_SOURCE_MISSING");
+      const sourceName = relatedSource.sourceName ?? relatedSource.publisher ?? relatedSource.provider;
+      const source = `관련 기사 확인 | 출처 ${sourceName} · BG Market Note 재구성`;
+      const tags = ["market-breadth", "market-cap-weighted", "large-cap-concentration"];
+      const files = [
+        { name: "thumbnail.svg", svg: topicThumbnailSvg({ eyebrow: "MARKET BREADTH", title: "코스피 상승과 내 종목의 온도차", subtitle: "시가총액 가중과 대형주 쏠림장 읽는 법", badge: "KOSPI", footer, accent: "#56D7B0" }) },
+        { name: "market-breadth-structure.svg", svg: metricCardsSvg({ title: "지수와 내 종목의 체감이 갈리는 구조", subtitle: "시가총액이 큰 종목일수록 지수에 더 큰 영향을 줍니다.", source, accent: "#56D7B0", cards: [
+          { label: "시총 상위 종목", display: "대형주", note: "지수 영향이 큼" },
+          { label: "시장 대표 숫자", display: "지수", note: "전체 종목과 다름" },
+          { label: "내 계좌의 움직임", display: "체감", note: "보유 종목별 차이" },
+        ] }) },
+        { name: "market-breadth-check-order.svg", svg: flowCardsSvg({ title: "시장 넓이를 확인하는 순서", subtitle: "지수만 보지 않고 상승이 얼마나 넓게 퍼졌는지 확인합니다.", source, accent: "#9B8CFF", steps: ["지수 방향", "상승 종목 수", "거래대금 확산", "업종 확산"], caution: "대형주 몇 종목의 상승을 시장 전체 상승으로 단정하지 않습니다." }) },
+        { name: "market-breadth-checklist.svg", svg: flowCardsSvg({ title: "대형주 쏠림장 체크리스트", subtitle: "내 종목이 지수와 다르게 움직일 때 세 항목을 나눠 봅니다.", source, accent: "#56D7B0", steps: ["시총 상위주", "상승·하락 종목", "업종 거래대금", "내 종목 수급"], caution: "지수보다 종목 확산과 거래대금의 이동을 함께 확인합니다." }) },
+      ];
+      await mkdir(outputDir, { recursive: true });
+      await Promise.all(files.map((file) => writeFile(path.join(outputDir, file.name), file.svg, "utf8")));
+      const sizes = await Promise.all(files.map((file) => stat(path.join(outputDir, file.name))));
+      if (sizes.some((file) => !file.isFile() || file.size < 500)) throw new Error("IMAGE_FILE_VERIFICATION_FAILED");
+      const image = (id: string, title: string, caption: string, placementAfterHeading: string): StockBlogContentImage => ({
+        id, role: "body", type: "related-image", title, placementAfterHeading,
+        imageUrl: `${relativeDir}/${id}.svg`, caption, sourceLabel: source, sourceName, sourceUrl: relatedSource.url,
+        relevanceTags: tags, licenseType: "generated", collectedAt: relatedSource.collectedAt ?? generatedAt,
+        usageAllowed: true, dataKeys: [], dataPoints: [], width: 1200, height: 675,
+        fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
+      });
+      const contentImages: StockBlogContentImage[] = [
+        { id: "thumbnail", role: "thumbnail", type: "thumbnail", title: "코스피 상승과 내 종목의 온도차", placementAfterHeading: "__thumbnail__", imageUrl: `${relativeDir}/thumbnail.svg`, caption: "시가총액 가중과 대형주 쏠림장 읽는 법", sourceLabel: "BG Market Note 자체 제작", sourceName: "BG Market Note", relevanceTags: tags, licenseType: "generated", collectedAt: generatedAt, usageAllowed: true, dataKeys: [], dataPoints: [], width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true },
+        image("market-breadth-structure", "지수와 내 종목의 체감이 갈리는 구조", "시가총액 가중 지수와 개별 종목 체감의 차이", placements.majorIndexChange),
+        image("market-breadth-check-order", "시장 넓이를 확인하는 순서", "지수·상승 종목 수·거래대금·업종 확산 확인 순서", placements.kospiInvestorFlow),
+        image("market-breadth-checklist", "대형주 쏠림장 체크리스트", "대형주 쏠림과 내 종목 수급을 나눠 보는 기준", placements.fxAndUsYields),
+      ];
+      const imageQuality = evaluateStockBlogImageQuality(contentImages, snapshot, { referenceBundle: input.referenceBundle, requiredRelevanceTags: ["market-breadth"], minimumRelevantBodyImages: 3 });
+      if (imageQuality.status !== "passed") throw new Error(imageQuality.issues.map((issue) => `${issue.code}:${issue.message}`).join(" | "));
+      return { thumbnailImageUrl: `${relativeDir}/thumbnail.svg`, inlineImageUrls: contentImages.filter((item) => item.role === "body").map((item) => item.imageUrl), contentImages, imageQuality, imageStatus: "generated", imageGeneratedAt: generatedAt };
     }
 
     if (isNvidiaEarningsSubject(input)) {

@@ -42,6 +42,7 @@ type ApplyVerifiedScheduleResult = {
 type ApplyVerifiedScheduleOptions = {
   contentType?: StockReferenceBriefingTemplate;
   references?: ReferenceItem[];
+  allowMissingMarketSnapshot?: boolean;
 };
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -73,10 +74,19 @@ function addUtcDays(isoDate: string, days: number) {
   return date.toISOString().slice(0, 10);
 }
 
-function normalizeVerifiedEvents(snapshot?: MarketSnapshot, contentType?: StockReferenceBriefingTemplate) {
+function normalizeVerifiedEvents(
+  snapshot?: MarketSnapshot,
+  contentType?: StockReferenceBriefingTemplate,
+  allowMissingMarketSnapshot = false,
+) {
   const issues: string[] = [];
   if (!snapshot) {
-    return { events: [] as VerifiedScheduleEvent[], issues: ["검증된 시장 스냅샷이 없습니다."], from: undefined, through: undefined };
+    return {
+      events: [] as VerifiedScheduleEvent[],
+      issues: allowMissingMarketSnapshot ? issues : ["검증된 시장 스냅샷이 없습니다."],
+      from: undefined,
+      through: undefined,
+    };
   }
   // The morning preview has no standalone schedule section in editorial policy v7.
   // Omitting it prevents internal validation notes from leaking into the public post.
@@ -268,9 +278,11 @@ function canonicalArticleBody(references?: ReferenceItem[]) {
     seen.add(url);
     return [{ title, publisher, url }];
   }).slice(0, 3);
-  return articles.map((item, index) => (
-    `${index + 1}. ${item.title}${item.publisher ? ` - ${item.publisher}` : ""}\n${item.url}`
-  )).join("\n");
+  return articles.map((item, index) => ([
+    `${index + 1}. ${item.title}`,
+    item.publisher ? `- 출처: ${item.publisher}` : null,
+    `- 원문: ${item.url}`,
+  ].filter((value): value is string => Boolean(value)).join("\n"))).join("\n\n");
 }
 
 function normalizeMentionedDate(year: string | undefined, month: string, day: string, expectedYear: string) {
@@ -350,7 +362,11 @@ export function applyVerifiedSchedule(
   snapshot?: MarketSnapshot,
   options: ApplyVerifiedScheduleOptions = {},
 ): ApplyVerifiedScheduleResult {
-  const { events: verifiedEvents, issues, from, through } = normalizeVerifiedEvents(snapshot, options.contentType);
+  const { events: verifiedEvents, issues, from, through } = normalizeVerifiedEvents(
+    snapshot,
+    options.contentType,
+    options.allowMissingMarketSnapshot,
+  );
   const originalSections = normalizeSections(writerResult.sections);
   if (originalSections.length === 0) issues.push("Writer sections가 없어 본문을 재조립할 수 없습니다.");
   const scheduleSections = originalSections.filter((section) => SCHEDULE_HEADING_PATTERN.test(stringValue(section.heading)));

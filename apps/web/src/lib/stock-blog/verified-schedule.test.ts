@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { MarketSnapshot } from "./references/reference-types.ts";
 import { applyVerifiedSchedule } from "./verified-schedule.ts";
 import { STOCK_BLOG_INVESTMENT_DISCLAIMER } from "./stock-blog-editorial-policy.ts";
+import { inspectStockBlogSourceContract } from "./canonical-stock-blog-body.ts";
 
 function snapshot(overrides?: Partial<MarketSnapshot>): MarketSnapshot {
   return {
@@ -163,12 +164,39 @@ test("오전 전망은 별도 일정을 빼고 마무리 뒤에 실제 기사 �
   assert.equal(applied.validation.ok, true);
   assert.equal(applied.validation.checkedEventCount, 0);
   assert.doesNotMatch(fullDraft, /검증된 미국 주요 일정|Alpha Market Data/);
-  assert.match(fullDraft, /코스피, 외국인 수급에 장중 변동성 확대 - 테스트경제/);
+  assert.match(fullDraft, /코스피, 외국인 수급에 장중 변동성 확대/);
+  assert.match(fullDraft, /- 출처: 테스트경제/);
+  assert.match(fullDraft, /- 원문: https:\/\/news\.example\.com\/articles\/1/);
   assert.match(fullDraft, /https:\/\/news\.example\.com\/articles\/1/);
   assert.doesNotMatch(fullDraft, /요약문으로 바꾼 가짜 기사명|search\.example\.com\/redirect/);
   assert.ok(fullDraft.indexOf("마무리") < fullDraft.indexOf("함께 확인한 기사"));
   assert.ok(fullDraft.indexOf("함께 확인한 기사") < fullDraft.indexOf(STOCK_BLOG_INVESTMENT_DISCLAIMER));
   assert.equal(fullDraft.endsWith(STOCK_BLOG_INVESTMENT_DISCLAIMER), true);
+});
+
+test("기사 근거만 쓰는 대체 투자공부 글은 시장 스냅샷 없이 출처를 고정하고 계속한다", () => {
+  const references = [1, 2, 3].map((index) => ({
+    id: `news-${index}`,
+    sourceType: "news" as const,
+    provider: "naver-search",
+    title: `코스피 시장 넓이 기사 ${index}`,
+    url: `https://news.example.com/articles/${index}`,
+    publisher: `경제매체${index}`,
+    publishedAt: "2026-09-08T00:00:00Z",
+    summary: "대형주 쏠림과 상승 종목 수를 설명합니다.",
+  }));
+  const applied = applyVerifiedSchedule(writerResult([
+    { heading: "1. 30초 요약", body: "판단: 지수와 종목 체감은 다를 수 있습니다." },
+    { heading: "함께 확인한 기사", body: "임시 기사 목록" },
+  ]), undefined, {
+    contentType: "INVESTMENT_STUDY",
+    references,
+    allowMissingMarketSnapshot: true,
+  });
+  const fullDraft = String(applied.result.fullDraft);
+
+  assert.equal(applied.validation.ok, true);
+  assert.equal(inspectStockBlogSourceContract(fullDraft, references).ok, true);
 });
 
 test("다음 주 전망은 검증 범위 일정이 비어 있으면 계속 차단한다", () => {

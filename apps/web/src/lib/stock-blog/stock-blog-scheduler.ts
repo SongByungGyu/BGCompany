@@ -852,6 +852,7 @@ async function buildHolidaySearchStudyPipelineInput(
     market: plan.market,
     keywords: plan.keywords,
     maxResults: 6,
+    prioritizeInputQueries: true,
   });
   return {
     nextOpenDate,
@@ -889,6 +890,7 @@ async function buildMarketDataFallbackStudyPipelineInput(
     market: "GLOBAL",
     keywords: plan.keywords,
     maxResults: 6,
+    prioritizeInputQueries: true,
   });
   return {
     input: {
@@ -1435,6 +1437,7 @@ async function runOneSchedule(
   const existing = logicalExisting ?? legacyExisting;
   const previousPayload = existing ? eventPayload(existing.payload) : {};
   const previousReason = typeof previousPayload.reason === "string" ? previousPayload.reason : "";
+  const continuingDataFailureStudyFallback = previousPayload.dataFailureStudyFallback === true;
   const parsedRetry = parseStockBlogRetryV2({
     payload: previousPayload,
     eventTimestamp: existing?.timestamp,
@@ -1486,6 +1489,9 @@ async function runOneSchedule(
     naverDraftJobId: retryCheckpointFromPayload(previousPayload).naverDraftJobId
       ?? (typeof previousPayload.naverDraftJobId === "string" ? previousPayload.naverDraftJobId : undefined),
   };
+  if (continuingDataFailureStudyFallback && isStockContentQualityFailure(previousReason)) {
+    retryCheckpoint = {};
+  }
   if (recoveredLegacyPipeline) {
     retryCheckpoint = {
       ...retryCheckpoint,
@@ -1583,7 +1589,7 @@ async function runOneSchedule(
     && !holidaySearchReplacement
     && definition.dataFailureFallback === "investment-study"
     && config.weekdayInvestmentStudyEnabled
-    && isStockReferencePreflightFailure(previousReason)
+    && (continuingDataFailureStudyFallback || isStockReferencePreflightFailure(previousReason))
     && dataFallbackCutoffReached;
   const effectiveContentType: StockBlogContentType = holidaySearchReplacement || dataFailureStudyFallback
     ? "INVESTMENT_STUDY"
