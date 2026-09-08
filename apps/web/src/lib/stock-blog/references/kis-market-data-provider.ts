@@ -305,6 +305,7 @@ function seoulDate(date = new Date()) {
 }
 
 function source(label: string, asOf: string, collectedAt: string, endpoint: string): MarketSnapshotSource {
+  const nyseIndex = /^(?:S&P 500|NASDAQ|Dow Jones)$/.test(label);
   return makeSource({
     provider: "kis",
     sourceName: `한국투자증권 Open API · ${label}`,
@@ -312,7 +313,7 @@ function source(label: string, asOf: string, collectedAt: string, endpoint: stri
     asOf,
     collectedAt,
     maxAgeMinutes: getKisMarketFreshnessMinutes(new Date(collectedAt)),
-  });
+  }, new Date(collectedAt), nyseIndex ? { market: "NYSE" } : undefined);
 }
 
 function configuredKoreaMarketClosedDates() {
@@ -436,7 +437,7 @@ function cachedOverseasMetric(key: string, collectedAt: string) {
     asOf: cached.source.asOf,
     collectedAt,
     maxAgeMinutes: cached.source.maxAgeMinutes,
-  }, new Date(collectedAt));
+  }, new Date(collectedAt), ["sp500", "nasdaq", "dow"].includes(key) ? { market: "NYSE" } : undefined);
   if (source.freshness !== "fresh") return undefined;
   return {
     metric: metricFromSource({

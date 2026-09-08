@@ -208,6 +208,7 @@ const STOCK_REFERENCE_POLICY = [
   "End the public body in this exact order: conclusion, '함께 확인한 기사', then the investment disclaimer once. Nothing may follow the disclaimer.",
   "Under '함께 확인한 기사', use actual titles and original URLs from realReferences; do not substitute summaries or invented labels.",
   "Avoid buy/sell recommendations, guaranteed returns, sensational claims, or unsupported forecasts.",
+  "If referenceBundle.evidencePolicy is reference-only-study-fallback, omit every marketSnapshot value, current index/sector/flow number, and market chart; explain only concepts and checks grounded in realReferences.",
 ];
 
 function extractHermesJobId(raw: unknown) {
@@ -350,7 +351,7 @@ export function buildQaAuditHermesPayload(input: QaAuditHermesInput): HermesQaAu
       marketSnapshot: input.referenceBundle?.marketSnapshot,
       qualityGateDiagnostics: {
         editorialPolicyVersion: BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION,
-        requireVerifiedOrAllowedFredDegradedMarketSnapshot: true,
+        requireVerifiedOrAllowedFredDegradedMarketSnapshot: input.referenceBundle?.evidencePolicy !== "reference-only-study-fallback",
         requiredEditorialQualityScore: STOCK_BLOG_EDITORIAL_QUALITY_TARGET,
         forbiddenEngagementCta: true,
       },

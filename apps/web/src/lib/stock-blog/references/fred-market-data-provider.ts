@@ -111,7 +111,7 @@ export function parseFredMarketMetric(input: {
     asOf: latest.asOf,
     collectedAt: input.collectedAt,
     maxAgeMinutes: maxAgeMinutes(),
-  });
+  }, new Date(input.collectedAt), input.label === "USD/KRW" ? undefined : { market: "NYSE" });
   return {
     metric: metricFromSource({
       label: input.label,

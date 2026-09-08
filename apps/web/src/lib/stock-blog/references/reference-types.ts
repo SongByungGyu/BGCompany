@@ -208,6 +208,7 @@ export type ReferenceBundle = {
   summary?: string;
   risks?: string[];
   missingItems?: string[];
+  evidencePolicy?: "market-snapshot-required" | "reference-only-study-fallback";
 };
 
 export type ReferenceSearchInput = {

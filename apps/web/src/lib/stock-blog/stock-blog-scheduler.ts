@@ -814,6 +814,26 @@ async function findNextOpenMarketDate(session: StockMarketSession) {
   return null;
 }
 
+function asReferenceOnlyFallbackBundle(referenceBundle: ReferenceBundle): ReferenceBundle {
+  const marketMissingItems = new Set(referenceBundle.marketSnapshot?.missingItems ?? []);
+  const remainingMissingItems = (referenceBundle.missingItems ?? [])
+    .filter((item) => !marketMissingItems.has(item));
+  return {
+    ...referenceBundle,
+    status: referenceBundle.status === "needs_reference" && remainingMissingItems.length === 0
+      ? "ready"
+      : referenceBundle.status,
+    marketSnapshot: undefined,
+    missingItems: remainingMissingItems,
+    evidencePolicy: "reference-only-study-fallback",
+    cautionNotes: Array.from(new Set([
+      ...referenceBundle.cautionNotes,
+      "시황 수치와 그래프는 사용하지 않고, 검증된 실제 기사에서 확인되는 개념과 확인 순서만 설명합니다.",
+    ])),
+    sourcePolicy: `${referenceBundle.sourcePolicy} 대체 투자공부 글은 검증된 기사만 근거로 사용하고 시황 수치와 그래프를 제외합니다.`,
+  };
+}
+
 async function buildHolidaySearchStudyPipelineInput(
   session: StockMarketSession,
   runnerMode: StockBlogSchedulerRunnerMode,
@@ -845,7 +865,7 @@ async function buildHolidaySearchStudyPipelineInput(
       channel: "blog" as const,
       runnerMode,
       contentType: "INVESTMENT_STUDY" as const,
-      referenceBundle,
+      referenceBundle: asReferenceOnlyFallbackBundle(referenceBundle),
     },
   };
 }
@@ -881,7 +901,7 @@ async function buildMarketDataFallbackStudyPipelineInput(
       channel: "blog" as const,
       runnerMode,
       contentType: "INVESTMENT_STUDY" as const,
-      referenceBundle,
+      referenceBundle: asReferenceOnlyFallbackBundle(referenceBundle),
     },
   };
 }

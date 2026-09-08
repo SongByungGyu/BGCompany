@@ -2,13 +2,68 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   hasValidStockBlogBodyLength,
+  evaluateStockBlogReferences,
   inspectNextWeekEditorialContract,
   inspectStockBlogImagePublishReadiness,
   inspectStockBlogQaApproval,
 } from "./quality-gate";
+import type { ReferenceBundle } from "./references/reference-types";
 import type { ContentPipelineRun } from "@/features/content-pipeline/content-pipeline-types";
 
 const disclaimer = "본 글은 시장 정보를 정리한 투자 참고 자료이며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 최종 투자 판단과 책임은 투자자 본인에게 있습니다.";
+
+function referenceOnlyFallbackBundle(): ReferenceBundle {
+  const items = Array.from({ length: 5 }, (_, index) => ({
+    id: `news-${index}`,
+    sourceType: "news" as const,
+    provider: "naver-news",
+    title: `주식 투자 개념 기사 ${index + 1}`,
+    url: `https://news${index + 1}.example.com/article`,
+    publisher: `언론사 ${(index % 3) + 1}`,
+    publishedAt: "2026-09-08T00:00:00.000Z",
+    summary: "시황 숫자를 추정하지 않고 투자자가 확인할 개념과 순서를 설명합니다.",
+  }));
+  return {
+    provider: "naver-search",
+    mode: "real",
+    status: "ready",
+    contentType: "INVESTMENT_STUDY",
+    generatedAt: "2026-09-08T00:00:00.000Z",
+    marketDate: "2026-09-08",
+    market: "GLOBAL",
+    queries: ["주식 투자 공부"],
+    items,
+    competitorBlogReferences: Array.from({ length: 3 }, (_, index) => ({
+      title: `경쟁 글 ${index + 1}`,
+      url: `https://blog${index + 1}.example.com/post`,
+      blogName: `블로그 ${index + 1}`,
+      publishedAt: "2026-09-08T00:00:00.000Z",
+      keywords: ["주식 투자 공부"],
+      observedStructure: [],
+      differentiationPoint: "검증 기사 중심",
+    })),
+    evidencePolicy: "reference-only-study-fallback",
+    keyThemes: [],
+    repeatedKeywords: [],
+    differentiationPoints: [],
+    cautionNotes: [],
+    sourcePolicy: "검증된 실제 기사만 사용하고 시황 수치는 제외합니다.",
+  };
+}
+
+test("시장자료 지연 대체 투자공부는 검증 기사 조건을 충족하면 스냅샷 없이 통과한다", () => {
+  const result = evaluateStockBlogReferences(referenceOnlyFallbackBundle(), true);
+  assert.equal(result.ok, true);
+  assert.equal(result.status, "passed");
+});
+
+test("일반 글은 같은 기사 묶음이라도 검증된 시장 스냅샷 없이는 차단한다", () => {
+  const bundle = referenceOnlyFallbackBundle();
+  bundle.evidencePolicy = "market-snapshot-required";
+  const result = evaluateStockBlogReferences(bundle, true);
+  assert.equal(result.ok, false);
+  assert.ok(result.reasons.some((reason) => reason.includes("MarketSnapshot")));
+});
 
 test("주간 전망 글의 기사 링크 3개·섹션 순서·유의문구를 식별한다", () => {
   const body = [

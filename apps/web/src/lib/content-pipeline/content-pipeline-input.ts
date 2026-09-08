@@ -67,6 +67,10 @@ function assertTrustedReferenceBundle(value: unknown): ReferenceBundle | undefin
   if (typeof value.sourcePolicy !== "string" || !value.sourcePolicy.trim()) {
     throw new Error("trusted referenceBundle sourcePolicy is required");
   }
+  if (value.evidencePolicy !== undefined
+    && !["market-snapshot-required", "reference-only-study-fallback"].includes(String(value.evidencePolicy))) {
+    throw new Error("trusted referenceBundle evidencePolicy is invalid");
+  }
   if (!Array.isArray(value.items)) throw new Error("trusted referenceBundle items must be an array");
   if (value.items.some((item) => (
     !isRecord(item)

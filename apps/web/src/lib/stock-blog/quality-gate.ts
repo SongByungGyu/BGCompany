@@ -384,6 +384,10 @@ function diagnostics(input: {
 export function evaluateStockBlogReferences(bundle?: ReferenceBundle, requireRealReferences = false): StockBlogQualityGateResult {
   const d = diagnostics({ bundle });
   const reasons: string[] = [];
+  const referenceOnlyFallback = bundle?.contentType === "INVESTMENT_STUDY"
+    && bundle.evidencePolicy === "reference-only-study-fallback"
+    && bundle.mode === "real"
+    && (bundle.provider === "naver-search" || bundle.provider === "web");
   if (requireRealReferences) {
     const minRefs = 5;
     const minUrls = 5;
@@ -392,18 +396,18 @@ export function evaluateStockBlogReferences(bundle?: ReferenceBundle, requireRea
     if (d.distinctUrlCount < minUrls) reasons.push(`중복되지 않는 실제 URL ${minUrls}개 이상 필요`);
     if (d.publisherCount < minPublishers) reasons.push(`서로 다른 발행처 ${minPublishers}곳 이상 필요`);
     if (d.newsReferenceCount < 3) reasons.push("실제 뉴스 참고자료 3개 이상 필요");
-    if (d.marketDataReferenceCount + d.officialReferenceCount < 1 && d.marketSnapshotDataQuality !== "verified") reasons.push("시장 데이터 또는 공식/신뢰 참고자료 1개 이상 필요");
+    if (!referenceOnlyFallback && d.marketDataReferenceCount + d.officialReferenceCount < 1 && d.marketSnapshotDataQuality !== "verified") reasons.push("시장 데이터 또는 공식/신뢰 참고자료 1개 이상 필요");
     if (d.competitorReferenceCount < 3) reasons.push("경쟁 블로그 참고자료 3개 이상 필요");
     if (process.env.COMPETITOR_BLOG_DEEP_ANALYSIS_REQUIRED === "true" && d.competitorAnalyzedCount < 1) reasons.push("경쟁 블로그 심층 구조 분석 1개 이상 필요");
-    if (d.marketSnapshotStatus !== "ready" || d.marketSnapshotDataQuality !== "verified") reasons.push("검증된 MarketSnapshot 필요");
-    if (d.marketSnapshotFreshnessStatus !== "fresh") reasons.push("최신성 검증을 통과한 MarketSnapshot 필요");
-    if (d.staleMarketDataItems.length > 0) reasons.push(`오래되거나 유효하지 않은 시장 데이터: ${d.staleMarketDataItems.join(", ")}`);
-    if (d.manualMarketSnapshot && process.env.STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES !== "true") reasons.push("Manual MarketSnapshot은 운영 Hermes에서 기본 차단됨");
+    if (!referenceOnlyFallback && (d.marketSnapshotStatus !== "ready" || d.marketSnapshotDataQuality !== "verified")) reasons.push("검증된 MarketSnapshot 필요");
+    if (!referenceOnlyFallback && d.marketSnapshotFreshnessStatus !== "fresh") reasons.push("최신성 검증을 통과한 MarketSnapshot 필요");
+    if (!referenceOnlyFallback && d.staleMarketDataItems.length > 0) reasons.push(`오래되거나 유효하지 않은 시장 데이터: ${d.staleMarketDataItems.join(", ")}`);
+    if (!referenceOnlyFallback && d.manualMarketSnapshot && process.env.STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES !== "true") reasons.push("Manual MarketSnapshot은 운영 Hermes에서 기본 차단됨");
     if (d.missingReferenceItems.length > 0) reasons.push(`필수 참고자료 부족: ${d.missingReferenceItems.join(", ")}`);
   }
   if (bundle?.status === "needs_credentials" || (requireRealReferences && bundle?.status === "disabled")) return { ok: false, status: "needs_credentials", reasons: reasons.length ? reasons : ["실제 Reference Provider credentials 필요"], diagnostics: d };
-  if (d.marketSnapshotStatus === "needs_credentials") return { ok: false, status: "needs_credentials", reasons: [...reasons, "시장 데이터 Provider credentials 필요"], diagnostics: d };
-  if (bundle?.status === "needs_data" || bundle?.status === "error" || d.marketSnapshotStatus === "needs_data" || d.marketSnapshotStatus === "error" || d.marketSnapshotFreshnessStatus === "stale" || d.marketSnapshotFreshnessStatus === "expired" || d.marketSnapshotFreshnessStatus === "unknown") {
+  if (!referenceOnlyFallback && d.marketSnapshotStatus === "needs_credentials") return { ok: false, status: "needs_credentials", reasons: [...reasons, "시장 데이터 Provider credentials 필요"], diagnostics: d };
+  if (!referenceOnlyFallback && (bundle?.status === "needs_data" || bundle?.status === "error" || d.marketSnapshotStatus === "needs_data" || d.marketSnapshotStatus === "error" || d.marketSnapshotFreshnessStatus === "stale" || d.marketSnapshotFreshnessStatus === "expired" || d.marketSnapshotFreshnessStatus === "unknown")) {
     return { ok: false, status: "needs_data", reasons: reasons.length ? reasons : ["검증된 MarketSnapshot 데이터 필요"], diagnostics: d };
   }
   if (requireRealReferences && d.manualMarketSnapshot && process.env.STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES !== "true") {
@@ -457,6 +461,10 @@ export function evaluateStockBlogPublishQuality(input: {
   const reasons: string[] = [];
   const requireReal = input.requireRealReferences ?? input.pipeline.runnerMode === "hermes";
   const contentType = bundle?.contentType ?? "KOREA_DAILY_PREVIEW";
+  const referenceOnlyFallback = contentType === "INVESTMENT_STUDY"
+    && bundle?.evidencePolicy === "reference-only-study-fallback"
+    && bundle.mode === "real"
+    && (bundle.provider === "naver-search" || bundle.provider === "web");
   const policy = getStockBlogEditorialPolicy(contentType);
   const publicEditorialContract = inspectStockBlogEditorialContract(body, contentType);
   const qaApproval = inspectStockBlogQaApproval(input.pipeline.qaResult);
@@ -481,6 +489,7 @@ export function evaluateStockBlogPublishQuality(input: {
     verifiedMarketSnapshot: baseDiagnostics.marketSnapshotStatus === "ready"
       && baseDiagnostics.marketSnapshotDataQuality === "verified"
       && baseDiagnostics.marketSnapshotFreshnessStatus === "fresh",
+    allowReferenceOnlyEvidence: referenceOnlyFallback,
     qaScore: effectiveQaScore,
   });
   const d: StockBlogQualityDiagnostics = {
@@ -520,16 +529,16 @@ export function evaluateStockBlogPublishQuality(input: {
     if (d.distinctUrlCount < minUrls) reasons.push(`중복되지 않는 실제 URL ${minUrls}개 이상 필요`);
     if (d.publisherCount < minPublishers) reasons.push(`서로 다른 발행처 ${minPublishers}곳 이상 필요`);
     if (d.newsReferenceCount < 3) reasons.push("실제 뉴스 참고자료 3개 이상 필요");
-    if (d.marketDataReferenceCount + d.officialReferenceCount < 1 && d.marketSnapshotDataQuality !== "verified") reasons.push("시장 데이터 또는 공식/신뢰 참고자료 1개 이상 필요");
+    if (!referenceOnlyFallback && d.marketDataReferenceCount + d.officialReferenceCount < 1 && d.marketSnapshotDataQuality !== "verified") reasons.push("시장 데이터 또는 공식/신뢰 참고자료 1개 이상 필요");
     if (d.competitorReferenceCount < 3) reasons.push("경쟁 블로그 참고자료 3개 이상 필요");
     if (process.env.COMPETITOR_BLOG_DEEP_ANALYSIS_REQUIRED === "true" && d.competitorAnalyzedCount < 1) reasons.push("경쟁 블로그 심층 구조 분석 1개 이상 필요");
-    if (d.marketSnapshotStatus !== "ready" || d.marketSnapshotDataQuality !== "verified") reasons.push("검증된 MarketSnapshot 필요");
-    if (d.marketSnapshotFreshnessStatus !== "fresh") reasons.push("최신성 검증을 통과한 MarketSnapshot 필요");
-    if (d.staleMarketDataItems.length > 0) reasons.push(`오래되거나 유효하지 않은 시장 데이터: ${d.staleMarketDataItems.join(", ")}`);
-    if (d.manualMarketSnapshot && process.env.STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES !== "true") reasons.push("Manual MarketSnapshot은 운영 Hermes에서 기본 차단됨");
+    if (!referenceOnlyFallback && (d.marketSnapshotStatus !== "ready" || d.marketSnapshotDataQuality !== "verified")) reasons.push("검증된 MarketSnapshot 필요");
+    if (!referenceOnlyFallback && d.marketSnapshotFreshnessStatus !== "fresh") reasons.push("최신성 검증을 통과한 MarketSnapshot 필요");
+    if (!referenceOnlyFallback && d.staleMarketDataItems.length > 0) reasons.push(`오래되거나 유효하지 않은 시장 데이터: ${d.staleMarketDataItems.join(", ")}`);
+    if (!referenceOnlyFallback && d.manualMarketSnapshot && process.env.STOCK_MARKET_DATA_ALLOW_MANUAL_IN_HERMES !== "true") reasons.push("Manual MarketSnapshot은 운영 Hermes에서 기본 차단됨");
     if (d.missingReferenceItems.length > 0) reasons.push(`필수 참고자료 부족: ${d.missingReferenceItems.join(", ")}`);
   }
-  if (!d.hasMarketDataSignal && requireReal) reasons.push("지수/섹터/수급 등 시장 데이터 신호 부족");
+  if (!d.hasMarketDataSignal && requireReal && !referenceOnlyFallback) reasons.push("지수/섹터/수급 등 시장 데이터 신호 부족");
   if (requireReal && !d.hasBgMarketNoteJudgment) reasons.push("BG Market Note 판단 섹션 필요");
   if (d.pasteReadyNewlineCount < 15) reasons.push("최종 본문 줄바꿈 15개 이상 필요");
   if (d.doubleNewlineBlockCount < 8) reasons.push("최종 본문 문단 블록 8개 이상 필요");

@@ -1,4 +1,5 @@
 import type { MarketSnapshotFreshness, MarketSnapshotMetric, MarketSnapshotSource } from "./reference-types";
+import { addIsoDays, getNyseMarketSession } from "../market-session-policy";
 
 export function asNumber(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -40,8 +41,57 @@ export function freshnessFor(asOf: string, maxAgeMinutes: number, now = new Date
   return { freshness: "expired", ageMinutes };
 }
 
-export function makeSource(input: Omit<MarketSnapshotSource, "freshness" | "ageMinutes">, now = new Date()): MarketSnapshotSource {
-  return { ...input, ...freshnessFor(input.asOf, input.maxAgeMinutes, now) };
+function zonedParts(now: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value ?? "0");
+  return {
+    date: `${get("year")}-${String(get("month")).padStart(2, "0")}-${String(get("day")).padStart(2, "0")}`,
+    hour: get("hour"),
+  };
+}
+
+export function mostRecentCompletedNyseSessionDate(now = new Date()) {
+  const ny = zonedParts(now, "America/New_York");
+  let candidate = ny.hour >= 16 ? ny.date : addIsoDays(ny.date, -1);
+  for (let offset = 0; offset < 10; offset += 1) {
+    const session = getNyseMarketSession(candidate, {
+      closedDates: process.env.STOCK_BLOG_US_CLOSED_DATES,
+      openDates: process.env.STOCK_BLOG_US_OPEN_DATES,
+    });
+    if (session.state === "open") return candidate;
+    candidate = addIsoDays(candidate, -1);
+  }
+  return null;
+}
+
+export function marketSessionAdjustedFreshness(
+  asOf: string,
+  maxAgeMinutes: number,
+  now = new Date(),
+  market?: "NYSE",
+): Pick<MarketSnapshotSource, "freshness" | "ageMinutes"> {
+  const ordinary = freshnessFor(asOf, maxAgeMinutes, now);
+  if (ordinary.freshness === "fresh" || market !== "NYSE") return ordinary;
+  const asOfDate = parseDateTime(asOf)?.slice(0, 10);
+  const completedSession = mostRecentCompletedNyseSessionDate(now);
+  return asOfDate && completedSession === asOfDate
+    ? { freshness: "fresh", ageMinutes: ordinary.ageMinutes }
+    : ordinary;
+}
+
+export function makeSource(
+  input: Omit<MarketSnapshotSource, "freshness" | "ageMinutes">,
+  now = new Date(),
+  options: { market?: "NYSE" } = {},
+): MarketSnapshotSource {
+  return { ...input, ...marketSessionAdjustedFreshness(input.asOf, input.maxAgeMinutes, now, options.market) };
 }
 
 export function metricFromSource(input: Omit<MarketSnapshotMetric, "freshness" | "ageMinutes" | "collectedAt" | "maxAgeMinutes"> & {

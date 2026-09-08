@@ -90,6 +90,7 @@ type QualityAssessmentInput = {
   realReferenceCount: number;
   publisherCount: number;
   verifiedMarketSnapshot: boolean;
+  allowReferenceOnlyEvidence?: boolean;
   qaScore?: number;
 };
 
@@ -186,7 +187,8 @@ export function assessStockBlogEditorialQuality(input: QualityAssessmentInput): 
   if (input.structure.beginnerExplanationSentenceCount >= 3 && input.structure.beginnerExplanationSentenceCount <= 5) structure += 2;
   else failedChecks.push("초보자 설명 3~5문장");
 
-  if (input.verifiedMarketSnapshot) evidence += 10;
+  if (input.verifiedMarketSnapshot
+    || (input.allowReferenceOnlyEvidence && input.realReferenceCount >= 5 && input.publisherCount >= 3)) evidence += 10;
   else failedChecks.push("검증된 최신 시장 데이터");
   if (input.realReferenceCount >= 5) evidence += 8;
   else failedChecks.push("실제 참고자료 5개 이상");
@@ -242,6 +244,7 @@ export function buildStockBlogEditorialBenchmark(input: {
   realReferenceCount: number;
   publisherCount: number;
   verifiedMarketSnapshot: boolean;
+  allowReferenceOnlyEvidence?: boolean;
   qaScore?: number;
   competitorAnalysis?: CompetitorBlogAnalysisSummary;
   appliedGuidelines?: string[];
@@ -253,6 +256,7 @@ export function buildStockBlogEditorialBenchmark(input: {
     realReferenceCount: input.realReferenceCount,
     publisherCount: input.publisherCount,
     verifiedMarketSnapshot: input.verifiedMarketSnapshot,
+    allowReferenceOnlyEvidence: input.allowReferenceOnlyEvidence,
     qaScore: input.qaScore,
   });
   const averages = input.competitorAnalysis?.averages ?? {

@@ -1858,6 +1858,8 @@ async function startValidatedContentPipeline(baseData: ContentPipelineInput): Pr
     verifiedMarketSnapshot: snapshot?.status === "ready"
       && snapshot.dataQuality === "verified"
       && snapshot.freshness?.status === "fresh",
+    allowReferenceOnlyEvidence: bundle?.contentType === "INVESTMENT_STUDY"
+      && bundle.evidencePolicy === "reference-only-study-fallback",
     qaScore: provisionalPipeline.qaResult?.qaScore,
     competitorAnalysis: bundle?.competitorAnalysis,
     appliedGuidelines: data.editorialBenchmarkGuidelines,
