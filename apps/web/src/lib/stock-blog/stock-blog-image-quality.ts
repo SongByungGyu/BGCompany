@@ -4,6 +4,7 @@ import { isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/
 import { isAllowedKisOverseasDegradedSnapshot } from "@/lib/stock-blog/references/kis-overseas-degraded-policy";
 import type { StockBlogContentImage, StockBlogImageQualityAudit, StockBlogImageQualityIssueCode } from "@/lib/stock-blog/stock-blog-image-types";
 import { hasMeaningfulInvestorFlowValues } from "@/lib/stock-blog/investor-flow-policy";
+import { isVerifiedExplanatoryImage } from "./stock-blog-explanatory-images";
 
 function resolveSnapshotValue(snapshot: MarketSnapshot, key: string): unknown {
   return key.split(".").reduce<unknown>((value, segment) => {
@@ -18,6 +19,7 @@ function closeEnough(left: number, right: number) {
 }
 
 export type StockBlogImageQualityContext = {
+  body?: string;
   referenceBundle?: ReferenceBundle;
   requiredRelevanceTags?: string[];
   minimumRelevantBodyImages?: number;
@@ -71,7 +73,11 @@ export function evaluateStockBlogImageQuality(
     issues.push({ code: "image_file_missing", message: "이미지 파일 또는 모바일 가독성 규격을 확인하지 못했습니다." });
   }
   const hasReferenceMetrics = (context.referenceBundle?.items ?? []).some((item) => (item.metrics?.length ?? 0) > 0);
-  if (bodyImages.length > 0 && charts.length === 0 && relatedImages.length === bodyImages.length && hasReferenceMetrics) {
+  const allExplanatory = bodyImages.length >= 2 && bodyImages.every(image => isVerifiedExplanatoryImage(image, context));
+  if (bodyImages.some(image => image.explanation && !isVerifiedExplanatoryImage(image, context))) {
+    issues.push({ code: "image_not_relevant", message: "대체 설명 이미지의 본문 연결·주제·출처를 확인하지 못했습니다." });
+  }
+  if (bodyImages.length > 0 && charts.length === 0 && relatedImages.length === bodyImages.length && hasReferenceMetrics && !allExplanatory) {
     issues.push({ code: "image_quality_failed", message: "검증 수치가 있는데 본문 이미지가 모두 장식용 이미지입니다." });
   }
 

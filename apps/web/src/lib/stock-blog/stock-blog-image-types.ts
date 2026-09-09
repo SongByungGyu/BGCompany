@@ -22,6 +22,12 @@ export type StockBlogContentImage = {
   sourceName: string;
   sourceUrl?: string;
   relevanceTags?: string[];
+  explanation?: {
+    version: 1;
+    reason: "chart-data-unavailable" | "topic-without-chart";
+    topicKey: string;
+    sourceIds: string[];
+  };
   licenseType: StockBlogImageLicenseType;
   collectedAt: string;
   usageAllowed: boolean;

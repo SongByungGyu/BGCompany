@@ -10,6 +10,7 @@ import { isAllowedKisSectorDegradedSnapshot } from "@/lib/stock-blog/references/
 import { isAllowedKisOverseasDegradedSnapshot } from "@/lib/stock-blog/references/kis-overseas-degraded-policy";
 import { evaluateStockBlogImageQuality } from "@/lib/stock-blog/stock-blog-image-quality";
 import { getStockBlogImagePlacementHeadings } from "@/lib/stock-blog/stock-blog-image-placements";
+import { planExplanatoryImages, type ExplanatoryImagePlan } from "./stock-blog-explanatory-images";
 import type { StockBlogContentImage, StockBlogImageDataPoint, StockBlogImageQualityAudit } from "@/lib/stock-blog/stock-blog-image-types";
 import {
   buildInvestorFlowChartCopy,
@@ -244,6 +245,10 @@ function numericMetric(metric: MarketSnapshotMetric | undefined, field: "value" 
 }
 
 type VerifiedNumericMetric = ReturnType<typeof numericMetric>;
+
+function optionalNumericMetric(metric: MarketSnapshotMetric | undefined, field: "value" | "changePct", label: string) {
+  try { return numericMetric(metric, field, label); } catch { return undefined; }
+}
 
 function dataPoint(key: string, label: string, value: number, unit: string, asOf: string): StockBlogImageDataPoint {
   return { key, label, value, unit, asOf };
@@ -864,6 +869,28 @@ export async function generateStockBlogImages(input: {
     ? "다음 주 한국·미국 증시 전망"
     : editorialTitle;
   const thumbnailSubtitle = titleFocus || input.topic;
+  async function explanatoryImages(plans: ExplanatoryImagePlan[], reason: "chart-data-unavailable" | "topic-without-chart") {
+    await mkdir(outputDir, { recursive: true });
+    return Promise.all(plans.map(async (plan): Promise<StockBlogContentImage> => {
+      const sourceLabel = `개념·확인 순서 | 참고 ${truncate(plan.sourceName, 32)} · BG Market Note 구성`;
+      const name = `${plan.id}.svg`;
+      await writeFile(path.join(outputDir, name), flowCardsSvg({ title: plan.title,
+        subtitle: `본문 연결: ${truncate(plan.heading, 45)}`, source: sourceLabel,
+        accent: "#56D7B0", steps: [...plan.steps],
+        caution: "시세 차트가 아닌 설명 이미지입니다. 현재 방향을 뜻하지 않습니다.",
+      }), "utf8");
+      const file = await stat(path.join(outputDir, name));
+      if (!file.isFile() || file.size < 500) throw new Error("IMAGE_FILE_VERIFICATION_FAILED");
+      return { id: plan.id, role: "body", type: "related-image", title: plan.title,
+        placementAfterHeading: plan.heading, imageUrl: `${relativeDir}/${name}`,
+        caption: `${plan.title} — 시세 차트가 아닌 개념·확인 순서`, sourceLabel,
+        sourceName: plan.sourceName, sourceUrl: plan.sourceUrl, relevanceTags: [plan.topicKey],
+        explanation: { version: 1, reason, topicKey: plan.topicKey, sourceIds: plan.sourceIds },
+        licenseType: "generated", collectedAt: generatedAt, usageAllowed: true,
+        dataKeys: [], dataPoints: [], width: 1200, height: 675, fileFormat: "image/svg+xml",
+        uploadFormat: "image/png", fileVerified: true };
+    }));
+  }
   try {
     if (isYouthFutureSavingsSubject(input)) {
       if (input.template !== "INVESTMENT_STUDY") throw new Error("YOUTH_SAVINGS_TEMPLATE_INVALID");
@@ -1322,30 +1349,24 @@ export async function generateStockBlogImages(input: {
     ) {
       throw new Error("검증된 최신 MarketSnapshot이 없어 데이터 차트를 생성하지 않았습니다.");
     }
-    const omitMissingOverseasItems = isAllowedKisOverseasDegradedSnapshot(snapshot);
     const genericImagePolicy = getGenericMarketImagePolicy(input);
     const useUsFocusedGenericImages = !genericImagePolicy.includeDomesticIndices;
     const kospi = numericMetric(snapshot.korea?.kospi, "changePct", "KOSPI_CHANGE");
     const kosdaq = numericMetric(snapshot.korea?.kosdaq, "changePct", "KOSDAQ_CHANGE");
-    const sp500 = snapshot.us?.sp500 ? numericMetric(snapshot.us.sp500, "changePct", "SP500_CHANGE") : undefined;
-    const nasdaq = snapshot.us?.nasdaq ? numericMetric(snapshot.us.nasdaq, "changePct", "NASDAQ_CHANGE") : undefined;
-    const dow = snapshot.us?.dow ? numericMetric(snapshot.us.dow, "changePct", "DOW_CHANGE") : undefined;
-    const fx = snapshot.us?.fx ? numericMetric(snapshot.us.fx, "value", "USDKRW_VALUE") : undefined;
-    const fxChange = snapshot.us?.fx ? numericMetric(snapshot.us.fx, "changePct", "USDKRW_CHANGE") : undefined;
-    if (
-      !omitMissingOverseasItems
-      && (!sp500 || !nasdaq || (!useUsFocusedGenericImages && !dow) || !fx || !fxChange)
-    ) {
-      throw new Error("IMAGE_DATA_MISSING_OVERSEAS_CORE");
-    }
+    const sp500 = optionalNumericMetric(snapshot.us?.sp500, "changePct", "SP500_CHANGE");
+    const nasdaq = optionalNumericMetric(snapshot.us?.nasdaq, "changePct", "NASDAQ_CHANGE");
+    const dow = optionalNumericMetric(snapshot.us?.dow, "changePct", "DOW_CHANGE");
+    const fxValue = optionalNumericMetric(snapshot.us?.fx, "value", "USDKRW_VALUE");
+    const fxChange = optionalNumericMetric(snapshot.us?.fx, "changePct", "USDKRW_CHANGE");
+    const fx = fxChange ? fxValue : undefined;
     const twoYear = snapshot.macro?.us2Year
-      ? numericMetric(snapshot.macro.us2Year, "value", "US2Y_VALUE")
+      ? optionalNumericMetric(snapshot.macro.us2Year, "value", "US2Y_VALUE")
       : undefined;
     const tenYear = snapshot.macro?.us10Year
-      ? numericMetric(snapshot.macro.us10Year, "value", "US10Y_VALUE")
+      ? optionalNumericMetric(snapshot.macro.us10Year, "value", "US10Y_VALUE")
       : undefined;
     const spread = snapshot.macro?.yieldSpread10Y2Y
-      ? numericMetric(snapshot.macro.yieldSpread10Y2Y, "value", "SPREAD_VALUE")
+      ? optionalNumericMetric(snapshot.macro.yieldSpread10Y2Y, "value", "SPREAD_VALUE")
       : undefined;
     const flows = snapshot.korea?.investorFlows ?? [];
     const kospiFlows = [
@@ -1416,6 +1437,8 @@ export async function generateStockBlogImages(input: {
       ...(displayedNasdaq ? [{ label: "NASDAQ", value: displayedNasdaq.value, display: `${signed(displayedNasdaq.value)}%` }] : []),
       ...(displayedDow ? [{ label: "Dow Jones", value: displayedDow.value, display: `${signed(displayedDow.value)}%` }] : []),
     ];
+    const includeIndexChart = useUsFocusedGenericImages || !(kospi.value === 0 && kosdaq.value === 0
+      && [kospi, kosdaq].some(item => item.metric.asOf!.replace(/\D/g, "").slice(0, 8) === snapshot.marketDate.replace(/-/g, "")));
     const flowSource = formattedInvestorFlows
       ? `기준일 ${dateLabel(kospiFlows[0].metric.asOf!)} | 단위 ${formattedInvestorFlows.unit} | 출처 한국투자증권 Open API`
       : undefined;
@@ -1444,6 +1467,7 @@ export async function generateStockBlogImages(input: {
         }),
       },
     ];
+    if (!includeIndexChart) files.splice(files.findIndex(file => file.name === "major-index-change.svg"), 1);
     if (formattedInvestorFlows && flowSource && flowCopy) {
       files.push({
         name: "kospi-investor-flow.svg",
@@ -1583,7 +1607,16 @@ export async function generateStockBlogImages(input: {
         width: 1200, height: 675, fileFormat: "image/svg+xml", uploadFormat: "image/png", fileVerified: true,
       });
     }
-    const imageQuality = evaluateStockBlogImageQuality(contentImages, snapshot);
+    if (!includeIndexChart) contentImages.splice(contentImages.findIndex(image => image.id === "major-index-change"), 1);
+    // Retain valid charts. Fill only missing slots with section-linked explanations.
+    const desiredBodyCount = genericImagePolicy.includeInvestorFlowChart ? 3 : 2;
+    const missingCount = desiredBodyCount - contentImages.filter(image => image.role === "body").length;
+    if (missingCount > 0) {
+      const occupied = new Set(contentImages.filter(image => image.role === "body").map(image => image.placementAfterHeading));
+      const plans = planExplanatoryImages(input).filter(plan => !occupied.has(plan.heading)).slice(0, missingCount);
+      contentImages.push(...await explanatoryImages(plans, "chart-data-unavailable"));
+    }
+    const imageQuality = evaluateStockBlogImageQuality(contentImages, snapshot, { referenceBundle: input.referenceBundle, body: input.body });
     if (imageQuality.status !== "passed") throw new Error(imageQuality.issues.map((issue) => `${issue.code}:${issue.message}`).join(" | "));
     return {
       thumbnailImageUrl: `${relativeDir}/thumbnail.svg`,
@@ -1594,6 +1627,33 @@ export async function generateStockBlogImages(input: {
       imageGeneratedAt: generatedAt,
     };
   } catch (error) {
-    return blockedImageResult(generatedAt, error instanceof Error ? error.message : "Stock blog image generation failed");
+    const message = error instanceof Error ? error.message : "Stock blog image generation failed";
+    // Never conceal mismatched data, absent sources, filesystem errors or failed QA.
+    const recoverable = /^(?:IMAGE_DATA_(?:MISSING|UNVERIFIED)_|(?:NVIDIA|BROADCOM|YEN)_TOPIC_IMAGE_METRICS_MISSING|MARKET_HOLIDAY_STUDY_DATES_MISSING|INVESTMENT_STUDY_TOPIC_IMAGE_TEMPLATE_MISSING)/.test(message);
+    const plans = recoverable ? planExplanatoryImages(input).slice(0, 3) : [];
+    if (plans.length >= 2) {
+      try {
+        const reason = input.template === "INVESTMENT_STUDY" ? "topic-without-chart" : "chart-data-unavailable";
+        const bodyImages = await explanatoryImages(plans, reason);
+        // No decorative price curve in a data-free thumbnail.
+        await writeFile(path.join(outputDir, "thumbnail.svg"), topicThumbnailSvg({
+          eyebrow: "BG MARKET NOTE GUIDE", title: thumbnailTitle, subtitle: "본문의 핵심 개념과 확인 순서",
+          badge: "NOTE", footer, accent: "#56D7B0",
+        }), "utf8");
+        const thumb = await stat(path.join(outputDir, "thumbnail.svg"));
+        if (!thumb.isFile() || thumb.size < 500) throw new Error("IMAGE_FILE_VERIFICATION_FAILED");
+        const contentImages: StockBlogContentImage[] = [{ ...bodyImages[0], id: "thumbnail", role: "thumbnail", type: "thumbnail",
+          title: thumbnailTitle, caption: thumbnailTitle, placementAfterHeading: "__thumbnail__",
+          imageUrl: `${relativeDir}/thumbnail.svg`, sourceLabel: "BG Market Note 자체 제작",
+          sourceName: "BG Market Note", sourceUrl: undefined, explanation: undefined }, ...bodyImages];
+        const imageQuality = evaluateStockBlogImageQuality(contentImages, snapshot, { referenceBundle: input.referenceBundle, body: input.body });
+        if (imageQuality.status !== "passed") throw new Error(imageQuality.issues.map(issue => issue.message).join(" | "));
+        return { thumbnailImageUrl: `${relativeDir}/thumbnail.svg`, inlineImageUrls: bodyImages.map(image => image.imageUrl),
+          contentImages, imageQuality, imageStatus: "generated", imageGeneratedAt: generatedAt };
+      } catch (fallbackError) {
+        return blockedImageResult(generatedAt, `${message} | ${fallbackError instanceof Error ? fallbackError.message : "EXPLANATORY_IMAGE_FAILED"}`);
+      }
+    }
+    return blockedImageResult(generatedAt, message);
   }
 }
