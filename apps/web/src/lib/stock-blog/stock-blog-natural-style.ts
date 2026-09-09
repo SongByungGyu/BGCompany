@@ -13,6 +13,19 @@ export const STOCK_BLOG_NATURAL_STYLE_GUIDELINES = [
 
 const SOURCE_HEADING = /^(?:함께 확인한 기사|참고한 기사와 자료|기사[·\s]*자료)$/;
 const OLD_SUMMARY = /^\s*(?:#{1,6}\s*)?\d+\.\s*(?:30초\s*요약|.*핵심\s*변수\s*2가지|BG\s*Market\s*Note\s*(?:의\s*)?판단)\s*$/im;
+// These are traceable presentation signals, not a semantic/factual approval.
+// Require a concrete financial subject; "판단합니다. 확인하세요." is not evidence.
+const FINANCIAL_SUBJECT = /지수|코스피|코스닥|나스닥|주가|종목|업종|주식|반도체|대형주|성장주|시장|환율|원달러|달러|엔화|금리|국채|물가|수급|외국인|기관|현물|선물|거래대금|거래량|매수|매도|상승|하락|반등|실적|매출|이익|가이던스|공시|배당|부채|재고|수익률|괴리율|수수료|납입|소득|신청|자격|지원금|적금|대출|연금|ETF|CPI|FOMC/i;
+const OBSERVATION_LANGUAGE = /확인|비교|살펴|살필|눈여겨|지켜|보겠|보셔|보시(?:는|면|고|기)|보는\s*(?:게|것|편)|봐야|봐도|볼\s|체크/;
+const JUDGMENT_LANGUAGE = /판단|해석|봅니다|보겠습니다|보겠|읽지는|보기는\s*(?:어렵|쉽지)|중요(?:합니다|하다|한|해)|관건|핵심|우선|더\s*궁금|낫습니다|실용적|유리|불리|부담|완충|위험|경계|주의|가능성|여지|민감|수혜|불확실|관망/;
+const DATA_SCOPE_DISCLOSURE = /^(?:미국 금리와 경제지표는 확인 가능한 최신 공식 수치만 반영했습니다\.|FRED 거시지표 조회 지연으로|KIS 업종 등락 자료가 일시적으로 비어 있어|※ 확인되지 않은 해외지수·환율 수치와 관련 그래프는 제외하고|본 글은 시장 정보를 정리한 투자 참고 자료)/;
+const NON_CONDITIONAL_MYEON_WORDS = new Set(["반면", "장면", "측면", "표면", "국면", "화면", "정면", "전면", "지면", "도면", "서면"]);
+
+function hasConditionalClause(sentence: string) {
+  if (/다면|으면|경우|조건|때는/.test(sentence)) return true;
+  // 이어지면·오르면·꺾이면 are conditions too; nouns like 화면 are not.
+  return (sentence.match(/[가-힣]+면(?=\s|[,.;!?。]|$)/g) ?? []).some(word => !NON_CONDITIONAL_MYEON_WORDS.has(word));
+}
 
 export function inspectNaturalStockBlogLayout(body: string) {
   const lines = body.replace(/\r\n?/g, "\n").split("\n");
@@ -28,12 +41,14 @@ export function inspectNaturalStockBlogLayout(body: string) {
     return [];
   });
   const paragraphs = content.split(/\n{2,}/).map(p => p.trim())
-    .filter(p => p && p !== "마무리" && !headings.includes(p.replace(/^#{1,6}\s*/, "")));
+    .filter(p => p && p !== "마무리" && !headings.includes(p.replace(/^#{1,6}\s*/, "")) && !DATA_SCOPE_DISCLOSURE.test(p));
   const prose = paragraphs.join("\n\n");
   const numericFacts = [...new Set(prose.match(/\d[\d,.]*(?:\s*(?:%|%p|bp|조\s*원|억\s*원|원|달러|포인트|배|만\s*명|건))/g) ?? [])];
-  const conditionalSentences = prose.split(/(?<=[.!?。])\s+|\n+/).filter(p => /다면|으면|경우|조건|때는/.test(p));
+  const conditionalSentences = prose.split(/(?<=[.!?。])\s+|\n+/).filter(hasConditionalClause);
   const explanationSentences = prose.split(/(?<=[.!?。])\s+|\n+/).filter(p => /때문|이유|뜻|의미|말합니다|계산|차이|달라|다릅/.test(p));
-  const observationSentences = prose.split(/(?<=[.!?。])\s+|\n+/).filter(p => /확인|비교|살펴|보겠|볼\s|판단/.test(p));
+  const sentences = prose.split(/(?<=[.!?。])\s+|\n+/).map(p => p.trim()).filter(Boolean);
+  const observationSentences = sentences.filter(p => FINANCIAL_SUBJECT.test(p) && OBSERVATION_LANGUAGE.test(p));
+  const judgmentSentences = sentences.filter(p => FINANCIAL_SUBJECT.test(p) && JUDGMENT_LANGUAGE.test(p));
   return {
     active: !OLD_SUMMARY.test(content),
     headingCount: headings.length,
@@ -44,6 +59,8 @@ export function inspectNaturalStockBlogLayout(body: string) {
     conditionalSentenceCount: conditionalSentences.length,
     explanationSentenceCount: explanationSentences.length,
     observationSentenceCount: observationSentences.length,
-    hasJudgment: /봅니다|보겠습니다|보겠|읽지는|판단|해석|중요한\s*것|우선|더\s*궁금/.test(prose),
+    hasJudgment: judgmentSentences.length > 0,
+    observationEvidence: observationSentences.slice(0, 3),
+    judgmentEvidence: judgmentSentences.slice(0, 3),
   };
 }

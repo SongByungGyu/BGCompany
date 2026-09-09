@@ -256,7 +256,10 @@ def compact_market_snapshot(input_data: dict[str, Any]) -> dict[str, Any]:
         return {}
     return {
         key: source[key]
-        for key in ("status", "provider", "dataQuality", "marketDate", "freshness", "korea", "us", "macro", "upcoming")
+        for key in (
+            "status", "provider", "dataQuality", "marketDate", "freshness", "korea", "us", "macro", "upcoming",
+            "degradedMode", "degradedProviders", "degradedReason", "missingItems", "disclosures",
+        )
         if key in source
     }
 
@@ -661,7 +664,7 @@ def build_content_writer_prompt(payload: dict[str, Any]) -> str:
 - 본문에는 API 주소, 원문 데이터 URL, JSON 필드명, asOf, 데이터 수집 과정, 내부 분석 과정, "AI 활용 설정", "사진 설명을 입력하세요", "제목과 짧은 설명을 바탕으로 재구성했습니다", 기계적인 "시장 영향" 항목명을 쓰지 않는다.
 - 별도의 "데이터 기준" 블록을 만들지 않고 기준일과 시장 데이터의 의미를 자연스러운 문장에 녹인다.
 - verified market snapshot의 provider가 kis-fred이고 degradedMode가 fred_unavailable이 아니면 첫 핵심 수치 문단의 "한국투자증권·FRED 최근 거래일 자료 기준"은 올바른 독자용 출처 표기다. degradedMode가 fred_unavailable이면 FRED를 빼고 실제 제공된 출처만 쓴다. API, provider, sourceLabel 같은 시스템 표현이나 URL은 공개하지 않는다.
-- degradedMode가 kis_sector_unavailable이면 서버가 넣는 "KIS 업종 등락 자료가 일시적으로 비어 있어 강세·약세 업종 항목은 제외하고, 검증된 지수·수급·환율·거시자료만 사용했습니다." 문장은 독자용 데이터 범위 고지이므로 삭제하거나 내부 과정 표현으로 바꾸지 않는다.
+- degradedMode가 kis_sector_unavailable이거나 degradedProviders에 kis-sector가 있으면 서버가 넣는 "KIS 업종 등락 자료가 일시적으로 비어 있어 강세·약세 업종 항목은 제외하고, 검증된 지수·수급·환율·거시자료만 사용했습니다." 문장은 독자용 데이터 범위 고지이므로 삭제하거나 내부 과정 표현으로 바꾸지 않는다. 이 표시는 검수용 입력이며 본문에 필드명이나 값을 새로 노출하지 않는다.
 - 신뢰할 수 있고 전망과 직접 관련된 뉴스 기사 정확히 3개만 선택해 핵심 내용을 본문에 재서술한다. 기사 제목·설명을 그대로 복사하지 않는다.
 - URL은 마지막 "함께 확인한 기사" 섹션의 기사 3개에만 각각 1개씩 표시한다. 일정·시장 데이터·본문 중간에는 URL을 쓰지 않는다.
 {heading_rule}
@@ -778,11 +781,9 @@ def build_qa_audit_prompt(payload: dict[str, Any]) -> str:
         for item in reference_source[:10]
         if isinstance(item, dict)
     ]
-    market_snapshot = {
-        key: market_snapshot_source[key]
-        for key in ("status", "provider", "dataQuality", "marketDate", "freshness", "korea", "us", "macro", "upcoming")
-        if key in market_snapshot_source
-    }
+    # Do not re-filter the shared allowlist: QA must see the same availability
+    # evidence as the writer and the server's mandatory disclosure validator.
+    market_snapshot = market_snapshot_source
     planner_json = json.dumps(planner_result, ensure_ascii=False, indent=2)
     marketing_json = json.dumps(marketing_result, ensure_ascii=False, indent=2)
     writer_json = json.dumps(writer_result, ensure_ascii=False, indent=2)
@@ -836,7 +837,7 @@ def build_qa_audit_prompt(payload: dict[str, Any]) -> str:
 - API 주소, JSON 필드명, asOf, 데이터 수집·내부 분석 과정, AI 설정, 이미지 설명 문구, 기계적인 "시장 영향" 항목명이 노출되면 필수 수정으로 판정한다.
 - 수급 단위가 불확실하거나 비정상적인 값은 숫자 대신 방향성으로 설명했는지, 확인되지 않은 일정·수치·기사를 만들지 않았는지 검사한다.
 - market snapshot provider가 kis-fred이고 degradedMode가 fred_unavailable이 아니면 "한국투자증권·FRED 최근 거래일 자료 기준"을 정확한 출처 표기로 인정한다. referenceBundle provider가 naver-search라는 이유로 시장 데이터 출처를 네이버만으로 판단하지 않는다. degradedMode가 fred_unavailable일 때만 FRED 표기를 필수 수정으로 본다.
-- market snapshot degradedMode가 kis_sector_unavailable이면 "KIS 업종 등락 자료가 일시적으로 비어 있어 강세·약세 업종 항목은 제외하고, 검증된 지수·수급·환율·거시자료만 사용했습니다."는 서버가 요구하는 독자용 데이터 범위 고지다. 내부 수집·분석 과정 노출로 판정하거나 삭제를 요구하지 않는다.
+- market snapshot degradedMode가 kis_sector_unavailable이거나 degradedProviders에 kis-sector가 있으면 "KIS 업종 등락 자료가 일시적으로 비어 있어 강세·약세 업종 항목은 제외하고, 검증된 지수·수급·환율·거시자료만 사용했습니다."는 서버가 요구하는 독자용 데이터 범위 고지다. 내부 수집·분석 과정 노출로 판정하거나 삭제를 요구하지 않는다. 이 검증 표시가 실제 입력에 없는 다른 사유·수치·고지까지 정당화하지는 않는다.
 - 검증 일정의 날짜와 이벤트가 scheduleValidation으로 대조되었다면 URL을 공개 본문에 쓰라고 요구하지 않는다. 숨은 verifiedSchedule의 URL은 검증 메타데이터일 뿐 공개 문구가 아니다.
 - conclusion이 환율·기업 실적·국채금리·수급 등 글에서 확인된 구체 변수를 다시 연결하고, 지정된 투자 유의 문구가 cta에 정확히 한 번만 있는지 확인한다.
 - 같은 문장 반복, 한 덩어리 장문, 같은 어미의 연속 사용, 기사 제목·설명 복사, 경쟁 글 문장·비유·체크리스트 복제가 없는지 확인한다.

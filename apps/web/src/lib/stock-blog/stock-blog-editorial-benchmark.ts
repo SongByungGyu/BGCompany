@@ -216,13 +216,13 @@ export function assessStockBlogEditorialQuality(input: QualityAssessmentInput): 
   else failedChecks.push("출처·기사 확인 섹션");
 
   if (narrative ? narrative.observationSentenceCount > 0 : input.structure.hasChecklist && input.structure.checklistItemCount === policy.checklistItemCount) readerValue += 5;
-  else failedChecks.push(`실행 가능한 확인 항목 정확히 ${policy.checklistItemCount}개`);
+  else failedChecks.push(narrative ? "독자가 실제로 비교·확인할 자료나 조건" : `실행 가능한 확인 항목 정확히 ${policy.checklistItemCount}개`);
   if (input.structure.imageCount >= policy.totalImageMin && input.structure.imageCount <= policy.totalImageMax) readerValue += 4;
   else failedChecks.push(`대표·본문 이미지 총 ${policy.totalImageMin}~${policy.totalImageMax}장`);
   if (input.structure.hasDisclaimer) readerValue += 4;
   else failedChecks.push("투자 유의문구");
   if (narrative ? narrative.hasJudgment : input.structure.hasBgMarketNoteJudgment) readerValue += 4;
-  else failedChecks.push("BG Market Note 판단");
+  else failedChecks.push(narrative ? "자료에 근거한 해석·판단" : "BG Market Note 판단");
   if (!input.structure.hasForbiddenEngagementCta && input.structure.forbiddenPhraseCount === 0) readerValue += 2;
   else failedChecks.push("AI 상투어·참여 유도 CTA 제거");
   if (input.structure.excessiveBlankLineRunCount === 0) readerValue += 1;

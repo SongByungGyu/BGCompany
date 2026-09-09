@@ -54,6 +54,7 @@ export type StockBlogQualityDiagnostics = {
   bodyLength: number;
   duplicateSentenceCount: number;
   hasBgMarketNoteJudgment: boolean;
+  naturalStyleEvidence?: { observation: string[]; judgment: string[] };
   hasDisclaimer: boolean;
   hasMockPhrase: boolean;
   hasImagePromptLeak: boolean;
@@ -356,6 +357,7 @@ function diagnostics(input: {
     bodyLength: body.length,
     duplicateSentenceCount: countDuplicateSentences(body),
     hasBgMarketNoteJudgment: narrative.active ? narrative.hasJudgment : BG_MARKET_NOTE_JUDGMENT_PATTERN.test(body),
+    naturalStyleEvidence: narrative.active ? { observation: narrative.observationEvidence, judgment: narrative.judgmentEvidence } : undefined,
     hasDisclaimer: DISCLAIMER_PATTERNS.some((pattern) => pattern.test(body)),
     hasMockPhrase: MOCK_TEXT_PATTERNS.some((pattern) => pattern.test(body)) || FORBIDDEN_SOURCE_NAMES.some((name) => body.includes(name)),
     hasImagePromptLeak: IMAGE_PROMPT_PATTERNS.some((pattern) => pattern.test(body)),
@@ -542,7 +544,7 @@ export function evaluateStockBlogPublishQuality(input: {
     if (d.missingReferenceItems.length > 0) reasons.push(`필수 참고자료 부족: ${d.missingReferenceItems.join(", ")}`);
   }
   if (!d.hasMarketDataSignal && requireReal && !referenceOnlyFallback) reasons.push("지수/섹터/수급 등 시장 데이터 신호 부족");
-  if (requireReal && !d.hasBgMarketNoteJudgment) reasons.push("BG Market Note 판단 섹션 필요");
+  if (requireReal && !d.hasBgMarketNoteJudgment) reasons.push(d.naturalStyleEvidence ? "자료에 근거한 해석·판단 필요" : "BG Market Note 판단 섹션 필요");
   if (d.pasteReadyNewlineCount < 15) reasons.push("최종 본문 줄바꿈 15개 이상 필요");
   if (d.doubleNewlineBlockCount < 8) reasons.push("최종 본문 문단 블록 8개 이상 필요");
   if (d.sectionHeadingCount < policy.minimumHeadingCount) reasons.push(`섹션 제목 ${policy.minimumHeadingCount}개 이상 필요`);

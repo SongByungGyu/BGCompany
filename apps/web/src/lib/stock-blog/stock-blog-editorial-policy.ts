@@ -379,7 +379,7 @@ export function inspectStockBlogEditorialContract(
     hasConditionalScenarios,
     beginnerExplanationSentenceCount,
     checklistItemCount,
-    hasBgMarketNoteJudgment,
+    hasBgMarketNoteJudgment: narrative.active ? narrative.hasJudgment : hasBgMarketNoteJudgment,
     forbiddenPhraseMatches,
     hasForbiddenEngagementCta,
     excessiveBlankLineRunCount,
