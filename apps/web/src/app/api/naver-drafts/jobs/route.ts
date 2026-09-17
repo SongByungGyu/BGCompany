@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApiSession } from "@/lib/auth/admin-auth";
 import { createNaverDraftJobFromPipeline, getNaverDraftPolicy, listNaverDraftJobs } from "@/lib/naver-drafts/naver-draft-jobs";
+import { verifyStockBlogSchedulerKey } from "@/lib/stock-blog/stock-blog-scheduler";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAdminApiSession(request);
@@ -12,8 +13,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAdminApiSession(request);
-  if (!auth.ok) return auth.response;
+  const agentKey = request.headers.get("x-bg-agent-key");
+  if (!verifyStockBlogSchedulerKey(agentKey)) {
+    const auth = await requireAdminApiSession(request);
+    if (!auth.ok) return auth.response;
+  }
 
   try {
     const body = await request.json() as {
