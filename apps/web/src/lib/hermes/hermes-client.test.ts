@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildQaAuditHermesPayload, normalizeQaAuditHermesResponse } from "./hermes-client.ts";
+import { buildContentWriterHermesPayload, buildQaAuditHermesPayload, normalizeQaAuditHermesResponse } from "./hermes-client.ts";
+
+test("17시 미국장 전망 Writer는 독립 일정 문단을 만들지 않는다", () => {
+  const payload = buildContentWriterHermesPayload({
+    topic: "오늘 미국장 전망",
+    title: "오늘 미국장 전망",
+    channel: "blog",
+    contentType: "KOREA_MARKET_CLOSE_US_PREVIEW",
+  });
+
+  assert.equal(payload.input.omitStandaloneScheduleSection, true);
+});
 
 test("QA payload leaves source and ending structure to deterministic server checks", () => {
   const payload = buildQaAuditHermesPayload({

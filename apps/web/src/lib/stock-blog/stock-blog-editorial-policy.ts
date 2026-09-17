@@ -1,7 +1,7 @@
 import type { StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 import { inspectNaturalStockBlogLayout, STOCK_BLOG_NATURAL_STYLE_GUIDELINES } from "./stock-blog-natural-style.ts";
 
-export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 8;
+export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 9;
 
 export const STOCK_BLOG_INVESTMENT_DISCLAIMER = "본 글은 시장 정보를 정리한 투자 참고 자료이며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 최종 투자 판단과 책임은 투자자 본인에게 있습니다.";
 
@@ -188,6 +188,9 @@ export function getStockBlogEditorialGuidelines(contentType: StockReferenceBrief
       ? [
         "17시 미국장 전망 글에서는 전일 S&P500·나스닥·다우 흐름을 검증 숫자로 먼저 짧게 복기하고, 오늘 한국장 마감은 미국장과 연결되는 신호를 2~3문장으로만 언급합니다. 본문의 70% 이상은 오늘 밤 미국장 변수·조건·확인 항목에 배정합니다.",
         "제목과 도입의 1차 검색 의도는 오늘 미국장·나스닥 전망입니다. 오늘 코스피 마감 원인이나 외국인 수급을 메인 제목과 결론으로 사용하지 않습니다.",
+        "17시 글의 경제 일정은 marketSnapshot.marketDate와 날짜가 같은 검증 일정만 본문에 사용합니다. 다음 날 이후 일정은 본문과 metaDescription에서 모두 빼고, 당일 일정이 없으면 일정 문단도 만들지 않습니다. metaDescription은 최종 공개 본문에 실제로 남은 내용만 요약합니다.",
+        "핵심 판단은 상세 본문 한 곳과 짧은 마무리 한 곳, 최대 두 곳에서만 다룹니다. 도입에서 같은 결론을 미리 반복하지 않습니다. 지수의 상대 강도를 비교할 때는 단순 동반 상승·하락이 아니라 낙폭 축소·상승 전환·다른 지수와의 낙폭 격차처럼 확인 가능한 조건을 정확히 적습니다.",
+        "일정 문단이 빠져도 최종 공개 본문은 최소 1,800자를 넘겨야 하며 2,100~2,600자를 목표로 합니다. 분량을 채우려고 같은 결론이나 조건을 되풀이하지 말고, 확인된 숫자의 의미와 판단이 달라지는 조건을 보충합니다.",
       ]
       : contentType === "WEEKLY_MARKET_REVIEW"
         ? [

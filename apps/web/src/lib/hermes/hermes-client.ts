@@ -320,7 +320,8 @@ export function buildContentWriterHermesPayload(input: ContentWriterHermesInput)
       ],
       editorialPolicyVersion: BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION,
       publicBodyEndingOrder: ["마무리", "함께 확인한 기사", "투자 유의문구"],
-      omitStandaloneScheduleSection: contentType === "KOREA_DAILY_PREVIEW",
+      omitStandaloneScheduleSection: contentType === "KOREA_DAILY_PREVIEW"
+        || contentType === "KOREA_MARKET_CLOSE_US_PREVIEW",
       prohibitedPhrases: input.prohibitedPhrases,
       blogImagePrompts: input.blogImagePrompts,
       referencePolicy: STOCK_REFERENCE_POLICY,
