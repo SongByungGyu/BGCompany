@@ -199,6 +199,22 @@ test("기사 근거만 쓰는 대체 투자공부 글은 시장 스냅샷 없이
   assert.equal(inspectStockBlogSourceContract(fullDraft, references).ok, true);
 });
 
+test("투자공부 글은 Writer가 고르지 않은 시장 일정을 자동으로 덧붙이지 않는다", () => {
+  const applied = applyVerifiedSchedule(writerResult([
+    { heading: "금리가 주식 가치에 닿는 과정", body: "국채금리와 할인율의 관계를 설명합니다." },
+  ]), snapshot({
+    upcoming: [
+      { date: "2026-07-21", event: "US Employment", market: "US", url: "https://example.com/us" },
+    ],
+  }), { contentType: "INVESTMENT_STUDY" });
+  const sections = applied.result.sections as Array<{ heading: string; body: string }>;
+
+  assert.equal(applied.validation.ok, true);
+  assert.equal(applied.validation.checkedEventCount, 0);
+  assert.equal(sections.some((section) => /일정|캘린더/.test(section.heading)), false);
+  assert.doesNotMatch(String(applied.result.fullDraft), /US Employment/);
+});
+
 test("다음 주 전망은 검증 범위 일정이 비어 있으면 계속 차단한다", () => {
   const applied = applyVerifiedSchedule(writerResult([
     { heading: "4. 다음 주 핵심 일정", body: "확인되지 않은 일정을 쓰지 않습니다." },

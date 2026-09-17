@@ -373,7 +373,10 @@ export function applyVerifiedSchedule(
   const writerScheduleText = scheduleSections.map((section) => stringValue(section.body)).join("\n").toLowerCase();
   const writerSelectedEvents = verifiedEvents.filter((item) => writerScheduleText.includes(item.event.toLowerCase()));
   const eventLimit = options.contentType === "NEXT_WEEK_MARKET_PREVIEW" ? 6 : 2;
-  const events = (writerSelectedEvents.length > 0 ? writerSelectedEvents : verifiedEvents).slice(0, eventLimit);
+  const scheduleIsOptionalAndOmitted = options.contentType === "INVESTMENT_STUDY" && scheduleSections.length === 0;
+  const events = scheduleIsOptionalAndOmitted
+    ? []
+    : (writerSelectedEvents.length > 0 ? writerSelectedEvents : verifiedEvents).slice(0, eventLimit);
   const markets = [...new Set(events.map((item) => item.market).filter((item): item is string => Boolean(item)))];
   const expectedMarkets = options.contentType === "NEXT_WEEK_MARKET_PREVIEW" ? ["KR", "US"] : [];
   const schedule: VerifiedSchedule = {
