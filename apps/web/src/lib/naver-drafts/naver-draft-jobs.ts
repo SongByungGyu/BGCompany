@@ -59,6 +59,7 @@ import {
   isNaverDraftScheduleInvalid,
   resolveNaverDraftSchedule,
 } from "@/lib/naver-drafts/naver-draft-schedule-policy";
+import { shouldRejectDailyBriefingLanguage } from "@/lib/naver-drafts/naver-draft-template-policy";
 
 export type NaverDraftJobStatus =
   | "created"
@@ -282,7 +283,7 @@ function normalizeNaverBody(value: string, template: StockBriefingTemplate) {
 }
 
 function sanitizeByTemplate(value: string, template: StockBriefingTemplate) {
-  if (template !== "WEEKLY_MARKET_REVIEW" && template !== "NEXT_WEEK_MARKET_PREVIEW" && template !== "INVESTMENT_STUDY") return value;
+  if (!shouldRejectDailyBriefingLanguage(template)) return value;
   return WEEKEND_FORBIDDEN_PHRASES.reduce((text, phrase) => text.replaceAll(phrase, "시장 정리"), value);
 }
 
@@ -471,7 +472,7 @@ function buildDraftQualityCheck(
     requireRealReferences: pipeline.runnerMode === "hermes",
   });
   const reasons = [...gate.reasons];
-  if ((template === "WEEKLY_MARKET_REVIEW" || template === "NEXT_WEEK_MARKET_PREVIEW" || template === "INVESTMENT_STUDY") && WEEKEND_FORBIDDEN_PHRASES.some((phrase) => body.includes(phrase))) {
+  if (shouldRejectDailyBriefingLanguage(template) && WEEKEND_FORBIDDEN_PHRASES.some((phrase) => body.includes(phrase))) {
     reasons.push("주말/주간 글에 장전·장마감 등 일일 브리핑 표현 포함");
   }
   const similarity = inspectPublishedPostSimilarity({ title, body, posts: publishedPosts });
