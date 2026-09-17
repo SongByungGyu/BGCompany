@@ -1,7 +1,7 @@
 import type { StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 import { inspectNaturalStockBlogLayout, STOCK_BLOG_NATURAL_STYLE_GUIDELINES } from "./stock-blog-natural-style.ts";
 
-export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 9;
+export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 10;
 
 export const STOCK_BLOG_INVESTMENT_DISCLAIMER = "본 글은 시장 정보를 정리한 투자 참고 자료이며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 최종 투자 판단과 책임은 투자자 본인에게 있습니다.";
 
@@ -183,6 +183,9 @@ export function getStockBlogEditorialGuidelines(contentType: StockReferenceBrief
       "제목과 도입은 오늘 코스피·한국장 전망을 중심으로 쓰며, 전일 한국장 마감 원인을 메인 제목으로 다시 소비하지 않습니다.",
       "투자자별 순매수 금액은 직전 거래일의 확정값으로만 설명하고 반드시 전일 수급이라고 밝힙니다. 오늘 수급 금액을 예측하지 말고, 원·달러 환율 안정과 외국인 선물 흐름 같은 관찰 조건에 따라 전일 흐름의 연속·반전 가능성을 시나리오로 씁니다.",
       "오전 한국장 전망에는 별도의 경제 일정·검증 일정 섹션을 만들지 않습니다. 일정이 핵심 변수라면 검증된 항목 하나만 관련 문단에 짧게 연결하고, 그렇지 않으면 생략합니다.",
+      "오전 글의 핵심 판단은 상세 본문 한 곳과 마무리 한 곳, 최대 두 곳에서만 다룹니다. 도입에는 확인된 장면과 오늘 볼 변수만 적고 결론을 미리 반복하지 않습니다. 환율 안정·외국인 수급처럼 같은 조건을 표현만 바꿔 세 번 이상 되풀이하지 않습니다.",
+      "마무리 뒤에 같은 내용을 다시 요약하는 '한 줄 평'을 덧붙이지 않습니다. '한 줄 평'을 쓰려면 별도 마무리를 만들지 말고 그 문장 자체를 마지막 판단으로 사용하며, 앞 문단과 다른 조건이나 예외를 담습니다.",
+      "기사 목록에는 본문 판단의 근거로 실제 사용한 기사만 남깁니다. 오래된 기사나 직접 쓰지 않은 기사를 개수 채우기 위해 넣지 않습니다.",
     ]
     : contentType === "KOREA_MARKET_CLOSE_US_PREVIEW"
       ? [
@@ -232,6 +235,7 @@ export function getStockBlogEditorialGuidelines(contentType: StockReferenceBrief
     "영문 보고서를 옮긴 듯한 명사 나열과 번역투를 쓰지 않습니다. '금리 상승에 따른 성장주 부담 확대'보다 '금리가 오르면 성장주가 먼저 눌릴 수 있습니다'처럼 주어와 서술어가 분명한 한국어 문장으로 씁니다.",
     "'이는 ○○를 시사합니다·투자자들은 주목해야 합니다·○○로 이어질 것으로 예상됩니다'처럼 AI가 자주 쓰는 결론형 문장을 금지합니다. 확인된 사실 뒤에는 그 숫자가 왜 중요한지를 짧고 직접적으로 설명합니다.",
     "증권사 보고서식 과장, 같은 문장 시작과 어미 반복, '결론부터 말씀드리면·쉽게 말하면·살펴보겠습니다·알아보겠습니다' 같은 AI 상투어를 사용하지 않습니다.",
+    "같은 핵심 판단은 도입·본문·마무리를 통틀어 최대 두 곳에서만 표현합니다. 이미 설명한 판단을 마지막에 '한 줄 평'이나 요약 문장으로 다시 시작하지 않습니다.",
     "문장 중간 강제 줄바꿈, 내용 없는 빈 문단, 연속된 세 줄 이상의 개행, 특수 공백으로 만든 여백을 금지합니다. 문단 사이는 한 번만 구분합니다.",
     ...STOCK_BLOG_NATURAL_STYLE_GUIDELINES,
   ];

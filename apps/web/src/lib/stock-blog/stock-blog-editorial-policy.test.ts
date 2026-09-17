@@ -69,6 +69,8 @@ test("일일·주간 템플릿에 서로 다른 분량과 고정 구조를 제�
   assert.match(getStockBlogEditorialGuidelines("KOREA_DAILY_PREVIEW").join("\n"), /전일 한국장 마감을 2~3문장/);
   assert.match(getStockBlogEditorialGuidelines("KOREA_DAILY_PREVIEW").join("\n"), /직전 거래일의 확정값/);
   assert.match(getStockBlogEditorialGuidelines("KOREA_DAILY_PREVIEW").join("\n"), /오늘 수급 금액을 예측하지 말고/);
+  assert.match(getStockBlogEditorialGuidelines("KOREA_DAILY_PREVIEW").join("\n"), /최대 두 곳에서만 다룹니다/);
+  assert.match(getStockBlogEditorialGuidelines("KOREA_DAILY_PREVIEW").join("\n"), /마무리 뒤에 같은 내용을 다시 요약하는 '한 줄 평'/);
   assert.match(getStockBlogEditorialGuidelines("KOREA_MARKET_CLOSE_US_PREVIEW").join("\n"), /전일 S&P500·나스닥·다우/);
   assert.match(getStockBlogEditorialGuidelines("KOREA_MARKET_CLOSE_US_PREVIEW").join("\n"), /다음 날 이후 일정은 본문과 metaDescription에서 모두 빼고/);
   assert.match(getStockBlogEditorialGuidelines("KOREA_MARKET_CLOSE_US_PREVIEW").join("\n"), /최대 두 곳에서만 다룹니다/);
