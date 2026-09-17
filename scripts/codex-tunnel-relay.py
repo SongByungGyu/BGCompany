@@ -8,7 +8,7 @@ import os
 LISTEN_HOST = os.environ.get("CODEX_RELAY_LISTEN_HOST", "172.16.1.1")
 LISTEN_PORT = int(os.environ.get("CODEX_RELAY_LISTEN_PORT", "43927"))
 TARGET_HOST = os.environ.get("CODEX_RELAY_TARGET_HOST", "127.0.0.1")
-TARGET_PORT = int(os.environ.get("CODEX_RELAY_TARGET_PORT", "43926"))
+TARGET_PORT = int(os.environ.get("CODEX_RELAY_TARGET_PORT", "43928"))
 
 
 async def pipe(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:

@@ -2,7 +2,7 @@ param(
   [string]$AgentRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
   [string]$WslDistribution = "Ubuntu-D",
   [string]$VpsHost = "root@72.60.108.42",
-  [ValidateRange(1024, 65535)][int]$BridgePort = 43926
+  [ValidateRange(1024, 65535)][int]$BridgePort = 43928
 )
 
 $ErrorActionPreference = "Stop"

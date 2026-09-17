@@ -40,7 +40,7 @@ function config(agentId: CodexAgentId) {
   };
   const processTimeoutMs = processTimeouts[agentId];
   return {
-    baseUrl: (process.env.CODEX_CONTENT_BRIDGE_BASE_URL?.trim() || "http://host.docker.internal:43926").replace(/\/$/, ""),
+    baseUrl: (process.env.CODEX_CONTENT_BRIDGE_BASE_URL?.trim() || "http://host.docker.internal:43928").replace(/\/$/, ""),
     apiKey: process.env.CODEX_QA_AGENT_KEY?.trim() || "",
     processTimeoutMs,
     timeoutMs: processTimeoutMs + positiveNumber(process.env.CODEX_CONTENT_CLIENT_TIMEOUT_BUFFER_MS, 30_000),

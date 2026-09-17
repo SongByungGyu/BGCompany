@@ -98,7 +98,7 @@ function bridgeConfig() {
     apiKey,
     command: process.env.CODEX_QA_CODEX_COMMAND?.trim() || "codex",
     host: process.env.CODEX_CONTENT_BRIDGE_HOST?.trim() || "0.0.0.0",
-    port: numberSetting(process.env.CODEX_CONTENT_BRIDGE_PORT, 43_926, 1_024, 65_535),
+    port: numberSetting(process.env.CODEX_CONTENT_BRIDGE_PORT, 43_928, 1_024, 65_535),
     timeouts: {
       "content-planner": numberSetting(process.env.CODEX_CONTENT_PLANNER_TIMEOUT_MS, 300_000, 30_000, 900_000),
       "marketing-manager": numberSetting(process.env.CODEX_CONTENT_MARKETING_TIMEOUT_MS, 300_000, 30_000, 900_000),
