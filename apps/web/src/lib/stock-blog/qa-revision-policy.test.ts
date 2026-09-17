@@ -8,11 +8,12 @@ import {
   STOCK_BLOG_MAX_QA_ATTEMPTS,
 } from "./qa-revision-policy.ts";
 
-test("allows at most three QA attempts and reserves eight Hermes runs", () => {
-  assert.equal(STOCK_BLOG_MAX_QA_ATTEMPTS, 3);
-  assert.equal(STOCK_BLOG_MAX_HERMES_RUNS, 8);
+test("allows at most four QA attempts and reserves ten Hermes runs", () => {
+  assert.equal(STOCK_BLOG_MAX_QA_ATTEMPTS, 4);
+  assert.equal(STOCK_BLOG_MAX_HERMES_RUNS, 10);
   assert.equal(shouldRetryStockBlogQa({ ok: true, qaScore: 88, publishReadiness: "needs_revision", finalRecommendation: "revise" }, 1), true);
-  assert.equal(shouldRetryStockBlogQa({ ok: true, qaScore: 88, publishReadiness: "needs_revision", finalRecommendation: "revise" }, 3), false);
+  assert.equal(shouldRetryStockBlogQa({ ok: true, qaScore: 88, publishReadiness: "needs_revision", finalRecommendation: "revise" }, 3), true);
+  assert.equal(shouldRetryStockBlogQa({ ok: true, qaScore: 88, publishReadiness: "needs_revision", finalRecommendation: "revise" }, 4), false);
 });
 
 test("stops immediately after QA approval", () => {
@@ -38,7 +39,7 @@ test("retries QA-approved output when deterministic editorial contract fails", (
   assert.equal(shouldRetryStockBlogQa(qa, 1, writer), true);
   assert.match(
     buildStockBlogQaRevisionFeedback(qa, writer).requiredRevisions.join("\n"),
-    /편집 정책 v\d+ 필수 수정: 30초 요약/,
+    /편집 정책 v\d+ 필수 수정: 내용에 맞는 소제목 2개 이상 필요/,
   );
 });
 

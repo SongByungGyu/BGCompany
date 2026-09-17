@@ -410,6 +410,13 @@ function isAuthoritativeRunner(mode: StockBlogSchedulerRunnerMode) {
   return mode === "hermes" || mode === "codex";
 }
 
+function reusablePipelineForRunner(
+  pipeline: ContentPipelineRun | null,
+  runnerMode: StockBlogSchedulerRunnerMode,
+) {
+  return pipeline?.runnerMode === runnerMode ? pipeline : null;
+}
+
 export function getStockBlogSchedulerConfig(): StockBlogSchedulerConfig {
   return {
     enabled: parseBoolean(process.env.STOCK_BLOG_SCHEDULER_ENABLED, false),
@@ -1477,7 +1484,10 @@ async function runOneSchedule(
     && previousPayload.status === "running"
     && legacyOperationalRunKey
     && legacyOperationalAttempt) {
-    recoveredLegacyPipeline = await findContentPipelineByOperationalAttempt(legacyOperationalRunKey, legacyOperationalAttempt);
+    recoveredLegacyPipeline = reusablePipelineForRunner(
+      await findContentPipelineByOperationalAttempt(legacyOperationalRunKey, legacyOperationalAttempt),
+      config.runnerMode,
+    );
     if (recoveredLegacyPipeline) {
       retryV2 = createEmptyStockBlogRetryV2State();
       retryV2.attempts.reference_preflight = 1;
@@ -1709,7 +1719,10 @@ async function runOneSchedule(
     && retryV2.lease?.phase === "content_generation"
     && Date.parse(retryV2.lease.expiresAt) <= now.getTime()) {
     for (const runKey of Array.from(new Set([key, legacyOperationalRunKey].filter((value): value is string => Boolean(value))))) {
-      recoveredPipeline = await findContentPipelineByOperationalAttempt(runKey, retryV2.lease.attempt);
+      recoveredPipeline = reusablePipelineForRunner(
+        await findContentPipelineByOperationalAttempt(runKey, retryV2.lease.attempt),
+        config.runnerMode,
+      );
       if (recoveredPipeline) break;
     }
   }
@@ -2175,6 +2188,16 @@ async function runOneSchedule(
       }
     }
     let pipelineInput: ContentPipelineInput | undefined = retryCheckpoint.pipelineInput;
+    if (pipelineInput && pipelineInput.runnerMode !== config.runnerMode) {
+      pipelineInput = { ...pipelineInput, runnerMode: config.runnerMode };
+      retryCheckpoint = {
+        ...retryCheckpoint,
+        pipelineId: undefined,
+        approvalId: undefined,
+        naverDraftJobId: undefined,
+        pipelineInput,
+      };
+    }
     if (!resumablePipelineId && !recoveredPipeline && !pipelineInput) {
       const builtPipelineInput = largeCapScan
         ? await buildLargeCapPipelineInput(definition, config.runnerMode, scheduledAt, config.timezone, largeCapScan)
@@ -2283,7 +2306,10 @@ async function runOneSchedule(
         throw new Error("STOCK_RETRY_V2_GENERATION_CHECKPOINT_MISSING");
       }
       activePhase = { phase: "content_generation", token: generationClaim.token };
-      pipeline = await findContentPipelineByOperationalAttempt(key, generationClaim.attempt)
+      pipeline = reusablePipelineForRunner(
+        await findContentPipelineByOperationalAttempt(key, generationClaim.attempt),
+        config.runnerMode,
+      )
         ?? await startContentPipelineFromTrustedInput({
           ...pipelineInput,
           channel: "blog" as const,

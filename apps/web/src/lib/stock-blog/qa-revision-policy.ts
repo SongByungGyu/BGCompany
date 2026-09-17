@@ -6,7 +6,7 @@ import {
 } from "./stock-blog-editorial-policy.ts";
 import { STOCK_BLOG_EDITORIAL_QUALITY_TARGET } from "./stock-blog-quality-target.ts";
 
-export const STOCK_BLOG_MAX_QA_ATTEMPTS = 3;
+export const STOCK_BLOG_MAX_QA_ATTEMPTS = 4;
 export const STOCK_BLOG_MAX_HERMES_RUNS = 2 + (STOCK_BLOG_MAX_QA_ATTEMPTS * 2);
 export const STOCK_BLOG_MIN_BODY_LENGTH = 1800;
 export const STOCK_BLOG_MAX_BODY_LENGTH = 3200;

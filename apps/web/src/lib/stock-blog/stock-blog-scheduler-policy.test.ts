@@ -240,11 +240,11 @@ test("선행 단계가 완료되지 않은 후행 단계는 seed 상태에서도
 
 test("중단된 실행의 lease가 만료돼도 이미 잡은 시도는 소모되며 상한을 우회하지 않는다", () => {
   const state = createEmptyStockBlogRetryV2State();
-  state.attempts.content_generation = 2;
+  state.attempts.content_generation = STOCK_BLOG_RETRY_PHASE_LIMITS.content_generation;
   state.completed.reference_preflight = true;
   state.lease = {
     phase: "content_generation",
-    attempt: 2,
+    attempt: STOCK_BLOG_RETRY_PHASE_LIMITS.content_generation,
     token: "crashed-worker",
     claimedAt: "2026-09-04T00:00:00.000Z",
     expiresAt: "2026-09-04T00:20:00.000Z",
@@ -257,14 +257,16 @@ test("중단된 실행의 lease가 만료돼도 이미 잡은 시도는 소모�
     token: "replacement-worker",
   });
   assert.equal(decision.action, "blocked");
-  if (decision.action === "blocked") assert.match(decision.reason, /2회/);
+  if (decision.action === "blocked") {
+    assert.match(decision.reason, new RegExp(`${STOCK_BLOG_RETRY_PHASE_LIMITS.content_generation}회`));
+  }
 });
 
 test("인증된 수동 복구는 본문 생성 1회만 추가하고 누적 횟수로 반복 우회를 막는다", () => {
   const state = createEmptyStockBlogRetryV2State();
   state.attempts.reference_preflight = 1;
   state.completed.reference_preflight = true;
-  state.attempts.content_generation = 2;
+  state.attempts.content_generation = STOCK_BLOG_RETRY_PHASE_LIMITS.content_generation;
 
   const automatic = evaluateStockBlogRetryV2Claim({
     state,

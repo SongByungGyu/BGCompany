@@ -55,6 +55,15 @@ test("중단 뒤에는 같은 operational attempt의 완성된 파이프라인�
   assert.match(naverDraftSource, /where: \{ contentPipelineId: detail\.pipeline\.id, status: \{ in: activeStatuses \} \}/);
 });
 
+test("runner 전환 뒤에는 이전 runner 파이프라인을 재사용하지 않는다", async () => {
+  const source = await readFile(sourceUrl, "utf8");
+  const runnerChecks = source.match(/reusablePipelineForRunner\(/g) ?? [];
+  assert.ok(runnerChecks.length >= 4);
+  assert.match(source, /pipeline\?\.runnerMode === runnerMode \? pipeline : null/);
+  assert.match(source, /pipelineInput\.runnerMode !== config\.runnerMode/);
+  assert.match(source, /pipelineInput = \{ \.\.\.pipelineInput, runnerMode: config\.runnerMode \}/);
+});
+
 test("생성 checkpoint는 같은 실행에서 조립으로 이어지고 두 조립 경로 모두 예전 발행키를 인식한다", async () => {
   const source = await readFile(sourceUrl, "utf8");
   const aliasPasses = source.match(/publishKeyAliases: config\.autoPublish && !holidaySearchReplacement && !dataFailureStudyFallback \? publishKeyAliases : \[\]/g) ?? [];
