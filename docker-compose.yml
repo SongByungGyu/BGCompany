@@ -12,6 +12,9 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       HOSTNAME: 0.0.0.0
       PORT: 3000
+      CODEX_QA_AGENT_KEY: ${NAVER_DRAFT_AGENT_KEY:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -33,6 +36,7 @@ services:
       start_period: 20s
 
   hermes-bridge:
+    profiles: ["hermes"]
     build:
       context: .
       dockerfile: services/hermes-bridge/Dockerfile

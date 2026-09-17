@@ -5,6 +5,7 @@ import { createAgentRun, updateAgentRunStatus, type AgentRunStatus } from "@/lib
 import { createEvent } from "@/lib/repositories/events";
 import { serializeApproval, serializeTask, serializeTimeline } from "@/lib/repositories/serializers";
 import { buildContentPlannerHermesPayload, buildContentWriterHermesPayload, buildMarketingReviewHermesPayload, buildQaAuditHermesPayload, runContentPlannerHermes, runContentWriterHermes, runMarketingReviewHermes, runQaAuditHermes } from "@/lib/hermes/hermes-client";
+import { runContentPlannerCodex, runContentWriterCodex, runMarketingReviewCodex, runQaAuditCodex } from "@/lib/codex/codex-content-client";
 import { assertHermesDailyRunAvailable } from "@/lib/hermes/hermes-usage";
 import { collectStockBlogReferences } from "@/lib/stock-blog/references/reference-adapter";
 import { buildBlogImagePrompts } from "@/lib/stock-blog/references/reference-normalizer";
@@ -111,6 +112,25 @@ const stockContentTypes = new Set<StockReferenceBriefingTemplate>([
   "LARGE_CAP_DISCLOSURE_EARNINGS",
 ]);
 const HERMES_PIPELINE_REQUIRED_RUNS = STOCK_BLOG_MAX_HERMES_RUNS;
+
+function isAuthoritativeRunner(mode: ContentPipelineInput["runnerMode"]) {
+  return mode === "hermes" || mode === "codex";
+}
+
+function liveAgentLabel(data: ContentPipelineInput) {
+  return data.runnerMode === "codex" ? "Codex Sol" : "Hermes";
+}
+
+function liveAgentRunMode(data: ContentPipelineInput) {
+  return data.runnerMode === "codex" ? "codex" : "hermes";
+}
+
+function taskModelLabel(mode: string | undefined) {
+  if (mode === "mock") return "Mock Agent";
+  if (mode === "hermes-dry-run") return "Hermes Dry Run";
+  if (mode === "codex" || mode === "codex-skipped") return "Codex Sol 5.6";
+  return "Hermes Agent";
+}
 
 function withCanonicalStockBlogBody(writer: WriterExecution, referenceBundle?: ReferenceBundle): WriterExecution {
   if (writer.agentRunStatus !== "succeeded") return writer;
@@ -658,24 +678,28 @@ function dryRunPlannerExecution(data: ContentPipelineInput): PlannerExecution {
 }
 
 async function hermesPlannerExecution(data: ContentPipelineInput): Promise<PlannerExecution> {
-  const { payload, result } = await runContentPlannerHermes({
+  const agentLabel = liveAgentLabel(data);
+  const request = {
     topic: data.topic,
     title: data.title,
     channel: data.channel,
     language: "ko",
     ...hermesStockContext(data, "content-planner"),
-  });
+  } as const;
+  const { payload, result } = data.runnerMode === "codex"
+    ? await runContentPlannerCodex(request)
+    : await runContentPlannerHermes(request);
   const hermesPayload = toJsonObject(payload);
   const normalizedResult = normalizeResultForMetadata(result);
 
   if (!result.ok) {
-    const outputTitle = `${data.title} · Hermes 실행 실패`;
-    const outputSummary = result.errorMessage ?? "Hermes content-planner 실행에 실패했습니다.";
+    const outputTitle = `${data.title} · ${agentLabel} 실행 실패`;
+    const outputSummary = result.errorMessage ?? `${agentLabel} content-planner 실행에 실패했습니다.`;
     return {
       status: "failed",
       taskStatus: "오류",
       progress: 30,
-      currentStep: "Hermes 실행 실패",
+      currentStep: `${agentLabel} 실행 실패`,
       outputTitle,
       outputSummary,
       recentOutput: outputSummary,
@@ -687,13 +711,13 @@ async function hermesPlannerExecution(data: ContentPipelineInput): Promise<Plann
     };
   }
 
-  const outputTitle = result.title ?? `${data.title} · Hermes 기획안`;
-  const outputSummary = result.summary ?? result.draftDirection ?? "Hermes content-planner가 콘텐츠 기획 결과를 반환했습니다.";
+  const outputTitle = result.title ?? `${data.title} · ${agentLabel} 기획안`;
+  const outputSummary = result.summary ?? result.draftDirection ?? `${agentLabel} content-planner가 콘텐츠 기획 결과를 반환했습니다.`;
   return {
     status: "succeeded",
     taskStatus: "완료",
     progress: 100,
-    currentStep: "Hermes 기획 완료",
+    currentStep: `${agentLabel} 기획 완료`,
     outputTitle,
     outputSummary,
     recentOutput: outputTitle,
@@ -709,7 +733,7 @@ async function hermesPlannerExecution(data: ContentPipelineInput): Promise<Plann
 async function executePlanner(data: ContentPipelineInput): Promise<PlannerExecution> {
   const runnerMode = data.runnerMode ?? "mock";
   if (runnerMode === "hermes-dry-run") return dryRunPlannerExecution(data);
-  if (runnerMode === "hermes") return hermesPlannerExecution(data);
+  if (runnerMode === "hermes" || runnerMode === "codex") return hermesPlannerExecution(data);
   return mockPlannerExecution(data);
 }
 
@@ -796,8 +820,10 @@ function dryRunMarketingExecution(data: ContentPipelineInput, planner: PlannerEx
 }
 
 async function hermesMarketingExecution(data: ContentPipelineInput, planner: PlannerExecution): Promise<MarketingExecution> {
+  const agentLabel = liveAgentLabel(data);
+  const agentRunMode = liveAgentRunMode(data);
   if (planner.agentRunStatus === "failed") {
-    const outputSummary = "content-planner 실패로 marketing-manager Hermes 실행을 건너뛰었습니다.";
+    const outputSummary = `content-planner 실패로 marketing-manager ${agentLabel} 실행을 건너뛰었습니다.`;
     return {
       status: "failed",
       taskStatus: "오류",
@@ -806,12 +832,12 @@ async function hermesMarketingExecution(data: ContentPipelineInput, planner: Pla
       outputTitle: `${data.title} · 마케팅 실행 보류`,
       outputSummary,
       recentOutput: outputSummary,
-      agentRunMode: "hermes-skipped",
+      agentRunMode: `${agentRunMode}-skipped`,
       agentRunStatus: "failed",
       agentRunError: outputSummary,
       result: {
         ok: false,
-        provider: "hermes-bridge",
+        provider: data.runnerMode === "codex" ? "codex" : "hermes-bridge",
         agentId: "marketing-manager",
         errorCode: "MARKETING_SKIPPED_AFTER_PLANNER_FAILURE",
         errorMessage: outputSummary,
@@ -819,29 +845,32 @@ async function hermesMarketingExecution(data: ContentPipelineInput, planner: Pla
     };
   }
 
-  const { payload, result } = await runMarketingReviewHermes({
+  const request = {
     topic: data.topic,
     title: data.title,
     channel: data.channel,
     language: "ko",
     ...hermesStockContext(data, "marketing-manager"),
     plannerResult: planner.result,
-  });
+  } as const;
+  const { payload, result } = data.runnerMode === "codex"
+    ? await runMarketingReviewCodex(request)
+    : await runMarketingReviewHermes(request);
   const hermesPayload = toJsonObject(payload);
   const normalizedResult = normalizeResultForMetadata({ ...(result as NormalizedPipelineResult), referenceBundle: data.referenceBundle, blogImagePrompts: data.blogImagePrompts });
 
   if (!result.ok) {
-    const outputTitle = `${data.title} · Marketing Hermes 실행 실패`;
-    const outputSummary = result.errorMessage ?? "Hermes marketing-manager 실행에 실패했습니다.";
+    const outputTitle = `${data.title} · Marketing ${agentLabel} 실행 실패`;
+    const outputSummary = result.errorMessage ?? `${agentLabel} marketing-manager 실행에 실패했습니다.`;
     return {
       status: "failed",
       taskStatus: "오류",
       progress: 30,
-      currentStep: "Marketing Hermes 실행 실패",
+      currentStep: `Marketing ${agentLabel} 실행 실패`,
       outputTitle,
       outputSummary,
       recentOutput: outputSummary,
-      agentRunMode: "hermes",
+      agentRunMode,
       agentRunStatus: "failed",
       agentRunError: outputSummary,
       hermesPayload,
@@ -851,16 +880,16 @@ async function hermesMarketingExecution(data: ContentPipelineInput, planner: Pla
   }
 
   const outputTitle = result.recommendedTitle ?? `${data.title} · 마케팅 검토안`;
-  const outputSummary = result.reviewSummary ?? result.reason ?? "Hermes marketing-manager가 마케팅 검토 결과를 반환했습니다.";
+  const outputSummary = result.reviewSummary ?? result.reason ?? `${agentLabel} marketing-manager가 마케팅 검토 결과를 반환했습니다.`;
   return {
     status: "succeeded",
     taskStatus: "완료",
     progress: 100,
-    currentStep: "Hermes 마케팅 검토 완료",
+    currentStep: `${agentLabel} 마케팅 검토 완료`,
     outputTitle,
     outputSummary,
     recentOutput: outputTitle,
-    agentRunMode: "hermes",
+    agentRunMode,
     agentRunStatus: "succeeded",
     agentRunSummary: outputSummary,
     hermesJobId: result.hermesJobId,
@@ -873,7 +902,7 @@ async function hermesMarketingExecution(data: ContentPipelineInput, planner: Pla
 async function executeMarketing(data: ContentPipelineInput, planner: PlannerExecution): Promise<MarketingExecution> {
   const runnerMode = data.runnerMode ?? "mock";
   if (runnerMode === "hermes-dry-run") return dryRunMarketingExecution(data, planner);
-  if (runnerMode === "hermes") return hermesMarketingExecution(data, planner);
+  if (runnerMode === "hermes" || runnerMode === "codex") return hermesMarketingExecution(data, planner);
   return mockMarketingExecution(data, planner);
 }
 
@@ -988,8 +1017,10 @@ async function hermesWriterExecution(
   marketing: MarketingExecution,
   revision?: WriterRevisionContext,
 ): Promise<WriterExecution> {
+  const agentLabel = liveAgentLabel(data);
+  const agentRunMode = liveAgentRunMode(data);
   if (planner.agentRunStatus === "failed") {
-    const outputSummary = "content-planner 실패로 content-writer Hermes 실행을 건너뛰었습니다.";
+    const outputSummary = `content-planner 실패로 content-writer ${agentLabel} 실행을 건너뛰었습니다.`;
     return {
       status: "failed",
       taskStatus: "오류",
@@ -998,12 +1029,12 @@ async function hermesWriterExecution(
       outputTitle: `${data.title} · 본문 작성 보류`,
       outputSummary,
       recentOutput: outputSummary,
-      agentRunMode: "hermes-skipped",
+      agentRunMode: `${agentRunMode}-skipped`,
       agentRunStatus: "failed",
       agentRunError: outputSummary,
       result: {
         ok: false,
-        provider: "hermes-bridge",
+        provider: data.runnerMode === "codex" ? "codex" : "hermes-bridge",
         agentId: "content-writer",
         errorCode: "WRITER_SKIPPED_AFTER_PLANNER_FAILURE",
         errorMessage: outputSummary,
@@ -1011,7 +1042,7 @@ async function hermesWriterExecution(
     };
   }
   if (marketing.agentRunStatus === "failed") {
-    const outputSummary = "marketing-manager 실패로 content-writer Hermes 실행을 건너뛰었습니다.";
+    const outputSummary = `marketing-manager 실패로 content-writer ${agentLabel} 실행을 건너뛰었습니다.`;
     return {
       status: "failed",
       taskStatus: "오류",
@@ -1020,12 +1051,12 @@ async function hermesWriterExecution(
       outputTitle: `${data.title} · 본문 작성 보류`,
       outputSummary,
       recentOutput: outputSummary,
-      agentRunMode: "hermes-skipped",
+      agentRunMode: `${agentRunMode}-skipped`,
       agentRunStatus: "failed",
       agentRunError: outputSummary,
       result: {
         ok: false,
-        provider: "hermes-bridge",
+        provider: data.runnerMode === "codex" ? "codex" : "hermes-bridge",
         agentId: "content-writer",
         errorCode: "WRITER_SKIPPED_AFTER_MARKETING_FAILURE",
         errorMessage: outputSummary,
@@ -1033,7 +1064,7 @@ async function hermesWriterExecution(
     };
   }
 
-  const { payload, result } = await runContentWriterHermes({
+  const request = {
     topic: data.topic,
     title: data.title,
     channel: data.channel,
@@ -1046,22 +1077,25 @@ async function hermesWriterExecution(
     revisionAttempt: revision?.revisionAttempt,
     previousWriterResult: revision?.previousWriterResult,
     qaRevisionFeedback: revision?.qaRevisionFeedback,
-  });
+  } as const;
+  const { payload, result } = data.runnerMode === "codex"
+    ? await runContentWriterCodex(request)
+    : await runContentWriterHermes(request);
   const hermesPayload = toJsonObject(payload);
   const normalizedResult = normalizeResultForMetadata(result as NormalizedPipelineResult);
 
   if (!result.ok) {
-    const outputTitle = `${data.title} · Writer Hermes 실행 실패`;
-    const outputSummary = result.errorMessage ?? "Hermes content-writer 실행에 실패했습니다.";
+    const outputTitle = `${data.title} · Writer ${agentLabel} 실행 실패`;
+    const outputSummary = result.errorMessage ?? `${agentLabel} content-writer 실행에 실패했습니다.`;
     return {
       status: "failed",
       taskStatus: "오류",
       progress: 30,
-      currentStep: "Writer Hermes 실행 실패",
+      currentStep: `Writer ${agentLabel} 실행 실패`,
       outputTitle,
       outputSummary,
       recentOutput: outputSummary,
-      agentRunMode: "hermes",
+      agentRunMode,
       agentRunStatus: "failed",
       agentRunError: outputSummary,
       hermesPayload,
@@ -1071,16 +1105,16 @@ async function hermesWriterExecution(
   }
 
   const outputTitle = result.finalTitle ?? `${data.title} · 본문 초안`;
-  const outputSummary = result.metaDescription ?? result.introduction ?? "Hermes content-writer가 게시용 본문 초안을 반환했습니다.";
+  const outputSummary = result.metaDescription ?? result.introduction ?? `${agentLabel} content-writer가 게시용 본문 초안을 반환했습니다.`;
   return {
     status: "succeeded",
     taskStatus: "완료",
     progress: 100,
-    currentStep: "Hermes 본문 초안 작성 완료",
+    currentStep: `${agentLabel} 본문 초안 작성 완료`,
     outputTitle,
     outputSummary,
     recentOutput: outputTitle,
-    agentRunMode: "hermes",
+    agentRunMode,
     agentRunStatus: "succeeded",
     agentRunSummary: outputSummary,
     hermesJobId: result.hermesJobId,
@@ -1098,7 +1132,7 @@ async function executeWriter(
 ): Promise<WriterExecution> {
   const runnerMode = data.runnerMode ?? "mock";
   if (runnerMode === "hermes-dry-run") return dryRunWriterExecution(data, planner, marketing);
-  if (runnerMode === "hermes") return hermesWriterExecution(data, planner, marketing, revision);
+  if (runnerMode === "hermes" || runnerMode === "codex") return hermesWriterExecution(data, planner, marketing, revision);
   return mockWriterExecution(data, planner, marketing);
 }
 
@@ -1191,8 +1225,10 @@ function dryRunQaExecution(data: ContentPipelineInput, planner: PlannerExecution
 }
 
 async function hermesQaExecution(data: ContentPipelineInput, planner: PlannerExecution, marketing: MarketingExecution, writer: WriterExecution): Promise<QaExecution> {
+  const agentLabel = liveAgentLabel(data);
+  const agentRunMode = liveAgentRunMode(data);
   if (planner.agentRunStatus === "failed") {
-    const outputSummary = "qa-auditor Hermes run was skipped because content-planner failed.";
+    const outputSummary = `qa-auditor ${agentLabel} run was skipped because content-planner failed.`;
     return {
       status: "failed",
       taskStatus: "오류",
@@ -1201,12 +1237,12 @@ async function hermesQaExecution(data: ContentPipelineInput, planner: PlannerExe
       outputTitle: `${data.title} · QA run skipped`,
       outputSummary,
       recentOutput: outputSummary,
-      agentRunMode: "hermes-skipped",
+      agentRunMode: `${agentRunMode}-skipped`,
       agentRunStatus: "failed",
       agentRunError: outputSummary,
       result: {
         ok: false,
-        provider: "hermes-bridge",
+        provider: data.runnerMode === "codex" ? "codex" : "hermes-bridge",
         agentId: "qa-auditor",
         errorCode: "QA_SKIPPED_AFTER_PLANNER_FAILURE",
         errorMessage: outputSummary,
@@ -1215,7 +1251,7 @@ async function hermesQaExecution(data: ContentPipelineInput, planner: PlannerExe
   }
 
   if (marketing.agentRunStatus === "failed") {
-    const outputSummary = "qa-auditor Hermes run was skipped because marketing-manager failed.";
+    const outputSummary = `qa-auditor ${agentLabel} run was skipped because marketing-manager failed.`;
     return {
       status: "failed",
       taskStatus: "오류",
@@ -1224,12 +1260,12 @@ async function hermesQaExecution(data: ContentPipelineInput, planner: PlannerExe
       outputTitle: `${data.title} · QA run skipped`,
       outputSummary,
       recentOutput: outputSummary,
-      agentRunMode: "hermes-skipped",
+      agentRunMode: `${agentRunMode}-skipped`,
       agentRunStatus: "failed",
       agentRunError: outputSummary,
       result: {
         ok: false,
-        provider: "hermes-bridge",
+        provider: data.runnerMode === "codex" ? "codex" : "hermes-bridge",
         agentId: "qa-auditor",
         errorCode: "QA_SKIPPED_AFTER_MARKETING_FAILURE",
         errorMessage: outputSummary,
@@ -1238,7 +1274,7 @@ async function hermesQaExecution(data: ContentPipelineInput, planner: PlannerExe
   }
 
   if (writer.agentRunStatus === "failed") {
-    const outputSummary = "qa-auditor Hermes run was skipped because content-writer failed.";
+    const outputSummary = `qa-auditor ${agentLabel} run was skipped because content-writer failed.`;
     return {
       status: "failed",
       taskStatus: "오류",
@@ -1247,12 +1283,12 @@ async function hermesQaExecution(data: ContentPipelineInput, planner: PlannerExe
       outputTitle: `${data.title} · QA run skipped`,
       outputSummary,
       recentOutput: outputSummary,
-      agentRunMode: "hermes-skipped",
+      agentRunMode: `${agentRunMode}-skipped`,
       agentRunStatus: "failed",
       agentRunError: outputSummary,
       result: {
         ok: false,
-        provider: "hermes-bridge",
+        provider: data.runnerMode === "codex" ? "codex" : "hermes-bridge",
         agentId: "qa-auditor",
         errorCode: "QA_SKIPPED_AFTER_WRITER_FAILURE",
         errorMessage: outputSummary,
@@ -1260,7 +1296,7 @@ async function hermesQaExecution(data: ContentPipelineInput, planner: PlannerExe
     };
   }
 
-  const { payload, result } = await runQaAuditHermes({
+  const request = {
     topic: data.topic,
     title: data.title,
     channel: data.channel,
@@ -1271,22 +1307,25 @@ async function hermesQaExecution(data: ContentPipelineInput, planner: PlannerExe
     writerResult: writer.result,
     referenceBundle: data.referenceBundle,
     blogImagePrompts: data.blogImagePrompts,
-  });
+  } as const;
+  const { payload, result } = data.runnerMode === "codex"
+    ? await runQaAuditCodex(request)
+    : await runQaAuditHermes(request);
   const hermesPayload = toJsonObject(payload);
   const normalizedResult = normalizeResultForMetadata(result as NormalizedPipelineResult);
 
   if (!result.ok) {
-    const outputTitle = `${data.title} · QA Hermes run failed`;
-    const outputSummary = result.errorMessage ?? "Hermes qa-auditor run failed.";
+    const outputTitle = `${data.title} · QA ${agentLabel} run failed`;
+    const outputSummary = result.errorMessage ?? `${agentLabel} qa-auditor run failed.`;
     return {
       status: "failed",
       taskStatus: "오류",
       progress: 30,
-      currentStep: "QA Hermes run failed",
+      currentStep: `QA ${agentLabel} run failed`,
       outputTitle,
       outputSummary,
       recentOutput: outputSummary,
-      agentRunMode: "hermes",
+      agentRunMode,
       agentRunStatus: "failed",
       agentRunError: outputSummary,
       hermesPayload,
@@ -1296,16 +1335,16 @@ async function hermesQaExecution(data: ContentPipelineInput, planner: PlannerExe
   }
 
   const outputTitle = `${data.title} · QA review draft`;
-  const outputSummary = result.qaSummary ?? result.reason ?? "Hermes qa-auditor returned a QA review result.";
+  const outputSummary = result.qaSummary ?? result.reason ?? `${agentLabel} qa-auditor returned a QA review result.`;
   return {
     status: "succeeded",
     taskStatus: "완료",
     progress: 100,
-    currentStep: "Hermes QA review completed",
+    currentStep: `${agentLabel} QA review completed`,
     outputTitle,
     outputSummary,
     recentOutput: outputSummary,
-    agentRunMode: "hermes",
+    agentRunMode,
     agentRunStatus: "succeeded",
     agentRunSummary: outputSummary,
     hermesJobId: result.hermesJobId,
@@ -1318,7 +1357,7 @@ async function hermesQaExecution(data: ContentPipelineInput, planner: PlannerExe
 async function executeQa(data: ContentPipelineInput, planner: PlannerExecution, marketing: MarketingExecution, writer: WriterExecution): Promise<QaExecution> {
   const runnerMode = data.runnerMode ?? "mock";
   if (runnerMode === "hermes-dry-run") return dryRunQaExecution(data, planner, marketing, writer);
-  if (runnerMode === "hermes") return hermesQaExecution(data, planner, marketing, writer);
+  if (runnerMode === "hermes" || runnerMode === "codex") return hermesQaExecution(data, planner, marketing, writer);
   return mockQaExecution(data, planner, marketing, writer);
 }
 
@@ -1713,8 +1752,8 @@ export async function regenerateContentPipelineImages(pipelineId: string) {
 async function startValidatedContentPipeline(baseData: ContentPipelineInput): Promise<ContentPipelineRun> {
   const runnerMode = baseData.runnerMode ?? "mock";
   const data = await enrichContentPipelineInput(baseData);
-  const preflightQualityGate = evaluateStockBlogReferences(data.referenceBundle, runnerMode === "hermes");
-  if (runnerMode === "hermes" && !preflightQualityGate.ok) {
+  const preflightQualityGate = evaluateStockBlogReferences(data.referenceBundle, isAuthoritativeRunner(runnerMode));
+  if (isAuthoritativeRunner(runnerMode) && !preflightQualityGate.ok) {
     const error = new Error(`STOCK_REFERENCE_PREFLIGHT_BLOCKED: ${preflightQualityGate.status} · ${preflightQualityGate.reasons.join(" / ")}`);
     Object.assign(error, { code: "STOCK_REFERENCE_PREFLIGHT_BLOCKED", qualityGate: preflightQualityGate });
     await createEvent({
@@ -1750,7 +1789,7 @@ async function startValidatedContentPipeline(baseData: ContentPipelineInput): Pr
   const planner = await executePlanner(data);
   const marketing = await executeMarketing(data, planner);
   let rawWriter = await executeWriter(data, planner, marketing);
-  let scheduleCheckedWriter = runnerMode === "hermes"
+  let scheduleCheckedWriter = isAuthoritativeRunner(runnerMode)
     ? withVerifiedSchedule(rawWriter, data.referenceBundle)
     : rawWriter;
   let writer = withCanonicalStockBlogBody(scheduleCheckedWriter, data.referenceBundle);
@@ -1762,7 +1801,7 @@ async function startValidatedContentPipeline(baseData: ContentPipelineInput): Pr
   const writerQaAttempts: WriterQaAttempt[] = [{ attempt: 1, writer, qa }];
 
   while (
-    runnerMode === "hermes"
+    isAuthoritativeRunner(runnerMode)
     && writer.agentRunStatus === "succeeded"
     && qa.agentRunStatus === "succeeded"
     && shouldRetryStockBlogQa(qa.result, writerQaAttempts.length, writer.result, data.referenceBundle?.contentType)
@@ -1867,13 +1906,13 @@ async function startValidatedContentPipeline(baseData: ContentPipelineInput): Pr
     competitorAnalysis: bundle?.competitorAnalysis,
     appliedGuidelines: data.editorialBenchmarkGuidelines,
   });
-  const qualityGate = runnerMode === "hermes"
+  const qualityGate = isAuthoritativeRunner(runnerMode)
     ? evaluateStockBlogPublishQuality({
       pipeline: { ...provisionalPipeline, editorialBenchmark },
       requireRealReferences: true,
     })
     : preflightQualityGate;
-  const qualityBlocked = runnerMode === "hermes" && !qualityGate.ok;
+  const qualityBlocked = isAuthoritativeRunner(runnerMode) && !qualityGate.ok;
   const metadata = pipelineMetadata({
     ...metadataInput,
     qualityGate,
@@ -1892,11 +1931,11 @@ async function startValidatedContentPipeline(baseData: ContentPipelineInput): Pr
         progress: planner.progress,
         startedAt: now,
         completedAt: planner.agentRunStatus === "succeeded" ? now : null,
-        model: runnerMode === "mock" ? "Mock Agent" : "Hermes Agent",
+        model: taskModelLabel(runnerMode),
         cost: "0.0000",
         currentStep: planner.currentStep,
         recentOutput: planner.recentOutput,
-        nextAction: planner.agentRunStatus === "failed" ? "Hermes 설정/응답 확인" : "마케팅 문구 검토",
+        nextAction: planner.agentRunStatus === "failed" ? `${liveAgentLabel(data)} 설정/응답 확인` : "마케팅 문구 검토",
         error: planner.agentRunError ?? null,
       },
       {
@@ -1909,11 +1948,11 @@ async function startValidatedContentPipeline(baseData: ContentPipelineInput): Pr
         progress: marketing.progress,
         startedAt: now,
         completedAt: marketing.agentRunStatus === "succeeded" ? now : null,
-        model: marketing.agentRunMode === "mock" ? "Mock Agent" : marketing.agentRunMode === "hermes-dry-run" ? "Hermes Dry Run" : "Hermes Agent",
+        model: taskModelLabel(marketing.agentRunMode),
         cost: "0.0000",
         currentStep: marketing.currentStep,
         recentOutput: marketing.recentOutput,
-        nextAction: marketing.agentRunStatus === "failed" ? "Marketing Hermes 설정/응답 확인" : "본문 초안 작성",
+        nextAction: marketing.agentRunStatus === "failed" ? `Marketing ${liveAgentLabel(data)} 설정/응답 확인` : "본문 초안 작성",
         error: marketing.agentRunError ?? null,
       },
       {
@@ -1926,11 +1965,11 @@ async function startValidatedContentPipeline(baseData: ContentPipelineInput): Pr
         progress: writer.progress,
         startedAt: now,
         completedAt: writer.agentRunStatus === "succeeded" ? now : null,
-        model: writer.agentRunMode === "mock" ? "Mock Agent" : writer.agentRunMode === "hermes-dry-run" ? "Hermes Dry Run" : "Hermes Agent",
+        model: taskModelLabel(writer.agentRunMode),
         cost: "0.0000",
         currentStep: writer.currentStep,
         recentOutput: writer.recentOutput,
-        nextAction: writer.agentRunStatus === "failed" ? "Content writer Hermes 설정/응답 확인" : "QA 검토",
+        nextAction: writer.agentRunStatus === "failed" ? `Content writer ${liveAgentLabel(data)} 설정/응답 확인` : "QA 검토",
         error: writer.agentRunError ?? null,
       },
       {
@@ -1943,11 +1982,11 @@ async function startValidatedContentPipeline(baseData: ContentPipelineInput): Pr
         progress: qa.progress,
         startedAt: now,
         completedAt: qa.agentRunStatus === "succeeded" ? now : null,
-        model: qa.agentRunMode === "mock" ? "Mock Agent" : qa.agentRunMode === "hermes-dry-run" ? "Hermes Dry Run" : "Hermes Agent",
+        model: taskModelLabel(qa.agentRunMode),
         cost: "0.0000",
         currentStep: qa.currentStep,
         recentOutput: qa.recentOutput,
-        nextAction: qa.agentRunStatus === "failed" ? "QA Hermes 설정/응답 확인" : "Director 승인",
+        nextAction: qa.agentRunStatus === "failed" ? `QA ${liveAgentLabel(data)} 설정/응답 확인` : "Director 승인",
         error: qa.agentRunError ?? null,
       },
     ],

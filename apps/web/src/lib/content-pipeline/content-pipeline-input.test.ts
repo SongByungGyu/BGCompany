@@ -25,6 +25,17 @@ test("public input cannot inject a scheduler reference bundle", () => {
   assert.equal(result.operationalAttempt, undefined);
 });
 
+test("public input accepts the Codex production runner", () => {
+  const result = assertPublicContentPipelineInput({
+    topic: "시장 전망",
+    title: "오늘 시장 전망",
+    channel: "blog",
+    runnerMode: "codex",
+  });
+
+  assert.equal(result.runnerMode, "codex");
+});
+
 test("trusted scheduler input retains its already-collected reference bundle", () => {
   const referenceBundle = {
     provider: "naver-search",

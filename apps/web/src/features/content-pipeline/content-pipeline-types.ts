@@ -260,7 +260,7 @@ export type ContentPipelineRun = {
   approvalId?: string;
   outputTitle?: string;
   outputSummary?: string;
-  runnerMode?: "mock" | "hermes-dry-run" | "hermes";
+  runnerMode?: "mock" | "hermes-dry-run" | "hermes" | "codex";
   plannerResult?: ContentPlannerResult;
   marketingResult?: MarketingReviewResult;
   writerResult?: ContentWriterResult;
@@ -389,7 +389,7 @@ export type ContentPipelineRequest = {
   topic: string;
   channel: ContentChannel;
   title: string;
-  runnerMode?: "mock" | "hermes-dry-run" | "hermes";
+  runnerMode?: "mock" | "hermes-dry-run" | "hermes" | "codex";
 };
 
 export type ContentPipelineResponse = {

@@ -10,7 +10,7 @@ export type ContentPipelineInput = {
   topic: string;
   channel: ContentChannel;
   title: string;
-  runnerMode?: "mock" | "hermes-dry-run" | "hermes";
+  runnerMode?: "mock" | "hermes-dry-run" | "hermes" | "codex";
   contentType?: StockReferenceBriefingTemplate;
   referenceBundle?: ReferenceBundle;
   blogImagePrompts?: BlogImagePrompt[];
@@ -142,7 +142,7 @@ export function assertPublicContentPipelineInput(input: unknown): ContentPipelin
   if (!topic) throw new Error("topic is required");
   if (!title) throw new Error("title is required");
   if (!channels.has(channel)) throw new Error("channel must be blog/instagram/youtube/newsletter");
-  if (!["mock", "hermes-dry-run", "hermes"].includes(runnerMode)) throw new Error("runnerMode must be mock/hermes-dry-run/hermes");
+  if (!["mock", "hermes-dry-run", "hermes", "codex"].includes(runnerMode)) throw new Error("runnerMode must be mock/hermes-dry-run/hermes/codex");
   return {
     topic,
     title,

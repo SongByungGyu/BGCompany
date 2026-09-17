@@ -73,7 +73,7 @@ import {
   type StockBlogScheduleItem,
 } from "@/lib/stock-blog/stock-blog-workflow";
 
-export type StockBlogSchedulerRunnerMode = "mock" | "hermes-dry-run" | "hermes";
+export type StockBlogSchedulerRunnerMode = "mock" | "hermes-dry-run" | "hermes" | "codex";
 export type StockBlogSchedulerRunStatus =
   | "not_due"
   | "disabled"
@@ -110,7 +110,7 @@ export type StockBlogSchedulerPlanItem = StockBlogScheduleItem & {
   scheduledTimeKst: string;
   objective: string;
   primaryAudience: string;
-  recommendedRunnerMode: "hermes" | "hermes-dry-run" | "mock";
+  recommendedRunnerMode: "codex" | "hermes" | "hermes-dry-run" | "mock";
   scheduleHour: number;
   scheduleMinute: number;
   isDueToday: boolean;
@@ -215,7 +215,7 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     weekdays: [1, 2, 3, 4, 5],
     objective: "06:50부터 자료를 수집하고 07:30 이후 누락된 선택 항목은 제외해 08:20에 당일 한국장 전망을 공개합니다.",
     primaryAudience: "한국 주식 투자자",
-    recommendedRunnerMode: "hermes",
+    recommendedRunnerMode: "codex",
     topic: "전일 한국장 코멘트와 간밤 미국 지수·금리·원달러 환율이 오늘 코스피에 미칠 영향",
     title: (date) => `${date} 오늘 코스피 전망: 간밤 미국장·금리·환율 영향`,
   },
@@ -229,7 +229,7 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     weekdays: [1, 2, 3, 4, 5],
     objective: "전일 미국장을 짧게 복기하고 오늘 한국장의 연결 신호를 참고해 오늘 밤 미국장 전망을 정리합니다.",
     primaryAudience: "한국·미국 주식 병행 투자자",
-    recommendedRunnerMode: "hermes",
+    recommendedRunnerMode: "codex",
     topic: "전일 나스닥·S&P500 흐름과 미국 국채금리·달러·주요 일정으로 보는 오늘 미국장 전망",
     title: (date) => `${date} 오늘 미국장 전망: 나스닥·미국 금리·주요 일정`,
   },
@@ -249,7 +249,7 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     weekdays: [6],
     objective: "07:30부터 이번 주 한국·미국 증시 자료를 수집하고 09:00에 수급·주도 업종과 실제 변동 원인을 복기합니다.",
     primaryAudience: "토요일에 한 주의 시장 흐름을 복기하는 투자자",
-    recommendedRunnerMode: "hermes",
+    recommendedRunnerMode: "codex",
     topic: "이번 주 코스피·나스닥 흐름과 외국인 수급·주도 업종·금리 변동 원인",
     title: (date) => `${date} 이번 주 증시 정리: 코스피·나스닥·주도 업종`,
   },
@@ -265,7 +265,7 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     marketDates: ["2026-09-07"],
     objective: "브로드컴 공식 실적과 AI 반도체 가이던스를 검색형 질문으로 정리해 당일 공개합니다.",
     primaryAudience: "브로드컴 실적과 AI 반도체 흐름을 검색하는 투자자",
-    recommendedRunnerMode: "hermes",
+    recommendedRunnerMode: "codex",
     topic: "브로드컴 공식 실적과 AI 반도체 가이던스의 의미",
     title: (date) => `${date} 브로드컴 실적과 AI 반도체 가이던스`,
     investmentStudyMode: "fixed",
@@ -283,7 +283,7 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     marketDates: ["2026-09-07"],
     objective: "미국 CPI 공식 발표시간과 나스닥 영향 경로를 발표 전에 검색형 질문으로 정리합니다.",
     primaryAudience: "CPI 발표시간과 나스닥 영향을 검색하는 투자자",
-    recommendedRunnerMode: "hermes",
+    recommendedRunnerMode: "codex",
     topic: "미국 CPI 공식 발표시간과 국채금리·나스닥 영향",
     title: (date) => `${date} 미국 CPI 발표시간과 나스닥 영향`,
     investmentStudyMode: "fixed",
@@ -300,7 +300,7 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     weekdays: [2],
     objective: "이번 주 공식 경제 일정이 있으면 발표시간·예상치·시장 영향 질문에 답하고, 일정이 없으면 검색형 실전 질문을 발행합니다.",
     primaryAudience: "경제 일정과 투자 개념을 검색해 바로 확인하려는 투자자",
-    recommendedRunnerMode: "hermes",
+    recommendedRunnerMode: "codex",
     topic: "오늘 코스피·미국장 핵심 이슈와 연결한 주식 투자 공부",
     title: (date) => `${date} 오늘 시장 이슈로 배우는 주식 투자 원리`,
     investmentStudyMode: "fixed",
@@ -317,7 +317,7 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     weekdays: [4],
     objective: "이번 주 경제지표·실적 발표 뒤 실제 시장 반응을 설명하고, 뚜렷한 결과가 없으면 검색형 실전 질문을 발행합니다.",
     primaryAudience: "발표 결과와 주가 반응의 이유를 검색하는 투자자",
-    recommendedRunnerMode: "hermes",
+    recommendedRunnerMode: "codex",
     topic: "오늘 코스피·미국장 핵심 이슈와 연결한 주식 투자 공부",
     title: (date) => `${date} 오늘 시장 이슈로 배우는 주식 투자 원리`,
     investmentStudyMode: "fixed",
@@ -333,7 +333,7 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     weekdays: [1, 3, 5],
     objective: "코스피·코스닥·나스닥 급변이나 물가·금리·반도체·실적 이슈가 확인될 때만 투자 원리 공부 글을 추가 발행합니다.",
     primaryAudience: "뉴스를 투자 원리까지 연결해 이해하려는 투자자",
-    recommendedRunnerMode: "hermes",
+    recommendedRunnerMode: "codex",
     topic: "오늘 코스피·미국장 핵심 이슈로 배우는 투자 원리",
     title: (date) => `${date} 코스피·미국장 이슈로 배우는 투자 원리`,
     investmentStudyMode: "conditional",
@@ -349,7 +349,7 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     weekdays: [0],
     objective: "다음 주 핵심 이슈와 영향 섹터, 경제·실적 일정과 대응 조건을 준비합니다.",
     primaryAudience: "일요일 저녁 다음 주 투자 계획을 세우는 투자자",
-    recommendedRunnerMode: "hermes",
+    recommendedRunnerMode: "codex",
     topic: "다음 주 한국·미국 증시 주요 이슈 3개와 영향 섹터·경제 일정·실적·금리 조건",
     title: (date) => `${date} 다음 주 증시 주요 이슈와 영향 섹터·일정`,
   },
@@ -363,7 +363,7 @@ const STOCK_BLOG_SCHEDULE_DEFINITIONS: StockBlogSchedulerDefinition[] = [
     weekdays: [1, 2, 3, 4, 5],
     objective: "OpenDART·SEC 공식 발표가 확인된 대형주가 있을 때만 공시·실적 분석을 발행합니다.",
     primaryAudience: "대형주 공식 발표와 핵심 숫자를 확인하는 투자자",
-    recommendedRunnerMode: "hermes",
+    recommendedRunnerMode: "codex",
     topic: "오늘 공식 발표가 확인된 대형주 공시·실적 핵심 숫자와 시장 영향",
     title: (date) => `${date} 대형주 공시·실적 발표 핵심 숫자 분석`,
   },
@@ -402,8 +402,12 @@ function getConfiguredTimezone() {
 
 function getConfiguredRunnerMode(): StockBlogSchedulerRunnerMode {
   const value = process.env.STOCK_BLOG_SCHEDULER_RUNNER_MODE?.trim();
-  if (value === "hermes" || value === "hermes-dry-run" || value === "mock") return value;
+  if (value === "hermes" || value === "hermes-dry-run" || value === "mock" || value === "codex") return value;
   return "mock";
+}
+
+function isAuthoritativeRunner(mode: StockBlogSchedulerRunnerMode) {
+  return mode === "hermes" || mode === "codex";
 }
 
 export function getStockBlogSchedulerConfig(): StockBlogSchedulerConfig {
@@ -2204,8 +2208,8 @@ async function runOneSchedule(
       }
       pipelineInput = preparedPipelineInput;
       retryCheckpoint = { ...retryCheckpoint, pipelineInput };
-      const referenceGate = evaluateStockBlogReferences(preparedPipelineInput.referenceBundle, config.runnerMode === "hermes");
-      if (config.runnerMode === "hermes" && !referenceGate.ok) {
+      const referenceGate = evaluateStockBlogReferences(preparedPipelineInput.referenceBundle, isAuthoritativeRunner(config.runnerMode));
+      if (isAuthoritativeRunner(config.runnerMode) && !referenceGate.ok) {
         const error = new Error(`STOCK_REFERENCE_PREFLIGHT_BLOCKED: ${referenceGate.status} · ${referenceGate.reasons.join(" / ")}`);
         Object.assign(error, { code: "STOCK_REFERENCE_PREFLIGHT_BLOCKED", qualityGate: referenceGate });
         throw error;
@@ -2294,11 +2298,11 @@ async function runOneSchedule(
     const notes: string[] = [];
     const qualityGate = evaluateStockBlogPublishQuality({
       pipeline,
-      requireRealReferences: config.runnerMode === "hermes",
+      requireRealReferences: isAuthoritativeRunner(config.runnerMode),
     });
     const qaBlocked = pipeline.qaResult?.publishReadiness === "blocked"
       || pipeline.qaResult?.finalRecommendation === "block";
-    const qualityBlocked = (config.runnerMode === "hermes" && !qualityGate.ok) || qaBlocked;
+    const qualityBlocked = (isAuthoritativeRunner(config.runnerMode) && !qualityGate.ok) || qaBlocked;
     if (qualityBlocked) {
       status = "failed";
       const qualityReason = qaBlocked
