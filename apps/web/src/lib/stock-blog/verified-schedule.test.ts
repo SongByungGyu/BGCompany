@@ -283,7 +283,7 @@ test("Writer가 선택한 검증 일정만 원래 섹션 위치에 공개하고 
   assert.equal(applied.validation.checkedEventCount, 1);
 });
 
-test("일일 마감 글은 원래 번호 제목을 유지하고 가까운 일정만 사용한다", () => {
+test("일일 마감 글은 원래 번호 제목을 유지하고 당일 일정만 사용한다", () => {
   const applied = applyVerifiedSchedule(writerResult([
     { heading: "1. 최근 시장은 어땠을까", body: "최근 시장 흐름입니다." },
     { heading: "4. 금리·환율·핵심 일정", body: "가까운 고용 일정을 확인합니다." },
@@ -291,7 +291,7 @@ test("일일 마감 글은 원래 번호 제목을 유지하고 가까운 일정
   ]), snapshot({
     marketDate: "2026-07-17",
     upcoming: [
-      { date: "2026-07-21", event: "State Employment and Unemployment", market: "US", url: "https://example.com/employment" },
+      { date: "2026-07-17", event: "State Employment and Unemployment", market: "US", url: "https://example.com/employment" },
       { date: "2026-07-22", event: "State Job Openings and Labor Turnover", market: "US", url: "https://example.com/jolts" },
       { date: "2026-07-29", event: "Later Employment Event", market: "US", url: "https://example.com/later" },
     ],
@@ -300,11 +300,28 @@ test("일일 마감 글은 원래 번호 제목을 유지하고 가까운 일정
   const scheduleSection = sections.find((section) => section.heading === "4. 금리·환율·핵심 일정");
 
   assert.ok(scheduleSection);
-  assert.match(scheduleSection.body, /^- 7월 21일 화요일:/m);
+  assert.match(scheduleSection.body, /^- 7월 17일 금요일:/m);
   assert.match(scheduleSection.body, /고용 흐름이 경기 기대/);
-  assert.match(scheduleSection.body, /노동 수요의 둔화 여부/);
-  assert.doesNotMatch(scheduleSection.body, /7월 29일|Later Employment Event/);
-  assert.equal(applied.validation.checkedEventCount, 2);
+  assert.doesNotMatch(scheduleSection.body, /7월 22일|State Job Openings|7월 29일|Later Employment Event/);
+  assert.equal(applied.validation.checkedEventCount, 1);
+});
+
+test("일일 마감 글은 미래 일정만 있으면 일정 문단을 공개하지 않는다", () => {
+  const applied = applyVerifiedSchedule(writerResult([
+    { heading: "1. 최근 시장은 어땠을까", body: "최근 시장 흐름입니다." },
+    { heading: "4. 금리·환율·핵심 일정", body: "다음 주 일정을 확인합니다." },
+  ]), snapshot({
+    marketDate: "2026-09-17",
+    upcoming: [
+      { date: "2026-09-18", event: "State Employment and Unemployment", market: "US", url: "https://example.com/employment" },
+      { date: "2026-09-24", event: "Employee Tenure", market: "US", url: "https://example.com/tenure" },
+    ],
+  }), { contentType: "KOREA_MARKET_CLOSE_US_PREVIEW" });
+  const fullDraft = String(applied.result.fullDraft);
+
+  assert.equal(applied.validation.ok, true);
+  assert.equal(applied.validation.checkedEventCount, 0);
+  assert.doesNotMatch(fullDraft, /State Employment|Employee Tenure|핵심 일정/);
 });
 
 test("일일 글은 검증 일정을 핵심 2개로 제한하고 일반 설명도 이벤트별로 구분한다", () => {

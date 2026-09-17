@@ -135,7 +135,9 @@ function normalizeVerifiedEvents(
     return { events: events.slice(0, MAX_VERIFIED_EVENTS), issues, from: undefined, through: undefined };
   }
   const from = addUtcDays(snapshot.marketDate, contentType === "NEXT_WEEK_MARKET_PREVIEW" ? 1 : 0);
-  const through = addUtcDays(snapshot.marketDate, 7);
+  const through = contentType === "NEXT_WEEK_MARKET_PREVIEW"
+    ? addUtcDays(snapshot.marketDate, 7)
+    : snapshot.marketDate;
   const scopedEvents = from && through
     ? events.filter((item) => item.date >= from && item.date <= through)
     : events;
