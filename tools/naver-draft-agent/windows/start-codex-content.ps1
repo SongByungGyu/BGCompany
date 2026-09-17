@@ -29,6 +29,22 @@ function Write-SupervisorLog {
   "[$(Get-Date -Format o)] $Message" | Add-Content -LiteralPath (Join-Path $logDir "codex-content-supervisor.log") -Encoding utf8
 }
 
+function Resolve-Executable {
+  param(
+    [string]$Name,
+    [string[]]$FallbackPaths
+  )
+  $command = Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($command) { return $command.Source }
+  foreach ($candidatePath in $FallbackPaths) {
+    $candidate = Get-ChildItem -Path $candidatePath -File -ErrorAction SilentlyContinue |
+      Sort-Object LastWriteTime -Descending |
+      Select-Object -First 1
+    if ($candidate) { return $candidate.FullName }
+  }
+  throw "Executable not found: $Name"
+}
+
 function Test-BridgeHealth {
   try {
     $health = Invoke-RestMethod -Uri "http://127.0.0.1:$BridgePort/health" -TimeoutSec 3
@@ -41,9 +57,20 @@ function Test-BridgeHealth {
 $sharedKey = Get-DotEnvValue -Name "CODEX_QA_AGENT_KEY"
 if (-not $sharedKey) { $sharedKey = Get-DotEnvValue -Name "NAVER_DRAFT_AGENT_KEY" }
 if (-not $sharedKey) { throw "CODEX_QA_AGENT_KEY or NAVER_DRAFT_AGENT_KEY is required." }
-$nodeExecutable = (Get-Command node.exe -ErrorAction Stop).Source
-$codexExecutable = (Get-Command codex.exe -ErrorAction Stop).Source
-$wslExecutable = (Get-Command wsl.exe -ErrorAction Stop).Source
+try {
+  $nodeExecutable = Resolve-Executable -Name "node.exe" -FallbackPaths @(
+    (Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe")
+  )
+  $codexExecutable = Resolve-Executable -Name "codex.exe" -FallbackPaths @(
+    (Join-Path $env:LOCALAPPDATA "OpenAI\Codex\bin\*\codex.exe")
+  )
+  $wslExecutable = Resolve-Executable -Name "wsl.exe" -FallbackPaths @(
+    (Join-Path $env:SystemRoot "System32\wsl.exe")
+  )
+} catch {
+  Write-SupervisorLog "Codex supervisor startup failed: $($_.Exception.Message)"
+  throw
+}
 
 $env:CODEX_QA_AGENT_KEY = $sharedKey
 $env:CODEX_QA_MODEL = "gpt-5.6-sol"
