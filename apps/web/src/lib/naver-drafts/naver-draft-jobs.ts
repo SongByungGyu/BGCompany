@@ -526,7 +526,7 @@ function buildDraftFromPipeline(pipeline: ContentPipelineRun, publishedPosts: Pu
     referenceItems: getRealStockReferences(referenceBundle),
     marketSnapshot: snapshot,
   });
-  const baseBody = pipeline.runnerMode === "hermes" && canonicalWriterBody
+  const baseBody = (pipeline.runnerMode === "hermes" || pipeline.runnerMode === "codex") && canonicalWriterBody
     ? canonicalWriterBody
     : buildPlainBody(pipeline, template, title, refs);
   const body = canonicalizeStockBlogBody({
@@ -678,7 +678,9 @@ function automaticPublishBlockReasons(pipeline: ContentPipelineRun, body: string
     requireRealReferences: true,
   });
   const reasons = [...quality.reasons];
-  if (pipeline.runnerMode !== "hermes") reasons.push("Hermes 실운영 결과만 자동 발행 가능");
+  if (pipeline.runnerMode !== "hermes" && pipeline.runnerMode !== "codex") {
+    reasons.push("Hermes 또는 Codex 실운영 결과만 자동 발행 가능");
+  }
   if (!pipeline.plannerResult?.ok) reasons.push("content-planner 실패");
   if (!pipeline.marketingResult?.ok) reasons.push("marketing-manager 실패");
   if (!pipeline.writerResult?.ok) reasons.push("content-writer 실패");

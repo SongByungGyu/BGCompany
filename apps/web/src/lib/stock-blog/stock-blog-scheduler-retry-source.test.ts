@@ -119,6 +119,13 @@ test("이미지 발행 조건은 생성 품질 게이트와 네이버 사전검�
   assert.match(naverDraftSource, /if \(!referenceOnlyEvidence\) \{[\s\S]{0,550}MarketSnapshot fallbackUsed=false 필요/);
 });
 
+test("Codex 실운영 원고는 작성자 본문을 유지한 채 Hermes와 같은 자동 발행 검사를 통과할 수 있다", async () => {
+  const naverDraftSource = await readFile(naverDraftSourceUrl, "utf8");
+  assert.match(naverDraftSource, /pipeline\.runnerMode !== "hermes" && pipeline\.runnerMode !== "codex"/);
+  assert.match(naverDraftSource, /\(pipeline\.runnerMode === "hermes" \|\| pipeline\.runnerMode === "codex"\) && canonicalWriterBody/);
+  assert.doesNotMatch(naverDraftSource, /Hermes 실운영 결과만 자동 발행 가능/);
+});
+
 test("발행 회로가 열려도 파이프라인과 큐 조립은 진행하고 실제 publish 단계에서만 차단한다", async () => {
   const schedulerSource = await readFile(sourceUrl, "utf8");
   const naverDraftSource = await readFile(naverDraftSourceUrl, "utf8");
