@@ -296,6 +296,21 @@ export function buildMarketingReviewHermesPayload(input: MarketingReviewHermesIn
 
 export function buildContentWriterHermesPayload(input: ContentWriterHermesInput): HermesContentWriterPayload {
   const contentType = input.referenceBundle?.contentType ?? input.contentType ?? "KOREA_DAILY_PREVIEW";
+  const bodyStructure = contentType === "KOREA_DAILY_PREVIEW"
+    ? [
+      "도입: 확인된 숫자와 오늘 볼 변수만 2~3문장. 환율·외국인 조건의 결론이나 시나리오는 여기서 쓰지 않음",
+      "전일 한국장 복기: 과거 지수와 확정 수급만 2~3문장. 오늘 장 관찰 조건은 넣지 않음",
+      "간밤 미국장·금리 맥락: 검증된 수치의 의미와 국내장에 연결될 수 있는 범위를 설명하되 환율·외국인 시나리오는 반복하지 않음",
+      "오늘의 상세 시나리오: 환율과 외국인 수급을 함께 다루는 유일한 본문 위치. 관찰 가능한 조건을 한 번만 설명",
+      "마무리: 1~2문장. 상세 시나리오를 길게 재진술하지 않고 판단이 달라지는 조건 하나만 짧게 회수. 별도 한 줄 평 금지",
+      "함께 확인한 기사",
+    ]
+    : [
+      "검증된 장면 또는 검색 질문의 답으로 시작하는 도입",
+      "내용에 맞게 직접 지은 소제목 2~5개: 사실·해석·개념 설명·관찰 조건을 관련 문단에 연결",
+      "앞의 결론을 반복하지 않는 짧은 판단",
+      "함께 확인한 기사",
+    ];
   return {
     agentId: "content-writer",
     role: "content_writer",
@@ -312,12 +327,7 @@ export function buildContentWriterHermesPayload(input: ContentWriterHermesInput)
       marketSnapshot: input.referenceBundle?.marketSnapshot,
       competitorBlogReferences: input.referenceBundle?.competitorBlogReferences,
       editorialBenchmarkGuidelines: [...(input.editorialBenchmarkGuidelines ?? []), ...getStockBlogEditorialGuidelines(contentType)],
-      bodyStructure: [
-        "검증된 장면 또는 검색 질문의 답으로 시작하는 도입",
-        "내용에 맞게 직접 지은 소제목 2~5개: 사실·해석·개념 설명·관찰 조건을 관련 문단에 연결",
-        "앞의 결론을 반복하지 않는 짧은 판단",
-        "함께 확인한 기사",
-      ],
+      bodyStructure,
       editorialPolicyVersion: BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION,
       publicBodyEndingOrder: ["마무리", "함께 확인한 기사", "투자 유의문구"],
       omitStandaloneScheduleSection: contentType === "KOREA_DAILY_PREVIEW"

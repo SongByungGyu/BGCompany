@@ -1,7 +1,7 @@
 import type { StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 import { inspectNaturalStockBlogLayout, STOCK_BLOG_NATURAL_STYLE_GUIDELINES } from "./stock-blog-natural-style.ts";
 
-export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 11;
+export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 12;
 
 export const STOCK_BLOG_INVESTMENT_DISCLAIMER = "본 글은 시장 정보를 정리한 투자 참고 자료이며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 최종 투자 판단과 책임은 투자자 본인에게 있습니다.";
 
@@ -187,6 +187,8 @@ export function getStockBlogEditorialGuidelines(contentType: StockReferenceBrief
       "마무리 뒤에 같은 내용을 다시 요약하는 '한 줄 평'을 덧붙이지 않습니다. '한 줄 평'을 쓰려면 별도 마무리를 만들지 말고 그 문장 자체를 마지막 판단으로 사용하며, 앞 문단과 다른 조건이나 예외를 담습니다.",
       "기사 목록에는 본문 판단의 근거로 실제 사용한 기사만 남깁니다. 오래된 기사나 직접 쓰지 않은 기사를 개수 채우기 위해 넣지 않습니다.",
       "환율 안정·외국인 매도 감소·선물 흐름을 코스피 상승의 필수조건이나 단독 원인으로 쓰지 않습니다. '~해야 오릅니다·함께 움직여야 합니다·줄어야 힘이 붙습니다'처럼 단정하지 말고, 해당 변화가 나타나면 미국장 상승이 국내 지수에 반영될 여지가 커지거나 수급 부담이 줄 수 있다는 가능성 범위로 제한합니다.",
+      "전일 한국장 복기에서는 과거 지수와 확정 수급만 2~3문장으로 적고 오늘의 환율·외국인 시나리오를 미리 쓰지 않습니다. 환율과 외국인을 함께 언급하는 상세 시나리오는 전용 소제목 한 곳에만 두고, 같은 소제목 안에서도 관찰 문단을 표현만 바꿔 반복하지 않습니다.",
+      "'우호적인 분위기가 들어오다·장 시작 전에 놓인 재료·편이 맞습니다·편이 좋습니다·자연스럽습니다'처럼 번역투나 조언형 어미를 피하고 확인된 장면을 주어가 분명한 한국어로 직접 적습니다.",
     ]
     : contentType === "KOREA_MARKET_CLOSE_US_PREVIEW"
       ? [
