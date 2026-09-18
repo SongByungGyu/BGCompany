@@ -1,7 +1,7 @@
 import type { StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 import { inspectNaturalStockBlogLayout, STOCK_BLOG_NATURAL_STYLE_GUIDELINES } from "./stock-blog-natural-style.ts";
 
-export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 13;
+export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 14;
 
 export const STOCK_BLOG_INVESTMENT_DISCLAIMER = "본 글은 시장 정보를 정리한 투자 참고 자료이며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 최종 투자 판단과 책임은 투자자 본인에게 있습니다.";
 
@@ -190,6 +190,7 @@ export function getStockBlogEditorialGuidelines(contentType: StockReferenceBrief
       "전일 한국장 복기에서는 과거 지수와 확정 수급만 2~3문장으로 적고 오늘의 환율·외국인 시나리오를 미리 쓰지 않습니다. 환율과 외국인을 함께 언급하는 상세 시나리오는 전용 소제목 한 곳에만 두고, 같은 소제목 안에서도 관찰 문단을 표현만 바꿔 반복하지 않습니다.",
       "간밤 미국장·금리 문단에서는 국내장의 시초가·개장 직후·오전·장중 유지력·상승분 유지·첫 반응을 쓰지 않습니다. 미국 지수와 금리가 가격 부담에 주는 의미까지만 설명하고, 국내장 관찰 시나리오는 전용 소제목으로 넘깁니다.",
       "상세 시나리오 뒤에 '개장 직후에는·그 뒤에는·높게 출발하는 것과'로 시작하는 별도 확인 문단을 덧붙이지 않습니다. 마무리에서도 시초가·개장 초·오전 상승분·첫 반응·장중 유지력을 다시 쓰지 말고, 코스피와 코스닥처럼 다른 검증 숫자의 차이를 이용해 2문장으로 자연스럽게 끝냅니다.",
+      "도입과 미국장 문단에서는 '낙관과 경계 한쪽으로 정하기 어렵다·기대와 부담이 동시에 있다' 같은 양비론 요약을 쓰지 않습니다. 확인된 수치와 그 수치의 구체적인 의미만 남기고 최종 판단은 상세 시나리오에서 한 번만 설명합니다.",
       "시장 수급 숫자를 썼다면 같은 문단에서 '한국투자증권 Open API 코스피 투자자별 매매동향 기준'처럼 자료 이름을 바로 연결합니다. 국내외 지수·환율의 출처만 적고 외국인 순매도 수치의 출처를 빠뜨리지 않습니다.",
       "'우호적인 분위기가 들어오다·장 시작 전에 놓인 재료·편이 맞습니다·편이 좋습니다·자연스럽습니다'처럼 번역투나 조언형 어미를 피하고 확인된 장면을 주어가 분명한 한국어로 직접 적습니다.",
     ]

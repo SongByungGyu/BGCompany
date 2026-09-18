@@ -16,6 +16,7 @@ import {
 } from "@/lib/stock-blog/canonical-stock-blog-body";
 import { generateStockBlogImages, type GeneratedStockBlogImages } from "@/lib/stock-blog/stock-blog-image-generator";
 import { applyVerifiedSchedule, type VerifiedSchedule, type VerifiedScheduleValidation } from "@/lib/stock-blog/verified-schedule";
+import { polishKoreaDailyPreviewWriterResult } from "@/lib/stock-blog/morning-preview-polish";
 import type { HermesRunTelemetry, NormalizedHermesRunResult } from "@/lib/hermes/hermes-types";
 import type { BlogImagePrompt, ReferenceBundle, StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 import type { StockBlogContentImage, StockBlogImageQualityAudit } from "@/lib/stock-blog/stock-blog-image-types";
@@ -172,7 +173,10 @@ function withDeterministicStructuralQaAudit(
 
 function withVerifiedSchedule(writer: WriterExecution, referenceBundle?: ReferenceBundle): WriterExecution {
   if (writer.agentRunStatus !== "succeeded") return writer;
-  const applied = applyVerifiedSchedule(writer.result, referenceBundle?.marketSnapshot, {
+  const writerResult = referenceBundle?.contentType === "KOREA_DAILY_PREVIEW"
+    ? polishKoreaDailyPreviewWriterResult(writer.result)
+    : writer.result;
+  const applied = applyVerifiedSchedule(writerResult, referenceBundle?.marketSnapshot, {
     contentType: referenceBundle?.contentType,
     references: getRealStockReferences(referenceBundle),
     allowMissingMarketSnapshot: referenceBundle?.evidencePolicy === "reference-only-study-fallback",
