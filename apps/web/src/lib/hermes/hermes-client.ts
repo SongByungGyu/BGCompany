@@ -299,10 +299,10 @@ export function buildContentWriterHermesPayload(input: ContentWriterHermesInput)
   const bodyStructure = contentType === "KOREA_DAILY_PREVIEW"
     ? [
       "도입: 확인된 숫자와 오늘 볼 변수만 2~3문장. 환율·외국인 조건의 결론이나 시나리오는 여기서 쓰지 않음",
-      "전일 한국장 복기: 과거 지수와 확정 수급만 2~3문장. 오늘 장 관찰 조건은 넣지 않음",
-      "간밤 미국장·금리 맥락: 검증된 수치의 의미와 국내장에 연결될 수 있는 범위를 설명하되 환율·외국인 시나리오는 반복하지 않음",
-      "오늘의 상세 시나리오: 환율과 외국인 수급을 함께 다루는 유일한 본문 위치. 관찰 가능한 조건을 한 번만 설명",
-      "마무리: 1~2문장. 상세 시나리오를 길게 재진술하지 않고 판단이 달라지는 조건 하나만 짧게 회수. 별도 한 줄 평 금지",
+      "전일 한국장 복기: 과거 지수와 확정 수급만 2~3문장. 수급 숫자 바로 옆에 '한국투자증권 Open API 코스피 투자자별 매매동향 기준'이라고 출처를 연결하고 오늘 장 관찰 조건은 넣지 않음",
+      "간밤 미국장·금리 맥락: 검증된 미국 지수와 금리가 가격 부담에 주는 의미까지만 설명. 국내장 시초가·개장 직후·오전·장중 유지력·상승분 유지·첫 반응과 환율·외국인 시나리오는 절대 쓰지 않음",
+      "오늘의 상세 시나리오: 환율과 외국인 수급을 함께 다루는 유일한 본문 위치. 정의 1문단과 상승·부담 조건 1문단으로 끝내며, 뒤에 개장 직후 확인·시초가 유지 문단을 추가하지 않음",
+      "마무리: 정확히 2문장. 환율·외국인·시초가·개장 초·오전·장중 유지·첫 반응을 재사용하지 말고 코스피와 코스닥처럼 다른 검증 숫자의 차이로 자연스럽게 끝냄. 별도 한 줄 평 금지",
       "함께 확인한 기사",
     ]
     : [
@@ -387,7 +387,7 @@ export function buildQaAuditHermesPayload(input: QaAuditHermesInput): HermesQaAu
           "body_structure_counts",
         ],
         doNotAddServerStructuralChecksToRequiredRevisions: true,
-        instruction: "출처 개수·기사 제목과 URL 순서·고지문과 투자 유의문구 위치·본문 구조 개수는 서버가 결정론적으로 검사합니다. 이를 requiredRevisions에 넣지 말고, 사실 오류·근거 없는 수치·과장 또는 투자 권유 오해·부자연스러운 한국어만 필수 수정으로 평가하세요.",
+        instruction: "출처 개수·기사 제목과 URL 순서·고지문과 투자 유의문구 위치·본문 구조 개수는 서버가 결정론적으로 검사합니다. '함께 확인한 기사'는 서버가 고정한 배경 참고자료 목록이므로 목록의 모든 기사를 본문에서 직접 언급하라고 요구하거나, 본문에서 직접 언급하지 않았다는 이유로 삭제를 requiredRevisions에 넣지 마세요. 사실 오류·근거 없는 수치·과장 또는 투자 권유 오해·부자연스러운 한국어만 필수 수정으로 평가하세요.",
         naturalStyleReview: "의미 반복, 문단 리듬, 번역투, 상투적인 구성, 판단의 구체성을 각각 실제 문장 근거로 검토하세요. 같은 결론이 세 군데 이상 반복되거나 근거 없는 개인 경험이 있으면 필수 수정으로 돌리세요. 내용형 소제목·서술형 조건을 과거의 30초 요약·변수 1/2·번호형 판단으로 되돌리라고 요구하지 마세요. AI 작성 확률이나 객관적인 AI 탐지 점수를 지어내지 마세요.",
       },
       editorialBenchmarkGuidelines: [...(input.editorialBenchmarkGuidelines ?? []), ...getStockBlogEditorialGuidelines(input.referenceBundle?.contentType ?? "KOREA_DAILY_PREVIEW")],

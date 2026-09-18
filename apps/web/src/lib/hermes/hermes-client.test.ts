@@ -13,6 +13,19 @@ test("17시 미국장 전망 Writer는 독립 일정 문단을 만들지 않는�
   assert.equal(payload.input.omitStandaloneScheduleSection, true);
 });
 
+test("아침 Writer는 국내장 관찰 시나리오를 한 문단에만 둔다", () => {
+  const payload = buildContentWriterHermesPayload({
+    topic: "오늘 코스피 전망",
+    title: "오늘 코스피 전망",
+    channel: "blog",
+    contentType: "KOREA_DAILY_PREVIEW",
+  });
+
+  assert.match(payload.input.bodyStructure?.join("\n") ?? "", /시초가·개장 직후·오전·장중 유지력.*절대 쓰지 않음/);
+  assert.match(payload.input.bodyStructure?.join("\n") ?? "", /한국투자증권 Open API 코스피 투자자별 매매동향 기준/);
+  assert.match(payload.input.bodyStructure?.join("\n") ?? "", /마무리: 정확히 2문장/);
+});
+
 test("QA payload leaves source and ending structure to deterministic server checks", () => {
   const payload = buildQaAuditHermesPayload({
     topic: "오늘 시장",
@@ -44,6 +57,7 @@ test("QA payload leaves source and ending structure to deterministic server chec
     "body_structure_counts",
   ]);
   assert.match(String(responsibility.instruction), /requiredRevisions에 넣지 말고/);
+  assert.match(String(responsibility.instruction), /목록의 모든 기사를 본문에서 직접 언급하라고 요구하거나/);
 });
 
 test("QA 응답 정규화는 명시적인 빈 requiredRevisions 배열을 보존한다", () => {
