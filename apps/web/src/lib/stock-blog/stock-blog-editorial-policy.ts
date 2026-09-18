@@ -1,7 +1,7 @@
 import type { StockReferenceBriefingTemplate } from "@/lib/stock-blog/references/reference-types";
 import { inspectNaturalStockBlogLayout, STOCK_BLOG_NATURAL_STYLE_GUIDELINES } from "./stock-blog-natural-style.ts";
 
-export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 10;
+export const BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION = 11;
 
 export const STOCK_BLOG_INVESTMENT_DISCLAIMER = "본 글은 시장 정보를 정리한 투자 참고 자료이며, 특정 종목의 매수 또는 매도를 권유하지 않습니다. 최종 투자 판단과 책임은 투자자 본인에게 있습니다.";
 
@@ -186,6 +186,7 @@ export function getStockBlogEditorialGuidelines(contentType: StockReferenceBrief
       "오전 글의 핵심 판단은 상세 본문 한 곳과 마무리 한 곳, 최대 두 곳에서만 다룹니다. 도입에는 확인된 장면과 오늘 볼 변수만 적고 결론을 미리 반복하지 않습니다. 환율 안정·외국인 수급처럼 같은 조건을 표현만 바꿔 세 번 이상 되풀이하지 않습니다.",
       "마무리 뒤에 같은 내용을 다시 요약하는 '한 줄 평'을 덧붙이지 않습니다. '한 줄 평'을 쓰려면 별도 마무리를 만들지 말고 그 문장 자체를 마지막 판단으로 사용하며, 앞 문단과 다른 조건이나 예외를 담습니다.",
       "기사 목록에는 본문 판단의 근거로 실제 사용한 기사만 남깁니다. 오래된 기사나 직접 쓰지 않은 기사를 개수 채우기 위해 넣지 않습니다.",
+      "환율 안정·외국인 매도 감소·선물 흐름을 코스피 상승의 필수조건이나 단독 원인으로 쓰지 않습니다. '~해야 오릅니다·함께 움직여야 합니다·줄어야 힘이 붙습니다'처럼 단정하지 말고, 해당 변화가 나타나면 미국장 상승이 국내 지수에 반영될 여지가 커지거나 수급 부담이 줄 수 있다는 가능성 범위로 제한합니다.",
     ]
     : contentType === "KOREA_MARKET_CLOSE_US_PREVIEW"
       ? [
