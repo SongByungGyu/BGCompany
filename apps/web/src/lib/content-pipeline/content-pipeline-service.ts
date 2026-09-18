@@ -39,6 +39,7 @@ import {
 import {
   buildStockBlogQaRevisionFeedback,
   selectLatestSuccessfulWriterQaAttempt,
+  selectStockBlogRevisionBaseAttempt,
   shouldRetryStockBlogQa,
   STOCK_BLOG_MAX_HERMES_RUNS,
   STOCK_BLOG_MAX_QA_ATTEMPTS,
@@ -1811,10 +1812,18 @@ async function startValidatedContentPipeline(baseData: ContentPipelineInput): Pr
     && shouldRetryStockBlogQa(qa.result, writerQaAttempts.length, writer.result, data.referenceBundle?.contentType)
   ) {
     const revisionAttempt = writerQaAttempts.length + 1;
+    const revisionBase = selectStockBlogRevisionBaseAttempt(
+      writerQaAttempts,
+      data.referenceBundle?.contentType,
+    ) ?? writerQaAttempts.at(-1)!;
     rawWriter = await executeWriter(data, planner, marketing, {
       revisionAttempt,
-      previousWriterResult: writer.result,
-      qaRevisionFeedback: buildStockBlogQaRevisionFeedback(qa.result, writer.result, data.referenceBundle?.contentType),
+      previousWriterResult: revisionBase.writer.result,
+      qaRevisionFeedback: buildStockBlogQaRevisionFeedback(
+        revisionBase.qa.result,
+        revisionBase.writer.result,
+        data.referenceBundle?.contentType,
+      ),
     });
     scheduleCheckedWriter = withVerifiedSchedule(rawWriter, data.referenceBundle);
     writer = withCanonicalStockBlogBody(scheduleCheckedWriter, data.referenceBundle);

@@ -15,6 +15,12 @@ type QaRevisionResult = Record<string, unknown>;
 
 type AgentRunStatusResult = {
   agentRunStatus: string;
+  result?: QaRevisionResult;
+};
+
+type WriterQaAttemptResult = {
+  writer: AgentRunStatusResult;
+  qa: AgentRunStatusResult;
 };
 
 export function selectLatestSuccessfulWriterQaAttempt<T extends {
@@ -64,6 +70,51 @@ function editorialContractRevisions(
     .map((violation) => `편집 정책 v${BG_MARKET_NOTE_EDITORIAL_POLICY_VERSION} 필수 수정: ${violation}`);
 }
 
+function revisionIssueCount(
+  attempt: WriterQaAttemptResult,
+  contentType: StockReferenceBriefingTemplate,
+) {
+  if (attempt.writer.agentRunStatus !== "succeeded" || attempt.qa.agentRunStatus !== "succeeded") {
+    return Number.POSITIVE_INFINITY;
+  }
+  const writerResult = attempt.writer.result;
+  const qaResult = attempt.qa.result;
+  if (!writerResult || !qaResult) return Number.POSITIVE_INFINITY;
+  const deterministicIssues = [
+    draftLengthRevision(writerResult, contentType),
+    ...editorialContractRevisions(writerResult, contentType),
+  ].filter(Boolean).length;
+  return deterministicIssues + stringList(qaResult.requiredRevisions).length;
+}
+
+/**
+ * Revisions must continue from the cleanest verified draft instead of blindly
+ * rewriting the latest one. A later model pass can fix one item while
+ * reintroducing facts or repetitions that an earlier pass had already fixed.
+ */
+export function selectStockBlogRevisionBaseAttempt<T extends WriterQaAttemptResult>(
+  attempts: readonly T[],
+  contentType: StockReferenceBriefingTemplate = "KOREA_DAILY_PREVIEW",
+): T | undefined {
+  let selected: T | undefined;
+  let selectedIssueCount = Number.POSITIVE_INFINITY;
+  let selectedQaScore = -1;
+
+  for (const attempt of attempts) {
+    const issueCount = revisionIssueCount(attempt, contentType);
+    if (!Number.isFinite(issueCount)) continue;
+    const qaScore = typeof attempt.qa.result?.qaScore === "number"
+      ? attempt.qa.result.qaScore
+      : 0;
+    if (issueCount < selectedIssueCount || (issueCount === selectedIssueCount && qaScore >= selectedQaScore)) {
+      selected = attempt;
+      selectedIssueCount = issueCount;
+      selectedQaScore = qaScore;
+    }
+  }
+  return selected;
+}
+
 export function shouldRetryStockBlogQa(
   result: QaRevisionResult,
   completedAttempts: number,
@@ -97,13 +148,17 @@ export function buildStockBlogQaRevisionFeedback(
     if (!requiredRevisions.includes(revision)) requiredRevisions.push(revision);
   }
   return {
+    revisionMode: "surgical",
+    revisionScope: "qaRevisionFeedback.requiredRevisions only",
+    preserveVerifiedContent: true,
+    ignoreOptionalSuggestionsDuringRevision: true,
     qaSummary: typeof result.qaSummary === "string" ? result.qaSummary : undefined,
     factCheckNotes: stringList(result.factCheckNotes),
     qualityNotes: stringList(result.qualityNotes),
     riskNotes: stringList(result.riskNotes),
     typoAndStyleNotes: stringList(result.typoAndStyleNotes),
     requiredRevisions,
-    optionalSuggestions: stringList(result.optionalSuggestions),
+    optionalSuggestions: [],
     publishReadiness: typeof result.publishReadiness === "string" ? result.publishReadiness : undefined,
     qaScore: typeof result.qaScore === "number" ? result.qaScore : undefined,
     finalRecommendation: typeof result.finalRecommendation === "string" ? result.finalRecommendation : undefined,

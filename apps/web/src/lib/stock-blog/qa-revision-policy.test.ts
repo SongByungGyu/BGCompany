@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildStockBlogQaRevisionFeedback,
   selectLatestSuccessfulWriterQaAttempt,
+  selectStockBlogRevisionBaseAttempt,
   shouldRetryStockBlogQa,
   STOCK_BLOG_MAX_HERMES_RUNS,
   STOCK_BLOG_MAX_QA_ATTEMPTS,
@@ -68,6 +69,10 @@ test("passes only actionable QA fields back to the writer", () => {
     typoAndStyleNotes: ["어색한 문장 수정"],
     raw: { prompt: "do not forward" },
   }), {
+    revisionMode: "surgical",
+    revisionScope: "qaRevisionFeedback.requiredRevisions only",
+    preserveVerifiedContent: true,
+    ignoreOptionalSuggestionsDuringRevision: true,
     qaSummary: undefined,
     factCheckNotes: [],
     qualityNotes: [],
@@ -80,6 +85,28 @@ test("passes only actionable QA fields back to the writer", () => {
     finalRecommendation: undefined,
     reason: undefined,
   });
+});
+
+test("revises from the cleanest verified attempt instead of a regressed latest draft", () => {
+  const selected = selectStockBlogRevisionBaseAttempt([
+    {
+      attempt: 1,
+      writer: { agentRunStatus: "succeeded", result: { fullDraft: "가".repeat(2200) } },
+      qa: { agentRunStatus: "succeeded", result: { qaScore: 92, requiredRevisions: ["중복 문장 정리", "날짜 분리"] } },
+    },
+    {
+      attempt: 2,
+      writer: { agentRunStatus: "succeeded", result: { fullDraft: "나".repeat(2200) } },
+      qa: { agentRunStatus: "succeeded", result: { qaScore: 94, requiredRevisions: ["중복 문장 정리"] } },
+    },
+    {
+      attempt: 3,
+      writer: { agentRunStatus: "succeeded", result: { fullDraft: "다".repeat(2200) } },
+      qa: { agentRunStatus: "succeeded", result: { qaScore: 90, requiredRevisions: ["중복 문장 정리", "인과 완화"] } },
+    },
+  ]);
+
+  assert.equal(selected?.attempt, 2);
 });
 
 test("tells the writer the exact reduction needed for an overlong study draft", () => {
