@@ -1,0 +1,66 @@
+name: BG Company v2 isolated checks
+on:
+  push:
+    branches: [feat/bg-company-v2-control-plane]
+    paths:
+      - 'apps/web/src/lib/business-development/**'
+      - 'apps/web/src/app/api/business-development/**'
+      - 'infrastructure/bg-company-v2/**'
+      - 'scripts/bg-v2*'
+      - 'scripts/test_bg_v2_audit.py'
+      - '.github/workflows/bg-company-v2.yml'
+  pull_request:
+    paths:
+      - 'apps/web/src/lib/business-development/**'
+      - 'apps/web/src/app/api/business-development/**'
+      - 'infrastructure/bg-company-v2/**'
+      - 'scripts/bg-v2*'
+      - '.github/workflows/bg-company-v2.yml'
+permissions:
+  contents: read
+concurrency:
+  group: bg-company-v2-checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  postgres-and-build:
+    # Standard hosted runner in this public repo; no paid API or deployment.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: bg_v2_test
+          POSTGRES_PASSWORD: isolated-test-only
+          POSTGRES_DB: bg_company_v2_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U bg_v2_test -d bg_company_v2_test"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+    env:
+      BG_V2_TEST_DATABASE_URL: postgresql://bg_v2_test:isolated-test-only@127.0.0.1:5432/bg_company_v2_test
+      NEXT_TELEMETRY_DISABLED: '1'
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run test:business
+      - run: npm run test:business:integration
+      - run: python ../../scripts/test_bg_v2_audit.py
+      - run: npx eslint src/lib/business-development src/app/api/business-development
+      - run: npm run db:generate
+      - run: npm run build
+      - run: node ../../scripts/bg-v2-http-smoke.mjs
+      - name: Validate isolated Docker test stack
+        working-directory: .
+        run: |
+          docker compose -f infrastructure/bg-company-v2/compose.test.yml config --quiet
+          docker compose -f infrastructure/bg-company-v2/compose.test.yml up --build --abort-on-container-exit --exit-code-from tests
+      - run: bash ../../scripts/check-sensitive-files.sh

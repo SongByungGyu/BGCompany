@@ -1,0 +1,80 @@
+{
+  "checked_date": "2026-10-11",
+  "timezone": "Asia/Seoul",
+  "repository": "SongByungGyu/BGCompany",
+  "baseline_commit": "52c8a28bae6d64d33123305fb94865e078336b47",
+  "validated_code_commit": "7bffe778b78a497cf87519d5af268caf7d3202e9",
+  "branch": "feat/bg-company-v2-control-plane",
+  "github_actions": {
+    "run_id": 38140292887,
+    "url": "https://github.com/SongByungGyu/BGCompany/actions/runs/38140292887",
+    "conclusion": "success",
+    "job_id": 114472602923
+  },
+  "checks": {
+    "policy_and_request_tests": {
+      "passed": 8,
+      "failed": 0
+    },
+    "postgresql_17_integration": {
+      "passed": 11,
+      "failed": 0,
+      "concurrent_claims": 16
+    },
+    "docker_isolated_tests": {
+      "passed": 19,
+      "failed": 0
+    },
+    "audit_safety_tests": {
+      "passed": 3,
+      "failed": 0
+    },
+    "http_smoke": {
+      "passed": 6,
+      "failed": 0
+    },
+    "existing_agent_tests": {
+      "passed": 2,
+      "failed": 0
+    },
+    "existing_learning_tests": {
+      "passed": 5,
+      "failed": 0
+    },
+    "existing_hermes_tests": {
+      "passed": 41,
+      "failed": 0
+    },
+    "wiki": "passed",
+    "production_build": "passed",
+    "new_module_eslint": "passed",
+    "sensitive_path_check": "passed",
+    "missing_database_guard": "ISOLATED_DATABASE_REQUIRED"
+  },
+  "production_http": {
+    "root": "login_redirect",
+    "health": 200,
+    "tasks_anonymous": 401,
+    "stock_blog_scheduler_anonymous": 401,
+    "new_business_development_api": 404
+  },
+  "production_internals": {
+    "verified": false,
+    "blocker": "SSH network unreachable and no configured SSH identity in current executor"
+  },
+  "changes": {
+    "production_deployment": false,
+    "production_database": false,
+    "existing_compose": false,
+    "existing_schedulers": false,
+    "paid_ai_api_calls": false
+  },
+  "autonomous_runtime": {
+    "execution_adapter": "not_connected",
+    "persistent_worker_running": false,
+    "remaining_quota": "not_observed",
+    "mvp_created": false,
+    "trial_deployed": false,
+    "revenue": "not_observed"
+  }
+}
