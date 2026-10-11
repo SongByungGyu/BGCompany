@@ -2,6 +2,13 @@ name: BG Company v2 isolated checks
 on:
   push:
     branches: [feat/bg-company-v2-control-plane]
+    paths:
+      - 'apps/web/src/lib/business-development/**'
+      - 'apps/web/src/app/api/business-development/**'
+      - 'infrastructure/bg-company-v2/**'
+      - 'scripts/bg-v2*'
+      - 'scripts/test_bg_v2_audit.py'
+      - '.github/workflows/bg-company-v2.yml'
   pull_request:
     paths:
       - 'apps/web/src/lib/business-development/**'
@@ -46,7 +53,14 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run test:business
       - run: npm run test:business:integration
+      - run: python ../../scripts/test_bg_v2_audit.py
       - run: npx eslint src/lib/business-development src/app/api/business-development
       - run: npm run db:generate
       - run: npm run build
+      - run: node ../../scripts/bg-v2-http-smoke.mjs
+      - name: Validate isolated Docker test stack
+        working-directory: .
+        run: |
+          docker compose -f infrastructure/bg-company-v2/compose.test.yml config --quiet
+          docker compose -f infrastructure/bg-company-v2/compose.test.yml up --build --abort-on-container-exit --exit-code-from tests
       - run: bash ../../scripts/check-sensitive-files.sh

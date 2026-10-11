@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   const auth = await requireAdminApiSession(request);
   if (!auth.ok) return auth.response;
   let body: Record<string,unknown>;
-  try { body = await readControlRequest(request); }
+  try { body = await readControlRequest(request,process.env.BG_V2_CONTROL_ORIGIN); }
   catch (error) {
     if (error instanceof RequestError) return response({error:error.message},error.status);
     return response({error:"INVALID_JSON"},400);

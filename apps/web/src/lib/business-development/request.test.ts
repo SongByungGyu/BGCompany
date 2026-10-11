@@ -18,3 +18,11 @@ test("malformed JSON and scalar/array bodies are rejected",async () => {
     await assert.rejects(readControlRequest(request(body)),(e: RequestError) => e.status===400);
   }
 });
+test("internal Next hostname and reverse proxy origin are handled explicitly",async () => {
+  const req = new Request("http://localhost:3000/api/business-development",{method:"POST",
+    headers:{host:"127.0.0.1:3000",origin:"http://127.0.0.1:3000","content-type":"application/json"},body:"{}"});
+  assert.deepEqual(await readControlRequest(req),{});
+  const proxied = new Request("http://internal:3000/api/business-development",{method:"POST",
+    headers:{origin:"https://bgcompanyoffice.cloud","content-type":"application/json"},body:"{}"});
+  assert.deepEqual(await readControlRequest(proxied,"https://bgcompanyoffice.cloud"),{});
+});
