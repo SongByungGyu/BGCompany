@@ -1,0 +1,33 @@
+name: bg-company-v2-test
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: bg_v2_test
+      POSTGRES_PASSWORD: isolated-test-only
+      POSTGRES_DB: bg_company_v2_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bg_v2_test -d bg_company_v2_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    networks: [isolated]
+    tmpfs:
+      - /var/lib/postgresql/data
+  tests:
+    build:
+      context: ../..
+      dockerfile: infrastructure/bg-company-v2/Dockerfile.test
+    environment:
+      BG_V2_TEST_DATABASE_URL: postgresql://bg_v2_test:isolated-test-only@postgres:5432/bg_company_v2_test
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [isolated]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+networks:
+  isolated:
+    internal: true

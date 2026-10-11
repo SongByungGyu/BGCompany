@@ -49,6 +49,7 @@ runtime/
 # Database backups
 backups/
 *.sql
+!infrastructure/bg-company-v2/001_control_plane.sql
 *.dump
 *.sql.gz
 logs/
