@@ -7,4 +7,4 @@ COPY apps/web/src/lib/business-development ./apps/web/src/lib/business-developme
 COPY infrastructure/bg-company-v2/001_control_plane.sql ./infrastructure/bg-company-v2/001_control_plane.sql
 USER node
 WORKDIR /app/apps/web
-CMD ["node", "--experimental-strip-types", "--test", "src/lib/business-development/policy.test.ts", "src/lib/business-development/queue.integration.test.ts"]
+CMD ["node", "--experimental-strip-types", "--test", "src/lib/business-development/policy.test.ts", "src/lib/business-development/request.test.ts", "src/lib/business-development/queue.integration.test.ts"]

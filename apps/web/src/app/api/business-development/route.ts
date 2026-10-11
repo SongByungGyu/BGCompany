@@ -1,6 +1,7 @@
 import { requireAdminApiSession } from "@/lib/auth/admin-auth";
 import { ControlPlaneError, kind, label, uuid } from "@/lib/business-development/policy";
 import { getBusinessDirector } from "@/lib/business-development/runtime";
+import { readControlRequest,RequestError } from "@/lib/business-development/request";
 
 export const runtime = "nodejs";
 
@@ -24,17 +25,12 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await requireAdminApiSession(request);
   if (!auth.ok) return auth.response;
-  // Cookie-authenticated writes must originate from this origin.
-  if (request.headers.get("origin") !== new URL(request.url).origin) return response({ error: "ORIGIN_REQUIRED" },403);
-  if (!request.headers.get("content-type")?.startsWith("application/json")) return response({ error: "JSON_REQUIRED" },415);
   let body: Record<string,unknown>;
-  try {
-    const raw = await request.text();
-    if (raw.length > 4096) return response({ error: "REQUEST_TOO_LARGE" },413);
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
-    body = parsed;
-  } catch { return response({ error: "INVALID_JSON" },400); }
+  try { body = await readControlRequest(request); }
+  catch (error) {
+    if (error instanceof RequestError) return response({error:error.message},error.status);
+    return response({error:"INVALID_JSON"},400);
+  }
   try {
     const director = getBusinessDirector();
     if (body.action === "start") return response({ project: await director.startProject(label(body.requestKey),label(body.title)) },201);
